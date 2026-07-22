@@ -12,13 +12,17 @@ create table public.bodegas (
     id uuid primary key default gen_random_uuid(),
     created_by uuid not null references auth.users(id) on delete cascade,
     name text not null,
-    location geography(Point, 4326) not null,
+    -- Schema-qualified: PostGIS is installed into the `extensions` schema
+    -- (see enable_postgis.sql), and the migration/PostgREST connection's
+    -- search_path doesn't include it by default, so the bare type/function
+    -- names don't resolve.
+    location extensions.geography(Point, 4326) not null,
     -- Generated from `location` so a plain `select *` hands back ordinary
     -- numeric fields instead of PostgREST's raw-WKB serialization of a
     -- geography column. `location` itself stays reserved for spatial
     -- queries (ST_DWithin) via the GIST index below.
-    latitude double precision generated always as (st_y(location::geometry)) stored,
-    longitude double precision generated always as (st_x(location::geometry)) stored,
+    latitude double precision generated always as (extensions.st_y(location::extensions.geometry)) stored,
+    longitude double precision generated always as (extensions.st_x(location::extensions.geometry)) stored,
     address text,
     has_cat boolean not null default false,
     serves_hot_food boolean not null default false,
