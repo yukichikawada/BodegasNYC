@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		686115C057025DD5A334998E /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = A82EAB8A0AE40717E331D2BC /* Auth */; };
+		5586D6112223B47BEBEC33DC /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 2E0F997B67B0CC5F4E015D98 /* PostgREST */; };
+		03233201721E0025DAA9078C /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 316773BD6592670F9C6C5D69 /* Storage */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		893AAB8530105EA7002B0BB2 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +58,9 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				686115C057025DD5A334998E /* Auth in Frameworks */,
+				5586D6112223B47BEBEC33DC /* PostgREST in Frameworks */,
+				03233201721E0025DAA9078C /* Storage in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +121,9 @@
 			);
 			name = BodegasNYC;
 			packageProductDependencies = (
+				A82EAB8A0AE40717E331D2BC /* Auth */,
+				2E0F997B67B0CC5F4E015D98 /* PostgREST */,
+				316773BD6592670F9C6C5D69 /* Storage */,
 			);
 			productName = BodegasNYC;
 			productReference = 893AAB7730105EA5002B0BB2 /* BodegasNYC.app */;
@@ -195,6 +207,9 @@
 			);
 			mainGroup = 893AAB6E30105EA5002B0BB2;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 893AAB7830105EA5002B0BB2 /* Products */;
 			projectDirPath = "";
@@ -570,6 +585,35 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.53.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A82EAB8A0AE40717E331D2BC /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
+		};
+		2E0F997B67B0CC5F4E015D98 /* PostgREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = PostgREST;
+		};
+		316773BD6592670F9C6C5D69 /* Storage */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Storage;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 893AAB6F30105EA5002B0BB2 /* Project object */;
 }
