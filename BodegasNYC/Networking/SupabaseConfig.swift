@@ -8,8 +8,8 @@ nonisolated struct SupabaseConfig: Sendable {
 
 extension SupabaseConfig {
     /// Failure modes when loading connection details out of an Info.plist-backed
-    /// bundle dictionary — `SUPABASE_URL`/`SUPABASE_ANON_KEY`, populated at build
-    /// time via `INFOPLIST_KEY_SUPABASE_URL`/`INFOPLIST_KEY_SUPABASE_ANON_KEY`.
+    /// bundle dictionary — `SUPABASE_URL`/`SUPABASE_ANON_KEY`, populated via
+    /// `$(SUPABASE_URL)`/`$(SUPABASE_ANON_KEY)` substitution in `Info.plist`.
     enum LoadError: Error, Equatable {
         case missingURL
         case invalidURL(String)
