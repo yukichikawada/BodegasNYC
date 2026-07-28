@@ -7,9 +7,9 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		686115C057025DD5A334998E /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = A82EAB8A0AE40717E331D2BC /* Auth */; };
-		5586D6112223B47BEBEC33DC /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 2E0F997B67B0CC5F4E015D98 /* PostgREST */; };
 		03233201721E0025DAA9078C /* Storage in Frameworks */ = {isa = PBXBuildFile; productRef = 316773BD6592670F9C6C5D69 /* Storage */; };
+		5586D6112223B47BEBEC33DC /* PostgREST in Frameworks */ = {isa = PBXBuildFile; productRef = 2E0F997B67B0CC5F4E015D98 /* PostgREST */; };
+		686115C057025DD5A334998E /* Auth in Frameworks */ = {isa = PBXBuildFile; productRef = A82EAB8A0AE40717E331D2BC /* Auth */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -598,11 +598,6 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		A82EAB8A0AE40717E331D2BC /* Auth */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
-			productName = Auth;
-		};
 		2E0F997B67B0CC5F4E015D98 /* PostgREST */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
@@ -612,6 +607,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Storage;
+		};
+		A82EAB8A0AE40717E331D2BC /* Auth */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Auth;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
