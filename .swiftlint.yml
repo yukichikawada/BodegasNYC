@@ -1,0 +1,5 @@
+disabled_rules:
+  - todo # allow TODO/FIXME during active Swift 6 concurrency learning; revisit before shipping
+
+excluded:
+  - .build

@@ -9,6 +9,7 @@ import XCTest
 
 final class BodegasNYCUITestsLaunchTests: XCTestCase {
 
+    // swiftlint:disable:next static_over_final_class - overriding `class var` can't be `static`.
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true
     }
