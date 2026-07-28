@@ -4,8 +4,7 @@
 //
 //  Verifies SupabaseConfig's Info.plist-dictionary loading, independent of
 //  Bundle.main, since the real bundle's values depend on build settings
-//  (INFOPLIST_KEY_SUPABASE_URL/INFOPLIST_KEY_SUPABASE_ANON_KEY) that aren't
-//  present in the test target.
+//  (SUPABASE_URL/SUPABASE_ANON_KEY) that aren't present in the test target.
 //
 
 import Testing
