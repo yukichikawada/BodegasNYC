@@ -18,7 +18,20 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     private(set) var authorizationStatus: CLAuthorizationStatus
 
     private let manager: CLLocationManager
-    private var pendingContinuation: CheckedContinuation<CLAuthorizationStatus, Never>?
+    /// Keyed rather than a single slot: `requestAlwaysAuthorization()` can be
+    /// in flight from one caller while another awaits
+    /// `requestWhenInUseAuthorization()` (or the same request twice), and a
+    /// single slot would silently overwrite — and leak — the earlier
+    /// continuation.
+    private var pendingContinuations: [UUID: CheckedContinuation<CLAuthorizationStatus, Never>] = [:]
+
+    /// CLLocationManager's Always-upgrade prompt is documented to be
+    /// presentable only once per install; a second call while still
+    /// `.authorizedWhenInUse` silently no-ops with no delegate callback at
+    /// all. There's no API to distinguish that from "the prompt is still up
+    /// and the user hasn't answered yet", so every request is bounded by this
+    /// timeout rather than awaiting the delegate forever.
+    private static let authorizationTimeout: Duration = .seconds(30)
 
     override init() {
         let manager = CLLocationManager()
@@ -38,10 +51,8 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         guard !Self.shouldSkipWhenInUseRequest(currentStatus: authorizationStatus) else {
             return authorizationStatus
         }
-        return await withCheckedContinuation { continuation in
-            pendingContinuation = continuation
-            manager.requestWhenInUseAuthorization()
-        }
+        manager.requestWhenInUseAuthorization()
+        return await awaitAuthorizationChange()
     }
 
     /// Requests Always authorization. Unlike the When-In-Use ask, this has a
@@ -54,18 +65,33 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         guard !Self.shouldSkipAlwaysRequest(currentStatus: authorizationStatus) else {
             return authorizationStatus
         }
+        manager.requestAlwaysAuthorization()
+        return await awaitAuthorizationChange()
+    }
+
+    private func awaitAuthorizationChange() async -> CLAuthorizationStatus {
+        let id = UUID()
         return await withCheckedContinuation { continuation in
-            pendingContinuation = continuation
-            manager.requestAlwaysAuthorization()
+            pendingContinuations[id] = continuation
+            Task { @MainActor in
+                try? await Task.sleep(for: Self.authorizationTimeout)
+                self.resumePending(id: id, status: self.authorizationStatus)
+            }
         }
+    }
+
+    private func resumePending(id: UUID, status: CLAuthorizationStatus) {
+        guard let continuation = pendingContinuations.removeValue(forKey: id) else { return }
+        continuation.resume(returning: status)
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         Task { @MainActor in
             authorizationStatus = status
-            pendingContinuation?.resume(returning: status)
-            pendingContinuation = nil
+            for id in pendingContinuations.keys {
+                resumePending(id: id, status: status)
+            }
         }
     }
 }

@@ -162,7 +162,11 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
             // Explicit, immediate save rather than relying on autosave
             // timing — the process can be suspended moments after a
             // background delivery.
-            try? modelContext.save()
+            do {
+                try modelContext.save()
+            } catch {
+                lastTrackingError = error.localizedDescription
+            }
         }
     }
 
