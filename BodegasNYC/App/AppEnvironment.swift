@@ -12,10 +12,20 @@ struct AppEnvironment {
     let supabaseEnvironment: SupabaseEnvironment
     let bodegaService: BodegaService
     let locationPermissionClient: LocationPermissionClient
+    /// `nil` if the local SwiftData store failed to open — a rare,
+    /// isolated failure in this personal, on-device-only feature that
+    /// shouldn't take down the app's core (Supabase-backed) bodega-finding
+    /// loop. See `RootView.load()`.
+    let streetsWalkedViewModel: StreetsWalkedViewModel?
 
-    init(supabaseEnvironment: SupabaseEnvironment, locationPermissionClient: LocationPermissionClient) {
+    init(
+        supabaseEnvironment: SupabaseEnvironment,
+        locationPermissionClient: LocationPermissionClient,
+        streetsWalkedViewModel: StreetsWalkedViewModel?
+    ) {
         self.supabaseEnvironment = supabaseEnvironment
         bodegaService = BodegaService(postgrest: supabaseEnvironment.postgrest)
         self.locationPermissionClient = locationPermissionClient
+        self.streetsWalkedViewModel = streetsWalkedViewModel
     }
 }

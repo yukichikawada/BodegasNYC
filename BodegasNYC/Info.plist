@@ -48,5 +48,11 @@
 	<string>$(SUPABASE_ANON_KEY)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>To show bodegas near you.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>BodegasNYC can track the streets you've walked, even when the app isn't open, so you can see them highlighted on your own map. This is completely optional, off by default, and your walking history stays on this device only.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>location</string>
+	</array>
 </dict>
 </plist>
