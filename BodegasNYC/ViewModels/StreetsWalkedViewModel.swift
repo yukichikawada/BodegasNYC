@@ -122,6 +122,14 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         polylines = []
     }
 
+    /// Acknowledges/clears the current error so the UI can dismiss whatever
+    /// affordance is showing it. Separate from the condition actually
+    /// resolving — a new failure after this call sets `lastTrackingError`
+    /// again independently.
+    func dismissTrackingError() {
+        lastTrackingError = nil
+    }
+
     /// Refetches and resegments the persisted history. Cheap and idempotent
     /// at this feature's scale, so callers (a view's `.task`, right after
     /// enabling tracking, right after clearing history) can call it
