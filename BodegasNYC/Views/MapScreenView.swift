@@ -1,12 +1,13 @@
 import MapKit
 import SwiftUI
+import UIKit
 
-/// The map screen: bodega pins/clusters (`BodegaMapViewModel`) rendered on
-/// a declarative `Map`. Does not know about list/detail screens (a future
-/// parent container owns the map/list toggle chrome) or the streets-walked
-/// heatmap's live UI yet (`// TODO(streets-walked)` below marks its two
-/// hook points) — see `docs/PRD.md` §7 and the map-architecture plan for why
-/// those are decoupled rather than folded in here.
+/// The map screen: bodega pins/clusters (`BodegaMapViewModel`) and the
+/// opt-in streets-walked heatmap overlay (`StreetsWalkedViewModel`)
+/// rendered on a declarative `Map`. Does not know about list/detail screens
+/// (a future parent container owns the map/list toggle chrome) — see
+/// `docs/PRD.md` §7 and the map-architecture plan for why that's decoupled
+/// rather than folded in here.
 struct MapScreenView: View {
     private static let newYorkCityDefault = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
@@ -15,12 +16,19 @@ struct MapScreenView: View {
 
     @State private var viewModel: BodegaMapViewModel
     @State private var cameraPosition: MapCameraPosition
+    @State private var showingClearConfirmation = false
     private let locationPermissionClient: LocationPermissionClient
+    private let streetsWalkedViewModel: StreetsWalkedViewModel?
 
-    init(bodegaService: BodegaService, locationPermissionClient: LocationPermissionClient) {
+    init(
+        bodegaService: BodegaService,
+        locationPermissionClient: LocationPermissionClient,
+        streetsWalkedViewModel: StreetsWalkedViewModel? = nil
+    ) {
         _viewModel = State(initialValue: BodegaMapViewModel(bodegaService: bodegaService))
         _cameraPosition = State(initialValue: .region(Self.newYorkCityDefault))
         self.locationPermissionClient = locationPermissionClient
+        self.streetsWalkedViewModel = streetsWalkedViewModel
     }
 
     var body: some View {
@@ -42,13 +50,19 @@ struct MapScreenView: View {
                         }
                     }
                 }
-                // TODO(streets-walked): add the heatmap's MapPolyline overlay here.
+                if let streetsWalkedViewModel, streetsWalkedViewModel.isTrackingEnabled {
+                    ForEach(Array(streetsWalkedViewModel.polylines.enumerated()), id: \.offset) { _, path in
+                        MapPolyline(coordinates: path.map(\.clLocationCoordinate))
+                            .stroke(.orange.opacity(0.55), lineWidth: 4)
+                    }
+                }
             }
             .onMapCameraChange(frequency: .onEnd) { context in
                 viewModel.regionDidSettle(context.region)
             }
             .task {
                 viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
+                streetsWalkedViewModel?.loadPolylinesIfNeeded()
             }
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -58,7 +72,30 @@ struct MapScreenView: View {
                         Label("Locate Me", systemImage: "location")
                     }
                 }
-                // TODO(streets-walked): add the heatmap on/off toggle here.
+                if let streetsWalkedViewModel {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            Button(streetsWalkedViewModel.isTrackingEnabled ? "Turn Off" : "Turn On") {
+                                Task { await toggleStreetsWalked() }
+                            }
+                            Button("Clear History…", role: .destructive) {
+                                showingClearConfirmation = true
+                            }
+                        } label: {
+                            Label("Streets Walked", systemImage: "figure.walk")
+                        }
+                    }
+                }
+            }
+            .confirmationDialog(
+                "Delete all walked-street history? This can't be undone.",
+                isPresented: $showingClearConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Delete All", role: .destructive) {
+                    Task { await clearStreetsWalkedHistory() }
+                }
+                Button("Cancel", role: .cancel) {}
             }
         }
     }
@@ -71,6 +108,37 @@ struct MapScreenView: View {
         guard status == .authorizedWhenInUse || status == .authorizedAlways else { return }
         viewModel.browseModeDidChange(.nearby, currentRegion: nil)
         cameraPosition = .userLocation(followsHeading: false, fallback: .region(Self.newYorkCityDefault))
+    }
+
+    /// The sole trigger for the separate Always location prompt (PRD §5.2:
+    /// never bundled with the core When-In-Use ask above). Requesting
+    /// Always from `.notDetermined` typically only yields
+    /// `.authorizedWhenInUse` from the system's first prompt — full
+    /// "Always" needs either a later just-in-time prompt or Settings, so
+    /// that case gets a nudge there rather than silently doing nothing.
+    private func toggleStreetsWalked() async {
+        guard let streetsWalkedViewModel else { return }
+        guard !streetsWalkedViewModel.isTrackingEnabled else {
+            streetsWalkedViewModel.disableTracking()
+            return
+        }
+        switch await streetsWalkedViewModel.requestTrackingPermission() {
+        case .authorizedAlways:
+            try? await streetsWalkedViewModel.enableTracking()
+        case .authorizedWhenInUse:
+            openSettings()
+        default:
+            break
+        }
+    }
+
+    private func clearStreetsWalkedHistory() async {
+        try? await streetsWalkedViewModel?.clearHistory()
+    }
+
+    private func openSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 }
 

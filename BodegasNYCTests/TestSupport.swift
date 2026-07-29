@@ -1,6 +1,7 @@
 import Foundation
 import PostgREST
 import Storage
+import SwiftData
 
 @testable import BodegasNYC
 
@@ -62,4 +63,14 @@ func makeTestBodega(
     }
     """
     return try PostgRESTDecoding.makeDecoder().decode(Bodega.self, from: Data(json.utf8))
+}
+
+/// An in-memory `ModelContainer` for `WalkedPoint` — isolated per test,
+/// never touches disk.
+@MainActor
+func makeInMemoryModelContainer() throws -> ModelContainer {
+    try ModelContainer(
+        for: WalkedPoint.self,
+        configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
 }
