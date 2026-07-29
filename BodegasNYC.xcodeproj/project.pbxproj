@@ -298,7 +298,7 @@
 		};
 		AA40A97029E07B9C2A414C02 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			productRef = B9CA924DC9D52779CDD922DA /* plugin:SwiftLintBuildToolPlugin */;
+			productRef = B9CA924DC9D52779CDD922DA /* SwiftLintBuildToolPlugin */;
 		};
 /* End PBXTargetDependency section */
 
@@ -636,7 +636,7 @@
 			package = 07D53F853177A67D577148DF /* XCRemoteSwiftPackageReference "supabase-swift" */;
 			productName = Auth;
 		};
-		B9CA924DC9D52779CDD922DA /* plugin:SwiftLintBuildToolPlugin */ = {
+		B9CA924DC9D52779CDD922DA /* SwiftLintBuildToolPlugin */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = A30A575EE290D38F4741DF02 /* XCRemoteSwiftPackageReference "SwiftLintPlugins" */;
 			productName = "plugin:SwiftLintBuildToolPlugin";
