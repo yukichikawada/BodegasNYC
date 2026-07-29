@@ -4,12 +4,15 @@
 //
 //  Constructs the real StreetsWalkedViewModel with an in-memory
 //  ModelContainer — never calls enableTracking() successfully or touches
-//  CLLocationManager.startUpdatingLocation(); the live delegate/background
-//  tracking wiring itself isn't unit-testable (same boundary
-//  LocationPermissionClientTests already draws), only the SwiftData
-//  persistence/segmenting logic layered on top of it.
+//  CLLocationManager.startUpdatingLocation(); real background delivery
+//  itself isn't unit-testable (same boundary LocationPermissionClientTests
+//  draws for permission prompts). Delegate *methods* are still plain Swift
+//  functions we can call directly, though — dismissTrackingErrorClearsLastTrackingError
+//  below calls locationManager(_:didFailWithError:) synthetically to seed
+//  state, without needing a real CLLocationManager to drive anything.
 //
 
+import CoreLocation
 import Foundation
 import SwiftData
 import Testing
@@ -75,5 +78,23 @@ struct StreetsWalkedViewModelTests {
             // expected
         }
         #expect(viewModel.isTrackingEnabled == false)
+    }
+
+    @Test func dismissTrackingErrorClearsLastTrackingError() async throws {
+        let (viewModel, _) = try makeViewModel()
+        // Invokes the delegate method directly to seed an error deterministically
+        // rather than driving a real CLLocationManager (see LocationPermissionClientTests).
+        viewModel.locationManager(CLLocationManager(), didFailWithError: StreetsWalkedViewModel.StreetsWalkedError.authorizationNotGranted)
+        await Task.yield()
+        #expect(viewModel.lastTrackingError != nil)
+
+        viewModel.dismissTrackingError()
+
+        #expect(viewModel.lastTrackingError == nil)
+    }
+
+    @Test func shouldRequestFullAccuracyOnlyWhenCurrentlyReduced() {
+        #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .reducedAccuracy) == true)
+        #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .fullAccuracy) == false)
     }
 }
