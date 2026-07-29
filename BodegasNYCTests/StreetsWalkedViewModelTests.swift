@@ -92,4 +92,9 @@ struct StreetsWalkedViewModelTests {
 
         #expect(viewModel.lastTrackingError == nil)
     }
+
+    @Test func shouldRequestFullAccuracyOnlyWhenCurrentlyReduced() {
+        #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .reducedAccuracy) == true)
+        #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .fullAccuracy) == false)
+    }
 }

@@ -39,6 +39,11 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     private let manager: CLLocationManager
 
     private static let trackingEnabledDefaultsKey = "streetsWalked.isTrackingEnabled"
+    /// Must match a key in `Info.plist`'s
+    /// `NSLocationTemporaryUsageDescriptionDictionary` — calling
+    /// `requestTemporaryFullAccuracyAuthorization` with an unregistered key
+    /// is a hard runtime crash, not a catchable error.
+    private static let fullAccuracyPurposeKey = "StreetsWalkedTracking"
 
     init(
         locationPermissionClient: LocationPermissionClient,
@@ -73,6 +78,33 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         await locationPermissionClient.requestAlwaysAuthorization()
     }
 
+    /// Since iOS 14, users can grant "Approximate Location" instead of
+    /// precise — this is tracked separately from `authorizationStatus`. A
+    /// street-level walking tracker with reduced accuracy would produce a
+    /// much coarser, less useful trace.
+    var accuracyAuthorization: CLAccuracyAuthorization {
+        manager.accuracyAuthorization
+    }
+
+    /// `requestTemporaryFullAccuracyAuthorization` is completion-handler
+    /// based, not routed through `CLLocationManagerDelegate` like
+    /// authorization changes — bridged to async/await here to match this
+    /// class's other request methods. No-ops (no system prompt) if full
+    /// accuracy is already granted, so this is safe to call unconditionally
+    /// on every enable/resume rather than needing to be called exactly
+    /// once.
+    func requestFullAccuracyIfNeeded() async {
+        guard Self.shouldRequestFullAccuracy(currentAccuracyAuthorization: accuracyAuthorization) else { return }
+        let error = await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: Self.fullAccuracyPurposeKey) { error in
+                continuation.resume(returning: error)
+            }
+        }
+        if let error {
+            lastTrackingError = error.localizedDescription
+        }
+    }
+
     /// Starts continuous background tracking. Throws rather than silently
     /// no-op-ing if Always authorization isn't actually granted — the
     /// caller (`MapScreenView`) is expected to have already requested it via
@@ -82,6 +114,7 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         guard alwaysAuthorizationStatus == .authorizedAlways else {
             throw StreetsWalkedError.authorizationNotGranted
         }
+        await requestFullAccuracyIfNeeded()
         manager.startUpdatingLocation()
         isTrackingEnabled = true
         userDefaults.set(true, forKey: Self.trackingEnabledDefaultsKey)
@@ -111,6 +144,9 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         manager.startUpdatingLocation()
         isTrackingEnabled = true
         loadPolylinesIfNeeded()
+        // Fire-and-forget: this method is called synchronously from the
+        // composition root's launch-time factory, which isn't async.
+        Task { await requestFullAccuracyIfNeeded() }
     }
 
     /// Deletes all persisted walked-street history (PRD §5.1: users must be
@@ -182,5 +218,15 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         Task { @MainActor in
             lastTrackingError = error.localizedDescription
         }
+    }
+}
+
+extension StreetsWalkedViewModel {
+    /// Pure branching logic, factored out so it's testable without a live
+    /// `CLLocationManager` — same rationale as
+    /// `LocationPermissionClient.shouldSkipWhenInUseRequest`/
+    /// `shouldSkipAlwaysRequest`.
+    nonisolated static func shouldRequestFullAccuracy(currentAccuracyAuthorization: CLAccuracyAuthorization) -> Bool {
+        currentAccuracyAuthorization == .reducedAccuracy
     }
 }
