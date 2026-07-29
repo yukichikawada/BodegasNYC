@@ -20,8 +20,10 @@ struct RootView: View {
             ProgressView()
                 .task { await load() }
         case .ready(let environment):
-            MapScreenView(
+            BrowseView(
                 bodegaService: environment.bodegaService,
+                reviewService: environment.reviewService,
+                photoService: environment.photoService,
                 locationPermissionClient: environment.locationPermissionClient,
                 streetsWalkedViewModel: environment.streetsWalkedViewModel
             )
