@@ -1,3 +1,4 @@
+import Auth
 import Foundation
 import PostgREST
 import Storage
@@ -72,5 +73,64 @@ func makeInMemoryModelContainer() throws -> ModelContainer {
     try ModelContainer(
         for: WalkedPoint.self,
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
+    )
+}
+
+/// An in-memory `AuthLocalStorage` double — never touches the Keychain, one
+/// fresh instance per test.
+final class InMemoryAuthLocalStorage: AuthLocalStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String: Data] = [:]
+
+    func store(key: String, value: Data) throws { lock.withLock { storage[key] = value } }
+    func retrieve(key: String) throws -> Data? { lock.withLock { storage[key] } }
+    func remove(key: String) throws { lock.withLock { storage[key] = nil } }
+}
+
+/// Builds a `Session` via its real memberwise initializer, defaulting to a
+/// long-lived expiry so `AuthClient.session`/`SessionStore` resolve it
+/// without a network refresh call (see `Session.isExpired`).
+func makeTestSession(
+    userID: UUID = UUID(),
+    accessToken: String = "test-access-token",
+    expiresIn: TimeInterval = 3600
+) -> Session {
+    Session(
+        accessToken: accessToken,
+        tokenType: "bearer",
+        expiresIn: expiresIn,
+        expiresAt: Date().addingTimeInterval(expiresIn).timeIntervalSince1970,
+        refreshToken: "test-refresh-token",
+        user: User(
+            id: userID,
+            appMetadata: [:],
+            userMetadata: [:],
+            aud: "authenticated",
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+    )
+}
+
+/// An `AuthClient` backed by `MockURLProtocol` and an isolated in-memory
+/// local storage, optionally pre-seeded with `session` under the SDK's real
+/// default storage key (`"supabase.auth.token"`), encoded exactly the way
+/// the live `SessionStorage.live.store(_:)` does it (a plain `JSONEncoder()`
+/// — *not* `AuthClient.Configuration.jsonEncoder`) so `auth.currentSession`
+/// resolves with no network call.
+func makeTestAuthClient(session: Session? = nil) throws -> AuthClient {
+    let storage = InMemoryAuthLocalStorage()
+    if let session {
+        try storage.store(key: "supabase.auth.token", value: JSONEncoder().encode(session))
+    }
+    let urlSession = MockURLProtocol.makeSession()
+    return AuthClient(
+        configuration: AuthClient.Configuration(
+            url: URL(string: "https://example.supabase.co/auth/v1")!,
+            headers: ["apikey": "test-anon-key"],
+            localStorage: storage,
+            logger: nil,
+            fetch: { try await urlSession.data(for: $0) }
+        )
     )
 }

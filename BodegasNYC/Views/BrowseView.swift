@@ -33,9 +33,13 @@ struct BrowseView: View {
     @State private var cameraPosition: MapCameraPosition = .region(MapScreenView.newYorkCityDefault)
     @State private var mapViewModel: BodegaMapViewModel
     @State private var listViewModel: BodegaListViewModel
+    @State private var showingSignIn = false
+    @State private var showingSignOutConfirmation = false
+    @State private var signOutErrorMessage: String?
 
     private let reviewService: ReviewService
     private let photoService: PhotoService
+    private let sessionStore: SessionStore
     private let locationPermissionClient: LocationPermissionClient
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
 
@@ -43,6 +47,7 @@ struct BrowseView: View {
         bodegaService: BodegaService,
         reviewService: ReviewService,
         photoService: PhotoService,
+        sessionStore: SessionStore,
         locationPermissionClient: LocationPermissionClient,
         streetsWalkedViewModel: StreetsWalkedViewModel?
     ) {
@@ -50,6 +55,7 @@ struct BrowseView: View {
         _listViewModel = State(initialValue: BodegaListViewModel(bodegaService: bodegaService))
         self.reviewService = reviewService
         self.photoService = photoService
+        self.sessionStore = sessionStore
         self.locationPermissionClient = locationPermissionClient
         self.streetsWalkedViewModel = streetsWalkedViewModel
     }
@@ -67,9 +73,52 @@ struct BrowseView: View {
                         .pickerStyle(.segmented)
                         .frame(maxWidth: 200)
                     }
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            if sessionStore.isSignedIn {
+                                showingSignOutConfirmation = true
+                            } else {
+                                showingSignIn = true
+                            }
+                        } label: {
+                            Label(
+                                "Account",
+                                systemImage: sessionStore.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle"
+                            )
+                        }
+                    }
                 }
                 .navigationDestination(for: Bodega.self) { bodega in
                     BodegaDetailView(bodega: bodega, reviewService: reviewService, photoService: photoService)
+                }
+                .sheet(isPresented: $showingSignIn) {
+                    SignInView(sessionStore: sessionStore)
+                }
+                .confirmationDialog(
+                    "Sign out of your account?",
+                    isPresented: $showingSignOutConfirmation,
+                    titleVisibility: .visible
+                ) {
+                    Button("Sign Out", role: .destructive) {
+                        Task {
+                            await sessionStore.signOut()
+                            if sessionStore.isSignedIn {
+                                signOutErrorMessage = sessionStore.lastAuthError
+                            }
+                        }
+                    }
+                    Button("Cancel", role: .cancel) {}
+                }
+                .alert(
+                    "Couldn't Sign Out",
+                    isPresented: Binding(
+                        get: { signOutErrorMessage != nil },
+                        set: { if !$0 { signOutErrorMessage = nil } }
+                    )
+                ) {
+                    Button("OK", role: .cancel) {}
+                } message: {
+                    Text(signOutErrorMessage ?? "")
                 }
         }
     }
