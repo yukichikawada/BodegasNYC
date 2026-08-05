@@ -37,6 +37,14 @@ struct BrowseView: View {
     @State private var showingSignOutConfirmation = false
     @State private var signOutErrorMessage: String?
     @State private var isPlacingBodega = false
+    /// True from the moment a programmatic recenter (the auto-locate fetch
+    /// in `beginPlacementMode`) is triggered until `MapScreenView`'s
+    /// `onMapCameraChange(.onEnd)` confirms the camera has actually
+    /// settled there. `MapScreenView` disables "Use This Location" while
+    /// this is true — otherwise a confirm tapped mid-recenter would read
+    /// `lastVisibleRegion`'s *previous* value, silently submitting a
+    /// coordinate that doesn't match what's visually under the pin.
+    @State private var isAwaitingCameraSettle = false
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var isResolvingCurrentLocation = false
 
@@ -163,6 +171,7 @@ struct BrowseView: View {
                 locationPermissionClient: locationPermissionClient,
                 streetsWalkedViewModel: streetsWalkedViewModel,
                 isPlacingBodega: $isPlacingBodega,
+                isAwaitingCameraSettle: $isAwaitingCameraSettle,
                 onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
                 onSelectBodega: { path.append($0) }
             )
@@ -180,7 +189,12 @@ struct BrowseView: View {
         guard LocationPermissionClient.canRequestCurrentLocation(
             authorizationStatus: locationPermissionClient.authorizationStatus
         ) else { return }
-        if let coordinate = await locationPermissionClient.requestCurrentLocation() {
+        // `isPlacingBodega` re-checked after the await: the user may have
+        // already cancelled placement mode (or, more precisely, this fetch
+        // is stale) by the time a fix arrives — recentering the map on
+        // their way out would be a confusing, unrequested jump.
+        if let coordinate = await locationPermissionClient.requestCurrentLocation(), isPlacingBodega {
+            isAwaitingCameraSettle = true
             cameraPosition = .region(
                 MKCoordinateRegion(center: coordinate, span: MapScreenView.newYorkCityDefault.span)
             )

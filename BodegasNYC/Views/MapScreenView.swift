@@ -29,6 +29,11 @@ struct MapScreenView: View {
     private let locationPermissionClient: LocationPermissionClient
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
     @Binding private var isPlacingBodega: Bool
+    /// See `BrowseView`'s doc comment on its own `isAwaitingCameraSettle` —
+    /// this view is the one that actually clears it, from
+    /// `onMapCameraChange(.onEnd)`, since that's the single source of truth
+    /// for "the visible region matches `lastVisibleRegion` again."
+    @Binding private var isAwaitingCameraSettle: Bool
     private let onConfirmPlacement: (CLLocationCoordinate2D) -> Void
     private let onSelectBodega: (Bodega) -> Void
 
@@ -38,6 +43,7 @@ struct MapScreenView: View {
         locationPermissionClient: LocationPermissionClient,
         streetsWalkedViewModel: StreetsWalkedViewModel? = nil,
         isPlacingBodega: Binding<Bool>,
+        isAwaitingCameraSettle: Binding<Bool>,
         onConfirmPlacement: @escaping (CLLocationCoordinate2D) -> Void,
         onSelectBodega: @escaping (Bodega) -> Void
     ) {
@@ -46,6 +52,7 @@ struct MapScreenView: View {
         self.locationPermissionClient = locationPermissionClient
         self.streetsWalkedViewModel = streetsWalkedViewModel
         _isPlacingBodega = isPlacingBodega
+        _isAwaitingCameraSettle = isAwaitingCameraSettle
         self.onConfirmPlacement = onConfirmPlacement
         self.onSelectBodega = onSelectBodega
     }
@@ -76,6 +83,7 @@ struct MapScreenView: View {
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             lastVisibleRegion = context.region
+            isAwaitingCameraSettle = false
             viewModel.regionDidSettle(context.region)
         }
         .onChange(of: selectedBodegaID) { _, newValue in
@@ -114,7 +122,8 @@ struct MapScreenView: View {
                         onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
                         isPlacingBodega = false
                     },
-                    onCancel: { isPlacingBodega = false }
+                    onCancel: { isPlacingBodega = false },
+                    isConfirmDisabled: isAwaitingCameraSettle
                 )
             }
         }
@@ -263,6 +272,11 @@ private struct TrackingErrorBanner: View {
 private struct PlacementBottomBar: View {
     let onUseThisLocation: () -> Void
     let onCancel: () -> Void
+    /// True while a programmatic recenter is still settling — confirming
+    /// during that window would read a stale `lastVisibleRegion`, not
+    /// whatever the pin currently sits over. See `BrowseView`'s
+    /// `isAwaitingCameraSettle` doc comment.
+    let isConfirmDisabled: Bool
 
     var body: some View {
         HStack {
@@ -270,6 +284,7 @@ private struct PlacementBottomBar: View {
             Spacer()
             Button("Use This Location", action: onUseThisLocation)
                 .buttonStyle(.borderedProminent)
+                .disabled(isConfirmDisabled)
         }
         .padding()
         .background(.regularMaterial)

@@ -131,7 +131,14 @@ final class BodegaMapViewModel {
     /// `fetchAll`'s `created_at desc` ordering. Safe regardless of
     /// `loadState`: `MapScreenView` renders `displayItems` unconditionally,
     /// not gated on `loadState`.
+    ///
+    /// Bumps `currentFetchGeneration` for the same reason `refetch` does:
+    /// placement mode can leave a `.nearby` refetch in flight (panning
+    /// re-triggers one on every settle), and without this, that fetch's
+    /// response landing after this prepend would silently overwrite
+    /// `loadedBodegas`, discarding the just-added pin.
     func bodegaWasAdded(_ bodega: Bodega) {
+        currentFetchGeneration += 1
         loadedBodegas.insert(bodega, at: 0)
         if let lastRegion {
             recluster(region: lastRegion)

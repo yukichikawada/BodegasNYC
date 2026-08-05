@@ -34,6 +34,10 @@ struct AddBodegaView: View {
                     Section { Text(message).foregroundStyle(.red).font(.footnote) }
                 }
             }
+            // Edits made while a submit is in flight would otherwise be
+            // silently discarded — `submit()` already snapshotted the
+            // fields into its request before the `await`.
+            .disabled(viewModel.submissionState == .submitting)
             .navigationTitle("Add a Bodega")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
