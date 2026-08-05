@@ -74,6 +74,20 @@ struct BodegaListViewModelTests {
         #expect(viewModel.loadState == .loaded)
     }
 
+    @Test func bodegaWasAddedPrependsAndIsVisibleImmediately() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.bodegas.map(\.name) == ["El Sol"])
+
+        let added = try makeTestBodega(name: "Nueva Bodega", latitude: 40.80, longitude: -73.90)
+        viewModel.bodegaWasAdded(added)
+
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega", "El Sol"])
+    }
+
     @Test func aFailedRequestDrivesLoadStateToFailed() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))

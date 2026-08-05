@@ -24,6 +24,10 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// single slot would silently overwrite — and leak — the earlier
     /// continuation.
     private var pendingContinuations: [UUID: CheckedContinuation<CLAuthorizationStatus, Never>] = [:]
+    /// Same rationale as `pendingContinuations`, for `requestCurrentLocation()`
+    /// callers — e.g. Add-a-Bodega's placement-mode auto-pan and "Use Current
+    /// Location" shortcut could plausibly race.
+    private var pendingLocationContinuations: [UUID: CheckedContinuation<CLLocationCoordinate2D?, Never>] = [:]
 
     /// CLLocationManager's Always-upgrade prompt is documented to be
     /// presentable only once per install; a second call while still
@@ -32,6 +36,12 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// and the user hasn't answered yet", so every request is bounded by this
     /// timeout rather than awaiting the delegate forever.
     private static let authorizationTimeout: Duration = .seconds(30)
+    /// `requestLocation()` has no documented upper bound on how long it can
+    /// take (or whether it calls back at all if a fix never arrives), so
+    /// this is a best-effort convenience bounded the same way as the
+    /// authorization requests above — callers treat a timeout identically to
+    /// a denied/failed fix (`nil`).
+    private static let locationFixTimeout: Duration = .seconds(10)
 
     override init() {
         let manager = CLLocationManager()
@@ -85,12 +95,53 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         continuation.resume(returning: status)
     }
 
+    /// One-shot current-location fetch for Add-a-Bodega's "Use Current
+    /// Location" shortcut and placement-mode auto-pan. Returns `nil` on
+    /// timeout/failure/denial rather than throwing — this is a best-effort
+    /// convenience, never a hard requirement (placement mode works fine via
+    /// manual panning without it).
+    @discardableResult
+    func requestCurrentLocation() async -> CLLocationCoordinate2D? {
+        guard Self.canRequestCurrentLocation(authorizationStatus: authorizationStatus) else { return nil }
+        let id = UUID()
+        manager.requestLocation()
+        return await withCheckedContinuation { continuation in
+            pendingLocationContinuations[id] = continuation
+            Task { @MainActor in
+                try? await Task.sleep(for: Self.locationFixTimeout)
+                self.resumePendingLocation(id: id, coordinate: nil)
+            }
+        }
+    }
+
+    private func resumePendingLocation(id: UUID, coordinate: CLLocationCoordinate2D?) {
+        guard let continuation = pendingLocationContinuations.removeValue(forKey: id) else { return }
+        continuation.resume(returning: coordinate)
+    }
+
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
         Task { @MainActor in
             authorizationStatus = status
             for id in pendingContinuations.keys {
                 resumePending(id: id, status: status)
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        guard let coordinate = locations.last?.coordinate else { return }
+        Task { @MainActor in
+            for id in pendingLocationContinuations.keys {
+                resumePendingLocation(id: id, coordinate: coordinate)
+            }
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        Task { @MainActor in
+            for id in pendingLocationContinuations.keys {
+                resumePendingLocation(id: id, coordinate: nil)
             }
         }
     }
@@ -107,5 +158,9 @@ extension LocationPermissionClient {
 
     nonisolated static func shouldSkipAlwaysRequest(currentStatus: CLAuthorizationStatus) -> Bool {
         currentStatus == .authorizedAlways
+    }
+
+    nonisolated static func canRequestCurrentLocation(authorizationStatus: CLAuthorizationStatus) -> Bool {
+        authorizationStatus == .authorizedWhenInUse || authorizationStatus == .authorizedAlways
     }
 }

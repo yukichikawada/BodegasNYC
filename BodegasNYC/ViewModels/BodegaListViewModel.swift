@@ -47,6 +47,15 @@ final class BodegaListViewModel {
         refetch()
     }
 
+    /// Optimistically reflects a just-inserted bodega without a full
+    /// refetch — mirrors `BodegaMapViewModel.bodegaWasAdded`. Note: if
+    /// `loadState` is currently `.failed`, `BodegaListView` still renders
+    /// the failure state regardless of `bodegas`' contents — a known,
+    /// accepted gap.
+    func bodegaWasAdded(_ bodega: Bodega) {
+        bodegas.insert(bodega, at: 0)
+    }
+
     private func refetch() {
         fetchTask?.cancel()
         currentFetchGeneration += 1
