@@ -12,6 +12,7 @@ struct AppEnvironment {
     let bodegaService: BodegaService
     let reviewService: ReviewService
     let photoService: PhotoService
+    let sessionStore: SessionStore
     let locationPermissionClient: LocationPermissionClient
     /// `nil` if the local SwiftData store failed to open — a rare,
     /// isolated failure in this personal, on-device-only feature that
@@ -28,6 +29,7 @@ struct AppEnvironment {
         bodegaService = BodegaService(postgrest: supabaseEnvironment.postgrest)
         reviewService = ReviewService(postgrest: supabaseEnvironment.postgrest)
         photoService = PhotoService(postgrest: supabaseEnvironment.postgrest, storage: supabaseEnvironment.storage)
+        sessionStore = SessionStore(auth: supabaseEnvironment.auth)
         self.locationPermissionClient = locationPermissionClient
         self.streetsWalkedViewModel = streetsWalkedViewModel
     }
