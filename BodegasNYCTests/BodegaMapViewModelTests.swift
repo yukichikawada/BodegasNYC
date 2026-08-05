@@ -162,6 +162,24 @@ struct BodegaMapViewModelTests {
         }
     }
 
+    @Test func bodegaWasAddedPrependsAndIsVisibleImmediately() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.displayItems.count == 1)
+
+        // Far enough from `sampleRegion`'s center to land in a different
+        // grid cell than the already-loaded bodega — otherwise clustering
+        // (see `BodegaClustering`) would merge them into a single `.cluster`
+        // item instead of two separate pins.
+        let added = try makeTestBodega(name: "Nueva Bodega", latitude: 40.80, longitude: -73.90)
+        viewModel.bodegaWasAdded(added)
+
+        #expect(viewModel.displayItems.count == 2)
+    }
+
     // Not covered here: a second in-flight fetch superseding an older one
     // (the `currentFetchGeneration` guard in `BodegaMapViewModel.refetch`).
     // Reliably forcing that race with `MockURLProtocol`'s instant-response

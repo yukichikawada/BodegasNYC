@@ -42,4 +42,11 @@ struct LocationPermissionClientTests {
     @Test func authorizedWhenInUseDoesNotSkipTheAlwaysUpgradeAsk() {
         #expect(LocationPermissionClient.shouldSkipAlwaysRequest(currentStatus: .authorizedWhenInUse) == false)
     }
+
+    @Test func requestCurrentLocationOnlyProceedsWhenAuthorized() {
+        for status in Self.allStatuses {
+            let canRequest = LocationPermissionClient.canRequestCurrentLocation(authorizationStatus: status)
+            #expect(canRequest == (status == .authorizedWhenInUse || status == .authorizedAlways), "status: \(status)")
+        }
+    }
 }
