@@ -119,7 +119,15 @@ struct AddBodegaViewModelTests {
         #expect(json["hours"] == nil)
     }
 
-    @Test func submitRequiresSignInWhenNoSessionAndSendsNoRequest() async throws {
+    // TEMPORARY: submit() no longer gates on session presence while
+    // unauthenticated writes are allowed (see
+    // 20260812013849_allow_anonymous_bodega_inserts.sql). This replaces
+    // `submitRequiresSignInWhenNoSessionAndSendsNoRequest`; the
+    // `.signInRequired` path it and a since-removed
+    // `dismissSignInPromptResetsToIdleSoASecondSubmitReasksForSignIn` test
+    // covered is unreachable until that migration is reverted and this
+    // gate is restored — see git history for both when that happens.
+    @Test func submitSendsNilCreatedByWhenNoSession() async throws {
         MockURLProtocol.reset()
         let capturedRequest = Captured<URLRequest?>(nil)
         MockURLProtocol.stub(body: Data(Self.bodegaJSON.utf8)) { request in
@@ -129,28 +137,16 @@ struct AddBodegaViewModelTests {
         viewModel.name = "El Sol"
 
         viewModel.submit()
+        await viewModel.waitForPendingSubmitForTesting()
 
-        #expect(viewModel.submissionState == .signInRequired)
-        #expect(capturedRequest.get() == nil)
-    }
-
-    @Test func dismissSignInPromptResetsToIdleSoASecondSubmitReasksForSignIn() async throws {
-        let viewModel = try makeViewModel(session: nil)
-        viewModel.name = "El Sol"
-
-        viewModel.submit()
-        #expect(viewModel.submissionState == .signInRequired)
-
-        // Regression: swiping away the sign-in sheet without signing in,
-        // then tapping Submit again, must re-present it — a bug caught in
-        // manual Simulator testing where `AddBodegaView`'s
-        // `.onChange(of: submissionState)` never fired a second time
-        // because `.signInRequired` was already the current value.
-        viewModel.dismissSignInPrompt()
-        #expect(viewModel.submissionState == .idle)
-
-        viewModel.submit()
-        #expect(viewModel.submissionState == .signInRequired)
+        guard case .submitted = viewModel.submissionState else {
+            Issue.record("expected .submitted, got \(viewModel.submissionState)")
+            return
+        }
+        let request = try #require(capturedRequest.get())
+        let body = try #require(request.httpBody)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        #expect(json["created_by"] == nil)
     }
 
     @Test func dismissSignInPromptIsANoOpWhenNotCurrentlySignInRequired() async throws {

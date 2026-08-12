@@ -10,7 +10,11 @@ import Foundation
 /// nothing to decode yet.
 nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
     var id: UUID
-    var createdBy: UUID
+    // TEMPORARY: optional because unauthenticated writes are allowed while
+    // Sign in with Apple is blocked on Apple Developer Program enrollment —
+    // see 20260812013849_allow_anonymous_bodega_inserts.sql. Revert to
+    // non-optional once that migration is reverted.
+    var createdBy: UUID?
     var name: String
     var coordinate: Coordinate
     var address: String?
@@ -41,7 +45,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        createdBy = try container.decode(UUID.self, forKey: .createdBy)
+        createdBy = try container.decodeIfPresent(UUID.self, forKey: .createdBy)
         name = try container.decode(String.self, forKey: .name)
         coordinate = Coordinate(
             latitude: try container.decode(Double.self, forKey: .latitude),
@@ -62,7 +66,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
-        try container.encode(createdBy, forKey: .createdBy)
+        try container.encodeIfPresent(createdBy, forKey: .createdBy)
         try container.encode(name, forKey: .name)
         try container.encode(coordinate.latitude, forKey: .latitude)
         try container.encode(coordinate.longitude, forKey: .longitude)
