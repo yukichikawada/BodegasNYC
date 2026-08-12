@@ -9,7 +9,11 @@ import PostgREST
 /// instead, as PostGIS EWKT text (`SRID=4326;POINT(long lat)` — longitude
 /// first, matching WKT's x/y-not-lat/long axis order).
 nonisolated struct NewBodega: Encodable, Sendable {
-    var createdBy: UUID
+    // TEMPORARY: optional to allow unauthenticated submits while Sign in
+    // with Apple is blocked on Apple Developer Program enrollment — see
+    // 20260812013849_allow_anonymous_bodega_inserts.sql. Revert to
+    // non-optional once that migration is reverted.
+    var createdBy: UUID?
     var name: String
     var coordinate: Coordinate
     var address: String?
@@ -32,7 +36,7 @@ nonisolated struct NewBodega: Encodable, Sendable {
 
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
-        try container.encode(createdBy, forKey: .createdBy)
+        try container.encodeIfPresent(createdBy, forKey: .createdBy)
         try container.encode(name, forKey: .name)
         try container.encode(
             "SRID=4326;POINT(\(coordinate.longitude) \(coordinate.latitude))",
