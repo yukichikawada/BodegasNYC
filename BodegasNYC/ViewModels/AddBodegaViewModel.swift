@@ -25,12 +25,6 @@ final class AddBodegaViewModel: Identifiable {
         /// by presenting `SignInView` inline rather than a dead-end error
         /// string. The user must tap Submit again after signing in; no
         /// auto-retry-on-sign-in.
-        ///
-        /// TEMPORARILY UNREACHABLE: `submit()` no longer gates on
-        /// `sessionStore.currentUserID` while unauthenticated writes are
-        /// allowed (see 20260812013849_allow_anonymous_bodega_inserts.sql).
-        /// Left in place, along with `AddBodegaView`'s sheet wiring, so
-        /// restoring the gate is a one-line revert in `submit()`.
         case signInRequired
         case failed(String)
     }
@@ -76,12 +70,10 @@ final class AddBodegaViewModel: Identifiable {
             submissionState = .failed("Please enter a name.")
             return
         }
-        // TEMPORARY: the sign-in requirement below is disabled while Sign in
-        // with Apple is blocked on Apple Developer Program enrollment — see
-        // 20260812013849_allow_anonymous_bodega_inserts.sql. `userID` is nil
-        // for a signed-out submit; `.signInRequired`/`SignInView` stay wired
-        // up in AddBodegaView for when this gate comes back.
-        let userID = sessionStore.currentUserID
+        guard let userID = sessionStore.currentUserID else {
+            submissionState = .signInRequired
+            return
+        }
         submitTask?.cancel()
         submissionState = .submitting
         submitTask = Task { [bodegaService, coordinate, name, address, hasCat,
