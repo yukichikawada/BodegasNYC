@@ -10,29 +10,19 @@ Effort is a rough T-shirt size (S/M/L/XL), not an estimate. **Sign-off column:**
 needs your judgment call before a Routine builds it unattended, versus safe to hand off once its
 dependencies are met — not a model-tier annotation.
 
-## Known debt (not a feature — a must-revert)
+## Resolved debt
 
-**Unauthenticated bodega writes are currently open on the live Supabase project** (PR #10,
-migration `20260812013849_allow_anonymous_bodega_inserts.sql`, merged 2026-08-12). Sign in with
-Apple was blocked on Apple Developer Program enrollment, so `AddBodegaViewModel.submit()` no
-longer requires a session, `bodegas_insert` RLS accepts the `anon` role, and `bodegas.created_by`
-is nullable. This directly contradicts PRD §4.2 ("any *authenticated* user can submit a new
-bodega") and is a public, unrate-limited write hole for as long as it's in place (the Supabase
-anon key ships inside the app binary and isn't a secret).
+**Unauthenticated bodega writes** (opened by PR #10, migration
+`20260812013849_allow_anonymous_bodega_inserts.sql`, merged 2026-08-12) were reverted once Sign
+in with Apple started working end-to-end — see migration
+`20260815181145_revert_anonymous_bodega_inserts.sql`. `bodegas_insert` is back to
+`to authenticated with check (auth.uid() = created_by)`, `created_by` is `NOT NULL` again, and
+`AddBodegaViewModel.submit()` re-gates on `sessionStore.currentUserID`.
 
-**Trigger to revert:** Apple Developer Program enrollment clears and Sign in with Apple actually
-works end-to-end. **Revert path:** restore `NOT NULL` on `created_by`, narrow `bodegas_insert`
-back to `to authenticated with check (auth.uid() = created_by)`, restore the
-`sessionStore.currentUserID` guard in `submit()`, and restore the two tests deleted (not
-commented out) in PR #10 — `submitRequiresSignInWhenNoSessionAndSendsNoRequest` and
-`dismissSignInPromptResetsToIdleSoASecondSubmitReasksForSignIn` — from git history.
-
-**Important for the rows below:** only `bodegas_insert` got the anon-role carve-out —
-`reviews_insert`/`photos_insert`/`flags_insert` are still `to authenticated`-only (see
-`supabase/migrations/20260722043231_bodegas_reviews_photos_flags_rls.sql`). New UI work (Add
-Review/Photo/Flag below) should follow `AddBodegaViewModel`'s *original* gated pattern
-(`sessionStore.currentUserID == nil` → present `SignInView`, matching PR #9's design) — **not**
-its current temporarily-bypassed state. Don't propagate the anon carve-out to these.
+New UI work (Add Review/Photo/Flag below) should follow `AddBodegaViewModel`'s sign-in-gated
+pattern (`sessionStore.currentUserID == nil` → present `SignInView`, matching PR #9's design) —
+`reviews_insert`/`photos_insert`/`flags_insert` have always been `to authenticated`-only (see
+`supabase/migrations/20260722043231_bodegas_reviews_photos_flags_rls.sql`).
 
 ## Remaining MVP feature work
 
