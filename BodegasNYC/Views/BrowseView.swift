@@ -37,14 +37,6 @@ struct BrowseView: View {
     @State private var showingSignOutConfirmation = false
     @State private var signOutErrorMessage: String?
     @State private var isPlacingBodega = false
-    /// True from the moment a programmatic recenter (the auto-locate fetch
-    /// in `beginPlacementMode`) is triggered until `MapScreenView`'s
-    /// `onMapCameraChange(.onEnd)` confirms the camera has actually
-    /// settled there. `MapScreenView` disables "Use This Location" while
-    /// this is true — otherwise a confirm tapped mid-recenter would read
-    /// `lastVisibleRegion`'s *previous* value, silently submitting a
-    /// coordinate that doesn't match what's visually under the pin.
-    @State private var isAwaitingCameraSettle = false
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var isResolvingCurrentLocation = false
 
@@ -103,8 +95,13 @@ struct BrowseView: View {
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
                             Button("Drop a Pin on Map", systemImage: "mappin.and.ellipse") {
+                                // Manual placement: pan-under-a-fixed-pin
+                                // over whatever the map already shows (see
+                                // `MapScreenView`'s `PlacementBottomBar` doc
+                                // comment) — no GPS fetch here. That's the
+                                // separate "Use Current Location" item below.
                                 activeTab = .map
-                                Task { await beginPlacementMode() }
+                                isPlacingBodega = true
                             }
                             Button("Use Current Location", systemImage: "location.fill") {
                                 Task { await useCurrentLocationShortcut() }
@@ -176,33 +173,11 @@ struct BrowseView: View {
                 locationPermissionClient: locationPermissionClient,
                 streetsWalkedViewModel: streetsWalkedViewModel,
                 isPlacingBodega: $isPlacingBodega,
-                isAwaitingCameraSettle: $isAwaitingCameraSettle,
                 onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
                 onSelectBodega: { path.append($0) }
             )
         case .list:
             BodegaListView(viewModel: listViewModel)
-        }
-    }
-
-    /// Switches to the Map tab and enters placement mode. Best-effort:
-    /// attempts a quick current-location fix first (if already authorized)
-    /// to center the map somewhere useful before the user starts panning,
-    /// but placement mode works fine via manual panning regardless.
-    private func beginPlacementMode() async {
-        isPlacingBodega = true
-        guard LocationPermissionClient.canRequestCurrentLocation(
-            authorizationStatus: locationPermissionClient.authorizationStatus
-        ) else { return }
-        // `isPlacingBodega` re-checked after the await: the user may have
-        // already cancelled placement mode (or, more precisely, this fetch
-        // is stale) by the time a fix arrives — recentering the map on
-        // their way out would be a confusing, unrequested jump.
-        if let coordinate = await locationPermissionClient.requestCurrentLocation(), isPlacingBodega {
-            isAwaitingCameraSettle = true
-            cameraPosition = .region(
-                MKCoordinateRegion(center: coordinate, span: MapScreenView.newYorkCityDefault.span)
-            )
         }
     }
 
