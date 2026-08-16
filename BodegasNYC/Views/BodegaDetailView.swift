@@ -1,8 +1,8 @@
 import SwiftUI
 
-/// Read-only bodega detail: data points, hours, address, photo gallery,
-/// reviews, and aggregate rating. Add-review/add-photo/flag-an-issue are a
-/// separate follow-up slice, not built here.
+/// Bodega detail: data points, hours, address, photo gallery, reviews, and
+/// aggregate rating — plus an Add/Edit-review action. Add-photo and
+/// flag-an-issue remain separate follow-up slices, not built here.
 ///
 /// Unlike `MapScreenView`/`BodegaListView`, this view legitimately owns its
 /// `@State private var viewModel` rather than receiving one already-built —
@@ -11,11 +11,26 @@ import SwiftUI
 /// fresh visit is the correct behavior, not stale-data reuse to avoid.
 struct BodegaDetailView: View {
     @State private var viewModel: BodegaDetailViewModel
+    @State private var addReviewViewModel: AddReviewViewModel?
+    private let reviewService: ReviewService
+    let sessionStore: SessionStore
 
-    init(bodega: Bodega, reviewService: ReviewService, photoService: PhotoService) {
+    init(bodega: Bodega, reviewService: ReviewService, photoService: PhotoService, sessionStore: SessionStore) {
+        self.reviewService = reviewService
+        self.sessionStore = sessionStore
         _viewModel = State(
             initialValue: BodegaDetailViewModel(bodega: bodega, reviewService: reviewService, photoService: photoService)
         )
+    }
+
+    /// The signed-in user's own review for this bodega, if any — `nil` both
+    /// when signed out and when signed in with no review yet. Determines
+    /// whether tapping the review button routes to Add vs. Edit; the DB's
+    /// `unique (bodega_id, author_id)` constraint is what actually makes a
+    /// second insert impossible, this is just picking the right request.
+    private var myReview: Review? {
+        guard let userID = sessionStore.currentUserID else { return nil }
+        return viewModel.reviews.first { $0.authorId == userID }
     }
 
     var body: some View {
@@ -29,6 +44,7 @@ struct BodegaDetailView: View {
                 }
                 PhotoGallerySection(photos: viewModel.photos, urlFor: viewModel.photoURL(for:))
                 ReviewsSection(reviews: viewModel.reviews)
+                reviewActionButton
                 if case .failed(let message) = viewModel.loadState {
                     Text(message)
                         .font(.footnote)
@@ -45,6 +61,24 @@ struct BodegaDetailView: View {
                 ProgressView()
             }
         }
+        .sheet(item: $addReviewViewModel) { addReviewViewModel in
+            AddReviewView(viewModel: addReviewViewModel, sessionStore: sessionStore) { review in
+                viewModel.reviewWasSubmitted(review)
+                self.addReviewViewModel = nil
+            }
+        }
+    }
+
+    private var reviewActionButton: some View {
+        Button(myReview == nil ? "Add a Review" : "Edit Your Review") {
+            addReviewViewModel = AddReviewViewModel(
+                bodegaId: viewModel.bodega.id,
+                existingReview: myReview,
+                reviewService: reviewService,
+                sessionStore: sessionStore
+            )
+        }
+        .buttonStyle(.bordered)
     }
 
     private var header: some View {

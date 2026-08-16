@@ -115,7 +115,12 @@ struct BrowseView: View {
                     }
                 }
                 .navigationDestination(for: Bodega.self) { bodega in
-                    BodegaDetailView(bodega: bodega, reviewService: reviewService, photoService: photoService)
+                    BodegaDetailView(
+                        bodega: bodega,
+                        reviewService: reviewService,
+                        photoService: photoService,
+                        sessionStore: sessionStore
+                    )
                 }
                 .sheet(isPresented: $showingSignIn) {
                     SignInView(sessionStore: sessionStore)

@@ -24,11 +24,17 @@ pattern (`sessionStore.currentUserID == nil` → present `SignInView`, matching 
 `reviews_insert`/`photos_insert`/`flags_insert` have always been `to authenticated`-only (see
 `supabase/migrations/20260722043231_bodegas_reviews_photos_flags_rls.sql`).
 
+## Shipped
+
+**Add Review UI** — form to submit a rating + text review from the bodega detail page, editable
+by the author, sign-in-gated via `AddBodegaViewModel`'s pattern. No backend changes; `reviews`'
+existing `unique (bodega_id, author_id)` constraint drives client-side insert-vs-update routing.
+Live-verified in Simulator 2026-08-16.
+
 ## Remaining MVP feature work
 
 | Feature | Category | One-liner | Effort | Needs Your Sign-Off? | Notes / Dependencies |
 |---|---|---|---|---|---|
-| Add Review UI | Detail page | Form to submit a rating + text review from the bodega detail page. `ReviewService` backend already exists. | S | No — mechanical; follow `AddBodegaViewModel`'s original sign-in-gated pattern. | PRD §4.2: one review per user per bodega, editable by author. `reviews_insert`/`reviews_update` RLS already `authenticated`-only, no backend changes needed. |
 | Add Photo UI | Detail page | Image picker + upload flow to add a photo to a bodega's gallery. `PhotoService` backend already exists. | M | No — mechanical; same sign-in-gated pattern. | Needs `PhotosPicker` (or camera) integration — more UI surface than Add Review. `photos_insert` RLS already `authenticated`-only. |
 | Flag-an-Issue UI | Detail page | Flag a bodega/review/photo as inaccurate or inappropriate. `FlagService` backend already exists. | S | No — mechanical; same sign-in-gated pattern. | PRD §4.2: auto-hide after a flag-count threshold, no moderation queue for v1 — that trigger logic should already exist server-side; confirm before assuming it needs building too. |
 | Edit Existing Bodega UI | Detail page | Any user can propose an edit to hours/data points on an existing bodega. `BodegaService.update()` already exists. | M | No — mechanical; can likely reuse `AddBodegaView`'s form components pre-filled with current values. | PRD §4.2 + §9: edits apply immediately, no approval queue (MVP assumption) — see [`REACH_GOALS.md`](./REACH_GOALS.md)'s "Edit-approval workflow" row if that assumption ever needs revisiting. |
