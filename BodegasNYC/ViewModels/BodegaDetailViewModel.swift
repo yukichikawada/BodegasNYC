@@ -65,6 +65,18 @@ final class BodegaDetailViewModel {
         try? photoService.publicURL(for: photo)
     }
 
+    /// Merges a just-submitted review into `reviews` in place (replace by
+    /// id, else insert at the front) instead of re-fetching — keeps
+    /// `averageRating` and the reviews list current without an extra round
+    /// trip. Front-insertion matches `fetchAll`'s `created_at desc` order.
+    func reviewWasSubmitted(_ review: Review) {
+        if let index = reviews.firstIndex(where: { $0.id == review.id }) {
+            reviews[index] = review
+        } else {
+            reviews.insert(review, at: 0)
+        }
+    }
+
     /// Pure and independently testable. `nil` for zero reviews. Does not
     /// filter hidden reviews itself — that's `loadIfNeeded()`'s job; this
     /// function just averages whatever it's handed. Named distinctly from

@@ -130,6 +130,68 @@ struct BodegaDetailViewModelTests {
 
         #expect(viewModel.loadState == .loaded)
     }
+
+    @Test func reviewWasSubmittedInsertsANewReviewAtTheFront() throws {
+        let viewModel = try makeViewModel()
+        let existing = try Review(
+            id: UUID(),
+            bodegaId: Self.bodegaID,
+            authorId: UUID(),
+            rating: 3,
+            body: nil,
+            isHidden: false,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        viewModel.reviewWasSubmitted(existing)
+
+        let newReview = Review(
+            id: UUID(),
+            bodegaId: Self.bodegaID,
+            authorId: Self.authorID,
+            rating: 5,
+            body: "Great spot",
+            isHidden: false,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        viewModel.reviewWasSubmitted(newReview)
+
+        #expect(viewModel.reviews.count == 2)
+        #expect(viewModel.reviews.first?.id == newReview.id)
+        #expect(viewModel.averageRating == 4.0)
+    }
+
+    @Test func reviewWasSubmittedReplacesAnExistingReviewByID() throws {
+        let viewModel = try makeViewModel()
+        let original = Review(
+            id: UUID(),
+            bodegaId: Self.bodegaID,
+            authorId: Self.authorID,
+            rating: 2,
+            body: "Meh",
+            isHidden: false,
+            createdAt: Date(),
+            updatedAt: Date()
+        )
+        viewModel.reviewWasSubmitted(original)
+
+        let edited = Review(
+            id: original.id,
+            bodegaId: Self.bodegaID,
+            authorId: Self.authorID,
+            rating: 5,
+            body: "Actually great",
+            isHidden: false,
+            createdAt: original.createdAt,
+            updatedAt: Date()
+        )
+        viewModel.reviewWasSubmitted(edited)
+
+        #expect(viewModel.reviews.count == 1)
+        #expect(viewModel.reviews.first?.rating == 5)
+        #expect(viewModel.reviews.first?.body == "Actually great")
+    }
 }
 
 }
