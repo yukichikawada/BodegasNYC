@@ -55,8 +55,13 @@ struct MapScreenView: View {
             ForEach(viewModel.displayItems) { item in
                 switch item {
                 case .pin(let bodega):
-                    Marker(bodega.name, coordinate: bodega.coordinate.clLocationCoordinate)
-                        .tag(bodega.id)
+                    Marker(
+                        bodega.name,
+                        systemImage: bodega.hasCat ? "cat" : "figure.wave",
+                        coordinate: bodega.coordinate.clLocationCoordinate
+                    )
+                    .tag(bodega.id)
+                    .tint(bodega.hasCat ? .orange : .red)
                 case .cluster(let cluster):
                     Annotation(
                         "\(cluster.bodegaIDs.count) bodegas",
@@ -96,14 +101,13 @@ struct MapScreenView: View {
         }
         .overlay {
             if isPlacingBodega {
-                Image(systemName: "mappin")
+                // `figure.wave` has no directional "point" the way `mappin`
+                // does, so it's centered directly on the screen-center
+                // coordinate `lastVisibleRegion.center` resolves to — no
+                // offset needed.
+                Image(systemName: "figure.wave")
                     .font(.largeTitle)
                     .foregroundStyle(.red)
-                    // Offsets by half the glyph's rendered height so the
-                    // pin's *point*, not its bounding-box center, marks the
-                    // screen-center coordinate `lastVisibleRegion.center`
-                    // resolves to.
-                    .offset(y: -16)
                     .allowsHitTesting(false)
             }
         }
