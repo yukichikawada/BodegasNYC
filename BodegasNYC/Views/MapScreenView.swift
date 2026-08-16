@@ -78,6 +78,10 @@ struct MapScreenView: View {
                         .stroke(.orange.opacity(0.55), lineWidth: 4)
                 }
             }
+            // The standard blue dot + heading cone, same as Apple/Google
+            // Maps. Silently renders nothing until When-In-Use is granted
+            // and a fix arrives — no separate gating needed here.
+            UserAnnotation()
         }
         .onMapCameraChange(frequency: .onEnd) { context in
             lastVisibleRegion = context.region
