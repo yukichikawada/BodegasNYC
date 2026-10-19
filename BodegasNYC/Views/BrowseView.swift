@@ -39,6 +39,11 @@ struct BrowseView: View {
     @State private var isPlacingBodega = false
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var isResolvingCurrentLocation = false
+    /// The single source of truth for filter/search across both tabs —
+    /// pushed into both view models via `.onChange` below, so switching
+    /// Map↔List never loses or desyncs it.
+    @State private var filter: BodegaFilter = .none
+    @State private var showingFilters = false
 
     private let bodegaService: BodegaService
     private let reviewService: ReviewService
@@ -77,6 +82,9 @@ struct BrowseView: View {
                         }
                         .pickerStyle(.segmented)
                         .frame(maxWidth: 200)
+                    }
+                    ToolbarItem(placement: .topBarLeading) {
+                        filterButton
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Button {
@@ -121,6 +129,13 @@ struct BrowseView: View {
                 }
                 .sheet(isPresented: $showingSignIn) {
                     SignInView(sessionStore: sessionStore)
+                }
+                .sheet(isPresented: $showingFilters) {
+                    BodegaFilterSheet(filter: $filter)
+                }
+                .onChange(of: filter) { _, newFilter in
+                    mapViewModel.filter = newFilter
+                    listViewModel.filter = newFilter
                 }
                 .sheet(item: $addBodegaViewModel) { viewModel in
                     AddBodegaView(viewModel: viewModel, sessionStore: sessionStore) { insertedBodega in
@@ -177,8 +192,39 @@ struct BrowseView: View {
                 onSelectBodega: { path.append($0) }
             )
         case .list:
-            BodegaListView(viewModel: listViewModel)
+            BodegaListView(viewModel: listViewModel, filter: $filter)
         }
+    }
+
+    /// Filled icon plus a count badge whenever any filter (including a
+    /// search typed on the List tab) is active — the only on-screen signal
+    /// on the Map tab that pins are being hidden. Hand-drawn overlay rather
+    /// than `.badge`, which toolbar buttons don't render.
+    private var filterButton: some View {
+        Button {
+            showingFilters = true
+        } label: {
+            Label(
+                "Filters",
+                systemImage: filter.isActive
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle"
+            )
+            .overlay(alignment: .topTrailing) {
+                if filter.isActive {
+                    Text("\(filter.activeCount)")
+                        .font(.caption2.bold())
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 16, minHeight: 16)
+                        .background(.red, in: Capsule())
+                        .offset(x: 8, y: -6)
+                        .accessibilityHidden(true)
+                }
+            }
+        }
+        .accessibilityValue(filter.isActive ? "\(filter.activeCount) active" : "None active")
     }
 
     /// "Use Current Location" toolbar shortcut: skips placement mode
