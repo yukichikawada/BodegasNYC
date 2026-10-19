@@ -155,6 +155,26 @@ struct BodegaListViewModelTests {
         #expect(requestCount.get() == 1)
     }
 
+    /// Regression for a QA finding: the generation bump drops the in-flight
+    /// fetch, and that used to strand `loadState` at `.loading`, so the list
+    /// showed a spinner forever. Exercised through `bodegaWasAdded`: the
+    /// list has only one fetch (the initial one), and while it is in flight
+    /// `bodegas` is empty, so `bodegaWasUpdated` has nothing to match and
+    /// never bumps. Both methods share `supersedeInFlightFetch()`.
+    @Test func bodegaWasAddedDuringTheInFlightFetchSettlesLoadState() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded()
+        #expect(viewModel.loadState == .loading)
+        viewModel.bodegaWasAdded(try makeTestBodega(name: "Nueva Bodega"))
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega"])
+    }
+
     @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))

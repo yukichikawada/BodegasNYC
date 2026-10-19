@@ -341,6 +341,17 @@ struct AddBodegaHoursRoundTripTests {
         #expect(AddBodegaViewModel.buildHours(from: entries) == nil)
     }
 
+    @Test func aClosedDayWithStoredTimesPrefillsAsBlankAndRebuildsAsCleanClosed() throws {
+        let hours = BodegaHours(sun: .init(open: "9:00", close: "17:00", isClosed: true))
+
+        let entries = AddBodegaViewModel.dayEntries(from: hours)
+
+        let sun = try #require(entries.first { $0.id == "sun" })
+        #expect(sun.isClosed && sun.open.isEmpty && sun.close.isEmpty)
+        let rebuilt = AddBodegaViewModel.buildHours(from: entries)
+        #expect(rebuilt == BodegaHours(sun: .init(open: "", close: "", isClosed: true)))
+    }
+
     @Test func openOnlyOrCloseOnlyDaysSurviveTheRoundTrip() {
         let hours = BodegaHours(mon: .init(open: "8:00", close: ""), sat: .init(open: "", close: "22:00"))
 

@@ -195,18 +195,19 @@ final class AddBodegaViewModel: Identifiable {
     /// Inverse of `buildHours(from:)`, used to pre-fill the Edit Bodega
     /// form: a `nil` day becomes a blank row, a closed day a row with
     /// `isClosed` set. Round-trips exactly for anything `buildHours` itself
-    /// produces. Not a perfect inverse for hand-written DB rows: a closed
-    /// day's stored `open`/`close` strings are carried into the row but
-    /// dropped again by `buildHours` (which always writes `""` for a closed
-    /// day), and an open day with both times empty comes back as `nil`.
+    /// produces. A closed day's `open`/`close` are blanked, matching what
+    /// `buildHours` writes for one. The only rows that don't survive the
+    /// round trip unchanged are hand-written DB rows: a closed day with
+    /// stored times comes back as `""`/`""`, and an open day with both
+    /// times empty comes back as `nil`.
     static func dayEntries(from hours: BodegaHours?) -> [DayEntry] {
         defaultDayEntries.map { entry in
             guard let hours, let keyPath = dayKeyPaths[entry.id], let dayHours = hours[keyPath: keyPath] else {
                 return entry
             }
             var filled = entry
-            filled.open = dayHours.open
-            filled.close = dayHours.close
+            filled.open = dayHours.isClosed ? "" : dayHours.open
+            filled.close = dayHours.isClosed ? "" : dayHours.close
             filled.isClosed = dayHours.isClosed
             return filled
         }

@@ -69,7 +69,7 @@ final class BodegaListViewModel {
     /// `BodegaListView` still renders the failure state regardless of
     /// `bodegas`' contents — a known, accepted gap.
     func bodegaWasAdded(_ bodega: Bodega) {
-        currentFetchGeneration += 1
+        supersedeInFlightFetch()
         bodegas.insert(bodega, at: 0)
     }
 
@@ -80,8 +80,23 @@ final class BodegaListViewModel {
     /// `BodegaMapViewModel.bodegaWasUpdated`, and only when found.
     func bodegaWasUpdated(_ bodega: Bodega) {
         guard let index = bodegas.firstIndex(where: { $0.id == bodega.id }) else { return }
-        currentFetchGeneration += 1
+        supersedeInFlightFetch()
         bodegas[index] = bodega
+    }
+
+    /// Same as `BodegaMapViewModel.supersedeInFlightFetch()`: drops any
+    /// in-flight fetch and moves `.loading` to `.loaded`, so the spinner
+    /// can't be stranded by a fetch whose result is now ignored. One caveat:
+    /// if `bodegaWasAdded` lands during the list's *initial* fetch (the list
+    /// tab hasn't loaded yet), the list will show only the added bodega
+    /// until the next load. A partial list is still better than a spinner
+    /// that never goes away. `bodegaWasUpdated` can't hit that case, since
+    /// it only acts on a bodega that is already loaded.
+    private func supersedeInFlightFetch() {
+        currentFetchGeneration += 1
+        if loadState == .loading {
+            loadState = .loaded
+        }
     }
 
     private func refetch() {
