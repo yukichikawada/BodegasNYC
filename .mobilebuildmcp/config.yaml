@@ -1,0 +1,6 @@
+# MobileBuildMCP project config. "ui-automation" adds tap/type/swipe/
+# snapshot tools so QA agents can drive the app in the Simulator (see
+# CLAUDE.md "Simulators for live runs"). Takes effect when the MCP
+# server next starts.
+schemaVersion: 1
+enabledWorkflows: ["simulator", "ui-automation"]
