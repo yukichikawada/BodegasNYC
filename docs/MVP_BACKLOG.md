@@ -31,6 +31,13 @@ by the author, sign-in-gated via `AddBodegaViewModel`'s pattern. No backend chan
 existing `unique (bodega_id, author_id)` constraint drives client-side insert-vs-update routing.
 Live-verified in Simulator 2026-08-16.
 
+**Filter/Search** — filter the map and list by any combination of the five data points (AND
+semantics) plus free-text name/address search (case- and diacritic-insensitive). Applied
+client-side via a pure `BodegaFilter` value type against the bodegas each view model already
+holds — no backend changes, and the `.all`/`.nearby` fetch paths are untouched. `BrowseView`
+owns the single filter state (toolbar filter sheet + the list's `.searchable`), so switching
+tabs keeps it. Covered by unit tests; not yet verified in Simulator.
+
 ## Remaining MVP feature work
 
 | Feature | Category | One-liner | Effort | Needs Your Sign-Off? | Notes / Dependencies |
@@ -38,7 +45,6 @@ Live-verified in Simulator 2026-08-16.
 | Add Photo UI | Detail page | Image picker + upload flow to add a photo to a bodega's gallery. `PhotoService` backend already exists. | M | No — mechanical; same sign-in-gated pattern. | Needs `PhotosPicker` (or camera) integration — more UI surface than Add Review. `photos_insert` RLS already `authenticated`-only. |
 | Flag-an-Issue UI | Detail page | Flag a bodega/review/photo as inaccurate or inappropriate. `FlagService` backend already exists. | S | No — mechanical; same sign-in-gated pattern. | PRD §4.2: auto-hide after a flag-count threshold, no moderation queue for v1 — that trigger logic should already exist server-side; confirm before assuming it needs building too. |
 | Edit Existing Bodega UI | Detail page | Any user can propose an edit to hours/data points on an existing bodega. `BodegaService.update()` already exists. | M | No — mechanical; can likely reuse `AddBodegaView`'s form components pre-filled with current values. | PRD §4.2 + §9: edits apply immediately, no approval queue (MVP assumption) — see [`REACH_GOALS.md`](./REACH_GOALS.md)'s "Edit-approval workflow" row if that assumption ever needs revisiting. |
-| Filter/Search | Browse | Filter by any combination of the five data points, plus free-text name/address search. | M | No — mechanical; data model and query surface already support it. | PRD §4.2. `nearby_bodegas` RPC pattern (from Add-a-Bodega's proximity work) may be a useful reference for how filters compose with the existing fetch paths. |
 | Duplicate-Bodega Check on Submit | Add-a-Bodega | Basic proximity check when submitting a new bodega to catch obvious duplicates. | S–M | **Yes** — exact UX (merge vs. reject vs. flag-for-review) is explicitly left unspecified in PRD §4.1. | Depends on picking a UX before building — don't let this get built ahead of that decision. |
 | Onboarding Flow | Portfolio/Design | Custom onboarding that establishes tone immediately — not a generic permissions carousel. | M | **Yes** — needs your product voice/tone direction. | PRD §4.3/§8. |
 | First-Run Tutorial | Portfolio/Design | Guided "add your first bodega" flow that teaches by doing, not static screens. | M | **Yes** — same, needs voice/tone direction and interaction design. | PRD §4.3/§8. |
