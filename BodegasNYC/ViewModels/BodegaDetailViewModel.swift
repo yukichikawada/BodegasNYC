@@ -16,7 +16,9 @@ final class BodegaDetailViewModel {
         case failed(String)
     }
 
-    let bodega: Bodega
+    /// Replaced (same id) by `bodegaWasUpdated(_:)` after an Edit Bodega
+    /// save, so the header, data points, and hours re-render.
+    private(set) var bodega: Bodega
     private(set) var loadState: LoadState = .idle
     private(set) var reviews: [Review] = []
     private(set) var photos: [Photo] = []
@@ -35,8 +37,9 @@ final class BodegaDetailViewModel {
 
     /// Safe to call on every view appearance — a no-op once `loadState` has
     /// moved past `.idle`. No fetch-generation guard needed here (unlike
-    /// `BodegaMapViewModel`/`BodegaListViewModel`): `bodega` is fixed for
-    /// this ViewModel's lifetime, so there's no re-triggerable parameter
+    /// `BodegaMapViewModel`/`BodegaListViewModel`): `bodega.id` is fixed
+    /// for this ViewModel's lifetime (`bodegaWasUpdated(_:)` only swaps in
+    /// a newer copy of the same row), so there's no re-triggerable parameter
     /// that could cause two overlapping fetches to race — the `loadState`
     /// guard alone is sufficient.
     func loadIfNeeded() {
@@ -85,6 +88,14 @@ final class BodegaDetailViewModel {
     func photoWasAdded(_ photo: Photo) {
         guard !photos.contains(where: { $0.id == photo.id }) else { return }
         photos.insert(photo, at: 0)
+    }
+
+    /// Swaps in the server's copy of this bodega after an Edit Bodega save
+    /// (the PATCH's `select().single()` response), instead of re-fetching.
+    /// Ignores a bodega with a different id — this screen is for one row.
+    func bodegaWasUpdated(_ updated: Bodega) {
+        guard updated.id == bodega.id else { return }
+        bodega = updated
     }
 
     /// Pure and independently testable. `nil` for zero reviews. Does not

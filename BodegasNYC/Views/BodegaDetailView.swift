@@ -27,22 +27,32 @@ struct BodegaDetailView: View {
     /// dropped by SwiftUI ("already presenting").
     @State private var flagSubmittedPendingConfirmation = false
     @State private var showingFlagConfirmation = false
+    @State private var editBodegaViewModel: AddBodegaViewModel?
+    private let bodegaService: BodegaService
     private let reviewService: ReviewService
     private let photoService: PhotoService
     private let flagService: FlagService
     let sessionStore: SessionStore
+    /// Fired after an Edit Bodega save so `BrowseView` can update the same
+    /// row on the map and list. This screen updates itself first, via its
+    /// own view model — it never re-reads the `Bodega` it was pushed with.
+    private let onBodegaUpdated: (Bodega) -> Void
 
     init(
         bodega: Bodega,
+        bodegaService: BodegaService,
         reviewService: ReviewService,
         photoService: PhotoService,
         flagService: FlagService,
-        sessionStore: SessionStore
+        sessionStore: SessionStore,
+        onBodegaUpdated: @escaping (Bodega) -> Void
     ) {
+        self.bodegaService = bodegaService
         self.reviewService = reviewService
         self.photoService = photoService
         self.flagService = flagService
         self.sessionStore = sessionStore
+        self.onBodegaUpdated = onBodegaUpdated
         _viewModel = State(
             initialValue: BodegaDetailViewModel(
                 bodega: bodega,
@@ -98,6 +108,13 @@ struct BodegaDetailView: View {
         }
         .navigationTitle(viewModel.bodega.name)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                // No sign-in check here — that happens on Save, same as
+                // Submit in the review/flag/photo flows.
+                Button("Edit") { presentEditBodegaSheet() }
+            }
+        }
         .task { viewModel.loadIfNeeded() }
         .overlay {
             if viewModel.loadState == .loading {
@@ -108,6 +125,13 @@ struct BodegaDetailView: View {
             AddReviewView(viewModel: addReviewViewModel, sessionStore: sessionStore) { review in
                 viewModel.reviewWasSubmitted(review)
                 self.addReviewViewModel = nil
+            }
+        }
+        .sheet(item: $editBodegaViewModel) { editBodegaViewModel in
+            AddBodegaView(viewModel: editBodegaViewModel, sessionStore: sessionStore) { updated in
+                viewModel.bodegaWasUpdated(updated)
+                onBodegaUpdated(updated)
+                self.editBodegaViewModel = nil
             }
         }
         .task(id: pickedPhotoItem) { await loadPickedPhoto() }
@@ -171,6 +195,17 @@ struct BodegaDetailView: View {
             photoLoadErrorMessage = error.localizedDescription
         }
         pickedPhotoItem = nil
+    }
+
+    /// Reuses the Add Bodega form, pre-filled from the bodega as currently
+    /// shown (so a second edit starts from the first edit's result).
+    private func presentEditBodegaSheet() {
+        editBodegaViewModel = AddBodegaViewModel(
+            coordinate: viewModel.bodega.coordinate,
+            existingBodega: viewModel.bodega,
+            bodegaService: bodegaService,
+            sessionStore: sessionStore
+        )
     }
 
     private func presentFlagSheet(for target: FlagTarget) {

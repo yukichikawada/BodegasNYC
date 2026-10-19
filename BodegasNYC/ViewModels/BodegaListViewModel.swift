@@ -73,6 +73,17 @@ final class BodegaListViewModel {
         bodegas.insert(bodega, at: 0)
     }
 
+    /// Reflects an Edit Bodega save without a full refetch: replaces the
+    /// bodega with the same id in place (edits don't change `created_at`
+    /// ordering). A no-op if it isn't loaded. Bumps
+    /// `currentFetchGeneration` for the same reason as
+    /// `BodegaMapViewModel.bodegaWasUpdated`, and only when found.
+    func bodegaWasUpdated(_ bodega: Bodega) {
+        guard let index = bodegas.firstIndex(where: { $0.id == bodega.id }) else { return }
+        currentFetchGeneration += 1
+        bodegas[index] = bodega
+    }
+
     private func refetch() {
         fetchTask?.cancel()
         currentFetchGeneration += 1

@@ -160,6 +160,26 @@ final class BodegaMapViewModel {
         }
     }
 
+    /// Reflects an Edit Bodega save without a full refetch: replaces the
+    /// loaded bodega with the same id in place (keeping its position, since
+    /// `created_at` ordering doesn't change on edit) and reclusters, which
+    /// also re-applies any active filter to the edited data points. A no-op
+    /// if that bodega isn't currently loaded (e.g. outside the `.nearby`
+    /// radius) — it isn't on the map to update.
+    ///
+    /// Bumps `currentFetchGeneration` like `bodegaWasAdded`, so a fetch
+    /// already in flight from before the save can't land afterward and put
+    /// the pre-edit row back. Only when the bodega was found, so an
+    /// unrelated in-flight fetch isn't discarded for nothing.
+    func bodegaWasUpdated(_ bodega: Bodega) {
+        guard let index = loadedBodegas.firstIndex(where: { $0.id == bodega.id }) else { return }
+        currentFetchGeneration += 1
+        loadedBodegas[index] = bodega
+        if let lastRegion {
+            recluster(region: lastRegion)
+        }
+    }
+
     /// Derives a fetch radius from the visible region's span rather than a
     /// fixed constant, so "nearby" widens/narrows with zoom; clamped so
     /// extreme zoom levels don't request an absurdly small or large radius.
