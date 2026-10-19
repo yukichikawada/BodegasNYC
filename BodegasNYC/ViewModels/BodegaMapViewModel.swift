@@ -27,6 +27,17 @@ final class BodegaMapViewModel {
     /// explicit call from `browseModeDidChange`, driven by a user action
     /// (the map's locate-me button), never automatically.
     private(set) var browseMode: BrowseMode = .all
+    /// Narrows which of `loadedBodegas` get clustered into `displayItems` —
+    /// pushed in from `BrowseView`, which owns the shared filter state.
+    /// Changing it only reclusters what's already loaded; it never triggers
+    /// a refetch, and `loadedBodegas` itself always holds the full,
+    /// unfiltered fetch result so clearing the filter is instant.
+    var filter: BodegaFilter = .none {
+        didSet {
+            guard filter != oldValue, let lastRegion else { return }
+            recluster(region: lastRegion)
+        }
+    }
 
     private let bodegaService: BodegaService
     private var loadedBodegas: [Bodega] = []
@@ -122,8 +133,12 @@ final class BodegaMapViewModel {
         }
     }
 
+    /// Filters *before* clustering, so a cluster's count only ever reflects
+    /// bodegas that actually match — clustering first and then hiding
+    /// clusters would leave badges counting bodegas the user filtered out.
     private func recluster(region: MKCoordinateRegion) {
-        displayItems = Self.cluster(loadedBodegas, visibleRegion: region)
+        let visible = filter.isActive ? loadedBodegas.filter(filter.matches) : loadedBodegas
+        displayItems = Self.cluster(visible, visibleRegion: region)
     }
 
     /// Optimistically reflects a just-inserted bodega without a full
