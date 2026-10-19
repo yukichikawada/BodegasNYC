@@ -103,54 +103,17 @@ final class AddBodegaViewModel: Identifiable {
         }
         submitTask?.cancel()
         submissionState = .submitting
-        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let trimmedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        let addressValue = trimmedAddress.isEmpty ? nil : trimmedAddress
-        let hours = Self.buildHours(from: dayEntries)
-        submitTask = Task { [bodegaService, coordinate, existingBodega, hasCat,
-                              servesHotFood, sellsCigarettes, sellsBeer, sellsLotto, userID] in
+        // Snapshotted synchronously, before the Task: edits made while the
+        // request is in flight can't leak into it.
+        let request = makeRequest(userID: userID)
+        submitTask = Task { [bodegaService, request] in
             do {
                 let saved: Bodega
-                if let existingBodega {
-                    // Always the full set of editable fields, not a diff
-                    // against `existingBodega`: simpler, and idempotent for
-                    // fields the user didn't touch. A blank address / all
-                    // blank hours is sent as an explicit `null` via
-                    // `fieldsToClear` so clearing actually clears. Never
-                    // sends `location`, `is_hidden`, or `created_by` —
-                    // `BodegaUpdate` has no such fields.
-                    var fieldsToClear: Set<BodegaUpdate.ClearableField> = []
-                    if addressValue == nil { fieldsToClear.insert(.address) }
-                    if hours == nil { fieldsToClear.insert(.hours) }
-                    saved = try await bodegaService.update(
-                        id: existingBodega.id,
-                        BodegaUpdate(
-                            name: trimmedName,
-                            address: addressValue,
-                            hasCat: hasCat,
-                            servesHotFood: servesHotFood,
-                            sellsCigarettes: sellsCigarettes,
-                            sellsBeer: sellsBeer,
-                            sellsLotto: sellsLotto,
-                            hours: hours,
-                            fieldsToClear: fieldsToClear
-                        )
-                    )
-                } else {
-                    saved = try await bodegaService.insert(
-                        NewBodega(
-                            createdBy: userID,
-                            name: trimmedName,
-                            coordinate: coordinate,
-                            address: addressValue,
-                            hasCat: hasCat,
-                            servesHotFood: servesHotFood,
-                            sellsCigarettes: sellsCigarettes,
-                            sellsBeer: sellsBeer,
-                            sellsLotto: sellsLotto,
-                            hours: hours
-                        )
-                    )
+                switch request {
+                case .insert(let draft):
+                    saved = try await bodegaService.insert(draft)
+                case .update(let id, let values):
+                    saved = try await bodegaService.update(id: id, values)
                 }
                 guard !Task.isCancelled else { return }
                 submissionState = .submitted(saved)
@@ -159,6 +122,55 @@ final class AddBodegaViewModel: Identifiable {
                 submissionState = .failed(error.localizedDescription)
             }
         }
+    }
+
+    private enum SubmitRequest: Sendable {
+        case insert(NewBodega)
+        case update(id: UUID, BodegaUpdate)
+    }
+
+    /// In edit mode, always the full set of editable fields rather than a
+    /// diff against `existingBodega`: simpler, and a no-op for fields the
+    /// user didn't touch. (`BodegaUpdate`'s optional encoding is what would
+    /// let a caller send only changed keys; this one just never leaves any
+    /// unset.) A blank address or all-blank hours goes out as an explicit
+    /// `null` via `fieldsToClear` so clearing actually clears. Never sends
+    /// `location`, `is_hidden`, or `created_by` — `BodegaUpdate` has no such
+    /// fields, so `coordinate` is unused here.
+    private func makeRequest(userID: UUID) -> SubmitRequest {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAddress = address.trimmingCharacters(in: .whitespacesAndNewlines)
+        let addressValue = trimmedAddress.isEmpty ? nil : trimmedAddress
+        let hours = Self.buildHours(from: dayEntries)
+
+        guard let existingBodega else {
+            return .insert(NewBodega(
+                createdBy: userID,
+                name: trimmedName,
+                coordinate: coordinate,
+                address: addressValue,
+                hasCat: hasCat,
+                servesHotFood: servesHotFood,
+                sellsCigarettes: sellsCigarettes,
+                sellsBeer: sellsBeer,
+                sellsLotto: sellsLotto,
+                hours: hours
+            ))
+        }
+        var fieldsToClear: Set<BodegaUpdate.ClearableField> = []
+        if addressValue == nil { fieldsToClear.insert(.address) }
+        if hours == nil { fieldsToClear.insert(.hours) }
+        return .update(id: existingBodega.id, BodegaUpdate(
+            name: trimmedName,
+            address: addressValue,
+            hasCat: hasCat,
+            servesHotFood: servesHotFood,
+            sellsCigarettes: sellsCigarettes,
+            sellsBeer: sellsBeer,
+            sellsLotto: sellsLotto,
+            hours: hours,
+            fieldsToClear: fieldsToClear
+        ))
     }
 
     /// Called when the nested `SignInView` sheet is dismissed (swipe-down,
@@ -189,7 +201,9 @@ final class AddBodegaViewModel: Identifiable {
     /// day), and an open day with both times empty comes back as `nil`.
     static func dayEntries(from hours: BodegaHours?) -> [DayEntry] {
         defaultDayEntries.map { entry in
-            guard let hours, let dayHours = dayHours(for: entry.id, in: hours) else { return entry }
+            guard let hours, let keyPath = dayKeyPaths[entry.id], let dayHours = hours[keyPath: keyPath] else {
+                return entry
+            }
             var filled = entry
             filled.open = dayHours.open
             filled.close = dayHours.close
@@ -198,26 +212,21 @@ final class AddBodegaViewModel: Identifiable {
         }
     }
 
-    private static func dayHours(for dayID: String, in hours: BodegaHours) -> BodegaHours.DayHours? {
-        switch dayID {
-        case "mon": hours.mon
-        case "tue": hours.tue
-        case "wed": hours.wed
-        case "thu": hours.thu
-        case "fri": hours.fri
-        case "sat": hours.sat
-        case "sun": hours.sun
-        default: nil
-        }
-    }
+    /// `DayEntry.id` → the matching `BodegaHours` property, shared by
+    /// `buildHours(from:)` and its inverse `dayEntries(from:)`.
+    private static let dayKeyPaths: [String: WritableKeyPath<BodegaHours, BodegaHours.DayHours?>] = [
+        "mon": \.mon, "tue": \.tue, "wed": \.wed, "thu": \.thu,
+        "fri": \.fri, "sat": \.sat, "sun": \.sun
+    ]
 
     /// A day left blank (not marked closed, no times entered) maps to `nil`
-    /// — matches `BodegaDetailView.HoursSection`, which already treats a nil
-    /// day the same as an explicit `isClosed`.
+    /// — matches `HoursSection` (`BodegaDetailSections.swift`), which
+    /// already treats a nil day the same as an explicit `isClosed`.
     static func buildHours(from entries: [DayEntry]) -> BodegaHours? {
         var hours = BodegaHours()
         var anySet = false
         for entry in entries {
+            guard let keyPath = dayKeyPaths[entry.id] else { continue }
             let dayHours: BodegaHours.DayHours?
             if entry.isClosed {
                 dayHours = BodegaHours.DayHours(open: "", close: "", isClosed: true)
@@ -227,16 +236,7 @@ final class AddBodegaViewModel: Identifiable {
                 dayHours = nil
             }
             if dayHours != nil { anySet = true }
-            switch entry.id {
-            case "mon": hours.mon = dayHours
-            case "tue": hours.tue = dayHours
-            case "wed": hours.wed = dayHours
-            case "thu": hours.thu = dayHours
-            case "fri": hours.fri = dayHours
-            case "sat": hours.sat = dayHours
-            case "sun": hours.sun = dayHours
-            default: break
-            }
+            hours[keyPath: keyPath] = dayHours
         }
         return anySet ? hours : nil
     }

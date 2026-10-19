@@ -237,40 +237,7 @@ struct BodegaDetailView: View {
     }
 }
 
-private struct DataPointsSection: View {
-    let bodega: Bodega
-
-    private struct DataPoint {
-        let label: String
-        let systemImage: String
-        let isPresent: Bool
-    }
-
-    private var points: [DataPoint] {
-        [
-            DataPoint(label: "Cat", systemImage: "cat", isPresent: bodega.hasCat),
-            DataPoint(label: "Hot food", systemImage: "flame", isPresent: bodega.servesHotFood),
-            DataPoint(label: "Cigarettes", systemImage: "smoke", isPresent: bodega.sellsCigarettes),
-            DataPoint(label: "Beer", systemImage: "mug", isPresent: bodega.sellsBeer),
-            DataPoint(label: "Lotto", systemImage: "ticket", isPresent: bodega.sellsLotto)
-        ]
-    }
-
-    var body: some View {
-        HStack(spacing: 16) {
-            ForEach(points, id: \.label) { point in
-                VStack(spacing: 4) {
-                    Image(systemName: point.systemImage)
-                        .foregroundStyle(point.isPresent ? .primary : .secondary)
-                        .opacity(point.isPresent ? 1 : 0.3)
-                    Text(point.label)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-}
+// `DataPointsSection` and `HoursSection` live in `BodegaDetailSections.swift`.
 
 private struct RatingSummaryView: View {
     let averageRating: Double?
@@ -291,36 +258,6 @@ private struct RatingSummaryView: View {
                     .foregroundStyle(.secondary)
             }
         }
-    }
-}
-
-private struct HoursSection: View {
-    let hours: BodegaHours
-
-    private var orderedDays: [(label: String, dayHours: BodegaHours.DayHours?)] {
-        [
-            ("Mon", hours.mon), ("Tue", hours.tue), ("Wed", hours.wed), ("Thu", hours.thu),
-            ("Fri", hours.fri), ("Sat", hours.sat), ("Sun", hours.sun)
-        ]
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Hours").font(.headline)
-            ForEach(orderedDays, id: \.label) { day in
-                HStack {
-                    Text(day.label).frame(width: 40, alignment: .leading)
-                    Text(describe(day.dayHours))
-                        .foregroundStyle(.secondary)
-                }
-                .font(.subheadline)
-            }
-        }
-    }
-
-    private func describe(_ dayHours: BodegaHours.DayHours?) -> String {
-        guard let dayHours, !dayHours.isClosed else { return "Closed" }
-        return "\(dayHours.open) – \(dayHours.close)"
     }
 }
 
