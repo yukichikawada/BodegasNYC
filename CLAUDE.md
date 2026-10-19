@@ -29,3 +29,17 @@ When Claude Code orchestrates work with subagents:
 - Items that touch the same view (e.g. all three bodega-detail actions) are built as a stack:
   each later branch is based on the previous one and its PR targets that branch, so GitHub
   retargets to `main` as earlier PRs merge. Independent items branch from `main` in parallel.
+
+## Simulators for live runs
+
+Unit tests always go through `scripts/run-tests.sh` (pinned device, lockfile). For anything that
+launches the app — `build_run_sim`, screenshots, manual QA — each branch/worktree uses its own
+simulator so parallel runs never overwrite each other's install:
+
+```sh
+UDID=$(scripts/sim-for-branch.sh udid)        # creates + boots "BodegasNYC-<branch>" if needed
+scripts/sim-for-branch.sh delete               # when the PR is merged or abandoned
+```
+
+Pass the UDID as the simulator id to MobileBuildMCP or `-destination "platform=iOS Simulator,id=$UDID"`.
+Never run the app on the test script's pinned "iPhone 17 Pro" device.
