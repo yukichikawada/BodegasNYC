@@ -215,6 +215,27 @@ struct BodegaDetailViewModelTests {
 
         #expect(viewModel.photos.map(\.id) == [newPhoto.id, existingID])
     }
+
+    @Test func bodegaWasUpdatedReplacesTheBodegaWithTheSameID() throws {
+        let viewModel = try makeViewModel()
+        var edited = viewModel.bodega
+        edited.name = "Renamed Deli"
+        edited.sellsBeer = true
+        edited.hours = BodegaHours(mon: .init(open: "7:00", close: "23:00"))
+
+        viewModel.bodegaWasUpdated(edited)
+
+        #expect(viewModel.bodega == edited)
+    }
+
+    @Test func bodegaWasUpdatedIgnoresADifferentBodega() throws {
+        let viewModel = try makeViewModel()
+        let original = viewModel.bodega
+
+        viewModel.bodegaWasUpdated(try makeTestBodega(name: "Some Other Deli"))
+
+        #expect(viewModel.bodega == original)
+    }
 }
 
 }

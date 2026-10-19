@@ -129,6 +129,23 @@ struct BodegaServiceTests {
         #expect(json.count == 1)
         #expect(json["has_cat"] as? Bool == false)
     }
+
+    @Test func updateEncodesExplicitNullsOnlyForFieldsToClear() throws {
+        let cleared = BodegaUpdate(name: "El Sol", fieldsToClear: [.address, .hours])
+        let clearedJSON = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(cleared)) as? [String: Any]
+        )
+        #expect(Set(clearedJSON.keys) == ["name", "address", "hours"])
+        #expect(clearedJSON["address"] is NSNull)
+        #expect(clearedJSON["hours"] is NSNull)
+
+        // A value set on the same field wins over clearing it.
+        let both = BodegaUpdate(address: "1 Main St", fieldsToClear: [.address])
+        let bothJSON = try #require(
+            try JSONSerialization.jsonObject(with: JSONEncoder().encode(both)) as? [String: Any]
+        )
+        #expect(bothJSON["address"] as? String == "1 Main St")
+    }
 }
 
 }

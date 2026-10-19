@@ -130,6 +130,42 @@ struct BodegaListViewModelTests {
         #expect(viewModel.loadState == .loaded)
         #expect(requestCount.get() == 1)
     }
+
+    @Test func bodegaWasUpdatedReplacesByIDInPlaceAndRespectsTheFilter() async throws {
+        MockURLProtocol.reset()
+        let requestCount = Captured(0)
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),\(Self.bodegaJSON(name: "Plain Deli"))]"
+        MockURLProtocol.stub(body: Data(body.utf8)) { _ in
+            requestCount.set(requestCount.get() + 1)
+        }
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        #expect(viewModel.filteredBodegas.map(\.name) == ["Cat Deli"])
+        var edited = try #require(viewModel.bodegas.last)
+        edited.name = "Plain Deli (now with cat)"
+        edited.hasCat = true
+
+        viewModel.bodegaWasUpdated(edited)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.bodegas.map(\.name) == ["Cat Deli", "Plain Deli (now with cat)"])
+        #expect(viewModel.filteredBodegas.count == 2)
+        #expect(requestCount.get() == 1)
+    }
+
+    @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.bodegaWasUpdated(try makeTestBodega(name: "Elsewhere"))
+
+        #expect(viewModel.bodegas.map(\.name) == ["El Sol"])
+    }
 }
 
 }

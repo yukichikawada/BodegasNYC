@@ -216,6 +216,67 @@ struct BodegaMapViewModelTests {
         #expect(requestCount.get() == 1)
     }
 
+    private static func pins(in items: [MapDisplayItem]) -> [Bodega] {
+        items.compactMap { item in
+            if case .pin(let bodega) = item { return bodega }
+            return nil
+        }
+    }
+
+    @Test func bodegaWasUpdatedReplacesByIDWithoutRefetching() async throws {
+        MockURLProtocol.reset()
+        let requestCount = Captured(0)
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),"
+            + "\(Self.bodegaJSON(name: "Plain Deli", latitude: 40.80, longitude: -73.90))]"
+        MockURLProtocol.stub(body: Data(body.utf8)) { _ in
+            requestCount.set(requestCount.get() + 1)
+        }
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        var edited = try #require(Self.pins(in: viewModel.displayItems).first { $0.name == "Plain Deli" })
+        edited.name = "Renamed Deli"
+
+        viewModel.bodegaWasUpdated(edited)
+        await viewModel.waitForPendingFetchForTesting()
+
+        let pins = Self.pins(in: viewModel.displayItems)
+        #expect(pins.count == 2)
+        #expect(Set(pins.map(\.name)) == ["Cat Deli", "Renamed Deli"])
+        #expect(pins.first { $0.id == edited.id }?.name == "Renamed Deli")
+        #expect(requestCount.get() == 1)
+    }
+
+    @Test func bodegaWasUpdatedReappliesTheActiveFilter() async throws {
+        MockURLProtocol.reset()
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),"
+            + "\(Self.bodegaJSON(name: "Plain Deli", latitude: 40.80, longitude: -73.90))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        var edited = try #require(Self.pins(in: viewModel.displayItems).first { $0.name == "Plain Deli" })
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        #expect(Self.pins(in: viewModel.displayItems).map(\.name) == ["Cat Deli"])
+
+        edited.hasCat = true
+        viewModel.bodegaWasUpdated(edited)
+
+        #expect(Set(Self.pins(in: viewModel.displayItems).map(\.name)) == ["Cat Deli", "Plain Deli"])
+    }
+
+    @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.bodegaWasUpdated(try makeTestBodega(name: "Elsewhere", latitude: 40.80, longitude: -73.90))
+
+        #expect(Self.pins(in: viewModel.displayItems).map(\.name) == ["El Sol"])
+    }
+
     // Not covered here: a second in-flight fetch superseding an older one
     // (the `currentFetchGeneration` guard in `BodegaMapViewModel.refetch`).
     // Reliably forcing that race with `MockURLProtocol`'s instant-response
