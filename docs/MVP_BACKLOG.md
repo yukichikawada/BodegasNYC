@@ -53,11 +53,19 @@ via the existing `PhotoService.upload` and prepended to the gallery. No backend 
 `Info.plist` usage string (`PhotosPicker` is out-of-process). Covered by unit tests; not yet
 live-verified in Simulator.
 
+**Edit Existing Bodega UI** — "Edit" in the bodega detail toolbar opens the Add Bodega form
+(`AddBodegaViewModel` with `existingBodega`) pre-filled with the name, address, five data
+points, and hours; Save is sign-in-gated via the same pattern and PATCHes through the existing
+`BodegaService.update`. Edits apply immediately (PRD §4.2 + §9, no approval queue — see
+[`REACH_GOALS.md`](./REACH_GOALS.md)'s "Edit-approval workflow" row if that ever needs
+revisiting). Location, `is_hidden`, and `created_by` are not editable. The detail screen, map,
+and list all update in place without a refetch. No backend changes. Covered by unit tests; not
+yet live-verified in Simulator.
+
 ## Remaining MVP feature work
 
 | Feature | Category | One-liner | Effort | Needs Your Sign-Off? | Notes / Dependencies |
 |---|---|---|---|---|---|
-| Edit Existing Bodega UI | Detail page | Any user can propose an edit to hours/data points on an existing bodega. `BodegaService.update()` already exists. | M | No — mechanical; can likely reuse `AddBodegaView`'s form components pre-filled with current values. | PRD §4.2 + §9: edits apply immediately, no approval queue (MVP assumption) — see [`REACH_GOALS.md`](./REACH_GOALS.md)'s "Edit-approval workflow" row if that assumption ever needs revisiting. |
 | Duplicate-Bodega Check on Submit | Add-a-Bodega | Basic proximity check when submitting a new bodega to catch obvious duplicates. | S–M | **Yes** — exact UX (merge vs. reject vs. flag-for-review) is explicitly left unspecified in PRD §4.1. | Depends on picking a UX before building — don't let this get built ahead of that decision. |
 | Onboarding Flow | Portfolio/Design | Custom onboarding that establishes tone immediately — not a generic permissions carousel. | M | **Yes** — needs your product voice/tone direction. | PRD §4.3/§8. |
 | First-Run Tutorial | Portfolio/Design | Guided "add your first bodega" flow that teaches by doing, not static screens. | M | **Yes** — same, needs voice/tone direction and interaction design. | PRD §4.3/§8. |
