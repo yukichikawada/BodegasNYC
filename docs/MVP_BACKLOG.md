@@ -45,11 +45,18 @@ the existing `trg_flags_auto_hide` trigger, and the partial unique indexes' `235
 flag is surfaced as "You've already flagged this." Covered by unit tests; not yet live-verified
 in Simulator.
 
+**Add Photo UI** — "Add a Photo" `PhotosPicker` (library, single image) in the bodega detail
+gallery, which now renders even with no photos yet. Picking opens a preview sheet whose Upload
+button is sign-in-gated via the same pattern; the image is downscaled to at most 1600 px on the
+long edge and re-encoded as JPEG (0.8) off the main actor (`PhotoImageEncoder`), then uploaded
+via the existing `PhotoService.upload` and prepended to the gallery. No backend changes, no
+`Info.plist` usage string (`PhotosPicker` is out-of-process). Covered by unit tests; not yet
+live-verified in Simulator.
+
 ## Remaining MVP feature work
 
 | Feature | Category | One-liner | Effort | Needs Your Sign-Off? | Notes / Dependencies |
 |---|---|---|---|---|---|
-| Add Photo UI | Detail page | Image picker + upload flow to add a photo to a bodega's gallery. `PhotoService` backend already exists. | M | No — mechanical; same sign-in-gated pattern. | Needs `PhotosPicker` (or camera) integration — more UI surface than Add Review. `photos_insert` RLS already `authenticated`-only. |
 | Edit Existing Bodega UI | Detail page | Any user can propose an edit to hours/data points on an existing bodega. `BodegaService.update()` already exists. | M | No — mechanical; can likely reuse `AddBodegaView`'s form components pre-filled with current values. | PRD §4.2 + §9: edits apply immediately, no approval queue (MVP assumption) — see [`REACH_GOALS.md`](./REACH_GOALS.md)'s "Edit-approval workflow" row if that assumption ever needs revisiting. |
 | Duplicate-Bodega Check on Submit | Add-a-Bodega | Basic proximity check when submitting a new bodega to catch obvious duplicates. | S–M | **Yes** — exact UX (merge vs. reject vs. flag-for-review) is explicitly left unspecified in PRD §4.1. | Depends on picking a UX before building — don't let this get built ahead of that decision. |
 | Onboarding Flow | Portfolio/Design | Custom onboarding that establishes tone immediately — not a generic permissions carousel. | M | **Yes** — needs your product voice/tone direction. | PRD §4.3/§8. |
