@@ -25,16 +25,21 @@ struct BodegaMapViewModelTests {
         span: MKCoordinateSpan(latitudeDelta: 0.05, longitudeDelta: 0.05)
     )
 
-    private static func bodegaJSON(name: String) -> String {
+    private static func bodegaJSON(
+        name: String,
+        latitude: Double = 40.7291,
+        longitude: Double = -73.9965,
+        hasCat: Bool = false
+    ) -> String {
         """
         {
           "id": "\(UUID().uuidString)",
           "created_by": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
           "name": "\(name)",
-          "latitude": 40.7291,
-          "longitude": -73.9965,
+          "latitude": \(latitude),
+          "longitude": \(longitude),
           "address": null,
-          "has_cat": false,
+          "has_cat": \(hasCat),
           "serves_hot_food": false,
           "sells_cigarettes": false,
           "sells_beer": false,
@@ -178,6 +183,37 @@ struct BodegaMapViewModelTests {
         viewModel.bodegaWasAdded(added)
 
         #expect(viewModel.displayItems.count == 2)
+    }
+
+    @Test func settingAFilterReclustersWithoutRefetching() async throws {
+        MockURLProtocol.reset()
+        let requestCount = Captured(0)
+        // Two bodegas in different grid cells (same separation as
+        // `bodegaWasAddedPrependsAndIsVisibleImmediately`) so they render as
+        // two separate pins rather than one cluster.
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),"
+            + "\(Self.bodegaJSON(name: "Plain Deli", latitude: 40.80, longitude: -73.90))]"
+        MockURLProtocol.stub(body: Data(body.utf8)) { _ in
+            requestCount.set(requestCount.get() + 1)
+        }
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.displayItems.count == 2)
+
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        await viewModel.waitForPendingFetchForTesting()
+
+        let pinNames = viewModel.displayItems.compactMap { item -> String? in
+            if case .pin(let bodega) = item { return bodega.name }
+            return nil
+        }
+        #expect(pinNames == ["Cat Deli"])
+        #expect(viewModel.loadState == .loaded)
+
+        viewModel.filter = .none
+        #expect(viewModel.displayItems.count == 2)
+        #expect(requestCount.get() == 1)
     }
 
     // Not covered here: a second in-flight fetch superseding an older one

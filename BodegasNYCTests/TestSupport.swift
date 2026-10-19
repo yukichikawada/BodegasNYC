@@ -38,32 +38,42 @@ func makeTestStorageClient() -> SupabaseStorageClient {
 /// has no memberwise initializer — defining `init(from:)` suppresses the
 /// synthesized one) rather than adding a test-only initializer to
 /// production code.
+///
+/// Built as a dictionary through `JSONSerialization` rather than string
+/// interpolation into a JSON literal, so names/addresses containing quotes
+/// or non-ASCII characters (e.g. `BodegaFilterTests`' diacritic cases) are
+/// escaped correctly.
 func makeTestBodega(
     id: UUID = UUID(),
     name: String = "Test Bodega",
-    latitude: Double,
-    longitude: Double
+    latitude: Double = 40.7291,
+    longitude: Double = -73.9965,
+    address: String? = nil,
+    hasCat: Bool = false,
+    servesHotFood: Bool = false,
+    sellsCigarettes: Bool = false,
+    sellsBeer: Bool = false,
+    sellsLotto: Bool = false
 ) throws -> Bodega {
-    let json = """
-    {
-      "id": "\(id.uuidString)",
-      "created_by": "00000000-0000-0000-0000-000000000000",
-      "name": "\(name)",
-      "latitude": \(latitude),
-      "longitude": \(longitude),
-      "address": null,
-      "has_cat": false,
-      "serves_hot_food": false,
-      "sells_cigarettes": false,
-      "sells_beer": false,
-      "sells_lotto": false,
-      "hours": null,
-      "is_hidden": false,
-      "created_at": "2026-07-21T18:30:00.000000+00:00",
-      "updated_at": "2026-07-21T18:30:00.000000+00:00"
-    }
-    """
-    return try PostgRESTDecoding.makeDecoder().decode(Bodega.self, from: Data(json.utf8))
+    let object: [String: Any] = [
+        "id": id.uuidString,
+        "created_by": "00000000-0000-0000-0000-000000000000",
+        "name": name,
+        "latitude": latitude,
+        "longitude": longitude,
+        "address": address ?? NSNull(),
+        "has_cat": hasCat,
+        "serves_hot_food": servesHotFood,
+        "sells_cigarettes": sellsCigarettes,
+        "sells_beer": sellsBeer,
+        "sells_lotto": sellsLotto,
+        "hours": NSNull(),
+        "is_hidden": false,
+        "created_at": "2026-07-21T18:30:00.000000+00:00",
+        "updated_at": "2026-07-21T18:30:00.000000+00:00"
+    ]
+    let data = try JSONSerialization.data(withJSONObject: object)
+    return try PostgRESTDecoding.makeDecoder().decode(Bodega.self, from: data)
 }
 
 /// An in-memory `ModelContainer` for `WalkedPoint` — isolated per test,

@@ -26,7 +26,21 @@ final class BodegaListViewModel {
     }
 
     private(set) var loadState: LoadState = .idle
+    /// The full, unfiltered fetch result. `BodegaListView` renders
+    /// `filteredBodegas`; this stays whole so it can still tell "nothing
+    /// loaded" apart from "nothing matches the filter".
     private(set) var bodegas: [Bodega] = []
+    /// Pushed in from `BrowseView`, which owns the shared filter state.
+    /// Changing it never refetches — see `filteredBodegas`.
+    var filter: BodegaFilter = .none
+
+    /// `bodegas` narrowed by `filter`, recomputed on read rather than cached:
+    /// `@Observable` tracks both `bodegas` and `filter` through this getter,
+    /// so the view re-renders on either changing with no stored copy to keep
+    /// in sync (e.g. through `bodegaWasAdded`'s prepend).
+    var filteredBodegas: [Bodega] {
+        filter.isActive ? bodegas.filter(filter.matches) : bodegas
+    }
 
     private let bodegaService: BodegaService
     private var fetchTask: Task<Void, Never>?

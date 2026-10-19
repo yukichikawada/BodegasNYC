@@ -11,11 +11,22 @@ import SwiftUI
 /// one internally — `BrowseView` owns it so it survives Map↔List tab
 /// switches instead of being torn down and rebuilt (and refetched) every
 /// time this view remounts.
+///
+/// `filter` is `BrowseView`'s shared filter state, bound here only so
+/// `.searchable` can edit its search text and the no-matches state can
+/// clear it — `BrowseView` pushes the result back into `viewModel.filter`,
+/// and this view renders `viewModel.filteredBodegas`.
 struct BodegaListView: View {
     let viewModel: BodegaListViewModel
+    @Binding var filter: BodegaFilter
 
     var body: some View {
         content
+            // On the outer view rather than the `List` case alone, so the
+            // search field stays put across the empty/no-matches states —
+            // otherwise a search that matches nothing would remove the very
+            // field needed to edit it.
+            .searchable(text: $filter.searchText, prompt: "Name or address")
             .task { viewModel.loadInitialIfNeeded() }
     }
 
@@ -30,8 +41,10 @@ struct BodegaListView: View {
                 systemImage: "cart",
                 description: Text("Be the first to add one.")
             )
+        case .loaded where viewModel.filteredBodegas.isEmpty:
+            noMatches
         case .loaded:
-            List(viewModel.bodegas) { bodega in
+            List(viewModel.filteredBodegas) { bodega in
                 NavigationLink(value: bodega) {
                     BodegaRow(bodega: bodega)
                 }
@@ -43,6 +56,26 @@ struct BodegaListView: View {
                 systemImage: "exclamationmark.triangle",
                 description: Text(message)
             )
+        }
+    }
+
+    /// Distinct from "No bodegas yet": there *are* bodegas, the filter just
+    /// hides all of them. A search-only filter gets the system's standard
+    /// search empty state (the search field's own clear button is the
+    /// obvious way out); once any data-point toggle is involved, that clear
+    /// button alone wouldn't help, so this offers Clear Filters instead.
+    @ViewBuilder
+    private var noMatches: some View {
+        if filter.requiredAmenities.isEmpty {
+            ContentUnavailableView.search(text: filter.trimmedSearchText)
+        } else {
+            ContentUnavailableView {
+                Label("No bodegas match", systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text("Try turning off some filters.")
+            } actions: {
+                Button("Clear Filters") { filter = .none }
+            }
         }
     }
 }
