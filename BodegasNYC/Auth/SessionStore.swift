@@ -21,10 +21,11 @@ import Observation
 @Observable
 final class SessionStore {
     private(set) var currentUserID: UUID?
-    /// Set by `completeAppleSignIn`/`signIn`/`signOut` on failure, cleared at the
-    /// start of each — `SignInView` reads this once per attempt rather
-    /// than binding continuously, so a stale error never resurfaces on a
-    /// later, unrelated sheet presentation.
+    /// Set by `completeAppleSignIn`/`signOut` (and, in DEBUG builds only,
+    /// `signIn(email:password:)`) on failure, cleared at the start of each
+    /// — `SignInView` reads this once per attempt rather than binding
+    /// continuously, so a stale error never resurfaces on a later,
+    /// unrelated sheet presentation.
     private(set) var lastAuthError: String?
 
     private let auth: AuthClient

@@ -118,6 +118,7 @@ extension SignInView {
                     debugSignIn(email: credentials.email, password: credentials.password)
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityIdentifier("debug.signInWithTestAccount")
                 .padding(.bottom, 8)
             }
             Text("Email sign-in (DEBUG)")
@@ -129,13 +130,16 @@ extension SignInView {
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
                 .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("debug.email")
             SecureField("Password", text: $debugPassword)
                 .textContentType(.password)
                 .textFieldStyle(.roundedBorder)
+                .accessibilityIdentifier("debug.password")
             Button("Sign In") {
                 debugSignIn(email: debugEmail, password: debugPassword)
             }
             .disabled(debugEmail.isEmpty || debugPassword.isEmpty)
+            .accessibilityIdentifier("debug.signIn")
         }
         .disabled(isSigningIn)
     }
