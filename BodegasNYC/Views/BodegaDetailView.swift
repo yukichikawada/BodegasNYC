@@ -1,9 +1,10 @@
+import PhotosUI
 import SwiftUI
 
 /// Bodega detail: data points, hours, address, photo gallery, reviews, and
-/// aggregate rating — plus an Add/Edit-review action and Flag-an-Issue
-/// (the bodega via a button, a review or photo via its context menu).
-/// Add-photo remains a separate follow-up slice, not built here.
+/// aggregate rating — plus an Add/Edit-review action, an Add-a-Photo
+/// library picker in the gallery, and Flag-an-Issue (the bodega via a
+/// button, a review or photo via its context menu).
 ///
 /// Unlike `MapScreenView`/`BodegaListView`, this view legitimately owns its
 /// `@State private var viewModel` rather than receiving one already-built —
@@ -14,6 +15,12 @@ struct BodegaDetailView: View {
     @State private var viewModel: BodegaDetailViewModel
     @State private var addReviewViewModel: AddReviewViewModel?
     @State private var flagIssueViewModel: FlagIssueViewModel?
+    @State private var addPhotoViewModel: AddPhotoViewModel?
+    /// The gallery's `PhotosPicker` selection. Only a hand-off slot: the
+    /// `.task(id:)` below loads its bytes into an `AddPhotoViewModel`, then
+    /// clears it so picking the same photo again still registers as a change.
+    @State private var pickedPhotoItem: PhotosPickerItem?
+    @State private var photoLoadErrorMessage: String?
     /// Set by `FlagIssueView`'s `onSubmitted`, but only turned into the
     /// visible confirmation alert from the flag sheet's `onDismiss` —
     /// presenting an alert while the sheet is still animating away is
@@ -21,6 +28,7 @@ struct BodegaDetailView: View {
     @State private var flagSubmittedPendingConfirmation = false
     @State private var showingFlagConfirmation = false
     private let reviewService: ReviewService
+    private let photoService: PhotoService
     private let flagService: FlagService
     let sessionStore: SessionStore
 
@@ -32,6 +40,7 @@ struct BodegaDetailView: View {
         sessionStore: SessionStore
     ) {
         self.reviewService = reviewService
+        self.photoService = photoService
         self.flagService = flagService
         self.sessionStore = sessionStore
         _viewModel = State(
@@ -62,7 +71,11 @@ struct BodegaDetailView: View {
                 if let hours = viewModel.bodega.hours {
                     HoursSection(hours: hours)
                 }
-                PhotoGallerySection(photos: viewModel.photos, urlFor: viewModel.photoURL(for:)) { photo in
+                PhotoGallerySection(
+                    photos: viewModel.photos,
+                    urlFor: viewModel.photoURL(for:),
+                    pickedItem: $pickedPhotoItem
+                ) { photo in
                     presentFlagSheet(for: .photo(photo.id))
                 }
                 ReviewsSection(reviews: viewModel.reviews, currentUserID: sessionStore.currentUserID) { review in
@@ -97,6 +110,24 @@ struct BodegaDetailView: View {
                 self.addReviewViewModel = nil
             }
         }
+        .task(id: pickedPhotoItem) { await loadPickedPhoto() }
+        .sheet(item: $addPhotoViewModel) { addPhotoViewModel in
+            AddPhotoView(viewModel: addPhotoViewModel, sessionStore: sessionStore) { photo in
+                viewModel.photoWasAdded(photo)
+                self.addPhotoViewModel = nil
+            }
+        }
+        .alert(
+            "Couldn't Load Photo",
+            isPresented: Binding(
+                get: { photoLoadErrorMessage != nil },
+                set: { if !$0 { photoLoadErrorMessage = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(photoLoadErrorMessage ?? "")
+        }
         .sheet(item: $flagIssueViewModel, onDismiss: {
             if flagSubmittedPendingConfirmation {
                 flagSubmittedPendingConfirmation = false
@@ -113,6 +144,33 @@ struct BodegaDetailView: View {
         } message: {
             Text("Your flag was submitted.")
         }
+    }
+
+    /// Loads the picked library item's raw bytes and hands them to a fresh
+    /// `AddPhotoViewModel`, which presents the confirm-and-upload sheet. No
+    /// sign-in check here — that happens on Upload, same as Submit in the
+    /// review/flag flows. `loadTransferable` does its work out of process,
+    /// so awaiting it here doesn't block the main actor.
+    private func loadPickedPhoto() async {
+        guard let item = pickedPhotoItem else { return }
+        do {
+            let data = try await item.loadTransferable(type: Data.self)
+            guard !Task.isCancelled else { return }
+            if let data {
+                addPhotoViewModel = AddPhotoViewModel(
+                    bodegaId: viewModel.bodega.id,
+                    imageData: data,
+                    photoService: photoService,
+                    sessionStore: sessionStore
+                )
+            } else {
+                photoLoadErrorMessage = "That photo isn't available."
+            }
+        } catch {
+            guard !Task.isCancelled else { return }
+            photoLoadErrorMessage = error.localizedDescription
+        }
+        pickedPhotoItem = nil
     }
 
     private func presentFlagSheet(for target: FlagTarget) {
@@ -231,15 +289,28 @@ private struct HoursSection: View {
     }
 }
 
+/// Always rendered (unlike before Add-a-Photo existed, when it hid itself
+/// with no photos) so the "Add a Photo" picker is reachable on a bodega
+/// with an empty gallery.
 private struct PhotoGallerySection: View {
     let photos: [Photo]
     let urlFor: (Photo) -> URL?
+    @Binding var pickedItem: PhotosPickerItem?
     let onFlag: (Photo) -> Void
 
     var body: some View {
-        if !photos.isEmpty {
-            VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
                 Text("Photos").font(.headline)
+                Spacer()
+                PhotosPicker(selection: $pickedItem, matching: .images) {
+                    Label("Add a Photo", systemImage: "photo.badge.plus")
+                }
+                .buttonStyle(.bordered)
+            }
+            if photos.isEmpty {
+                Text("No photos yet").font(.subheadline).foregroundStyle(.secondary)
+            } else {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(photos) { photo in
