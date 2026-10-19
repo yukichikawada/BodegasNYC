@@ -13,6 +13,11 @@ The script pins the test destination to a specific simulator UDID (avoids ambigu
 Work is tracked as GitHub issues (`gh issue list`). There is no Notion planning pipeline; ignore
 references to "Claude Plans" / Routines in older docs.
 
+Before a new body of work is briefed to a builder, it goes through gstack: `/spec` to turn the
+intent into a spec, then `/plan-eng-review` and `/plan-design-review` (accept their "outside
+voices" second-model passes). Attach the resulting spec/report to the GitHub issue. Small,
+mechanical follow-ups to an already-reviewed spec don't need a fresh pass.
+
 When Claude Code orchestrates work with subagents:
 
 - The orchestrator runs on the session's own model (Fable). It plans, briefs, reviews results,
@@ -26,6 +31,10 @@ When Claude Code orchestrates work with subagents:
 - Every feature lands as a PR that references its issue (`Closes #N`), with the "Summary / Bugs
   found / Test plan" body shape used by past PRs. The orchestrator opens the PR once QA is clean
   and tests pass; **the owner merges** (squash). Claude does not merge PRs.
+- `.github/workflows/claude-code-review.yml` runs an automated Claude review on every PR as a
+  second set of eyes. When reviewing in CI (Linux runner, no Xcode): read the diff against the
+  conventions in this file and `docs/PRD.md`; do not try to run `xcodebuild`, the test script, or
+  a simulator.
 - Items that touch the same view (e.g. all three bodega-detail actions) are built as a stack:
   each later branch is based on the previous one and its PR targets that branch, so GitHub
   retargets to `main` as earlier PRs merge. Independent items branch from `main` in parallel.
@@ -43,3 +52,8 @@ scripts/sim-for-branch.sh delete               # when the PR is merged or abando
 
 Pass the UDID as the simulator id to MobileBuildMCP or `-destination "platform=iOS Simulator,id=$UDID"`.
 Never run the app on the test script's pinned "iPhone 17 Pro" device.
+
+`.mobilebuildmcp/config.yaml` enables MobileBuildMCP's `ui-automation` workflow (snapshot_ui,
+tap, type_text, swipe, long_press) so QA agents can drive the app, not just screenshot it. The
+server reads it at startup; after changing it, reconnect the MCP server (`/mcp`) or restart the
+session.
