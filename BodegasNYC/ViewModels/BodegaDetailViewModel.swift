@@ -77,6 +77,16 @@ final class BodegaDetailViewModel {
         }
     }
 
+    /// Prepends a just-uploaded photo into `photos` instead of re-fetching,
+    /// mirroring `reviewWasSubmitted(_:)` — front-insertion matches
+    /// `PhotoService.fetchAll`'s `created_at desc` order. A photo already
+    /// present by id is left alone (photos have no editable fields, so
+    /// there's nothing to replace).
+    func photoWasAdded(_ photo: Photo) {
+        guard !photos.contains(where: { $0.id == photo.id }) else { return }
+        photos.insert(photo, at: 0)
+    }
+
     /// Pure and independently testable. `nil` for zero reviews. Does not
     /// filter hidden reviews itself — that's `loadIfNeeded()`'s job; this
     /// function just averages whatever it's handed. Named distinctly from

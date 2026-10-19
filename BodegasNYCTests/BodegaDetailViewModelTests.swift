@@ -192,6 +192,29 @@ struct BodegaDetailViewModelTests {
         #expect(viewModel.reviews.first?.rating == 5)
         #expect(viewModel.reviews.first?.body == "Actually great")
     }
+
+    @Test func photoWasAddedPrependsTheNewPhotoAndIgnoresADuplicate() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        MockURLProtocol.stub(body: Data("[\(Self.photoJSON())]".utf8))
+        let viewModel = try makeViewModel()
+        viewModel.loadIfNeeded()
+        await viewModel.waitForPendingLoadForTesting()
+        let existingID = try #require(viewModel.photos.first?.id)
+
+        let newPhoto = Photo(
+            id: UUID(),
+            bodegaId: Self.bodegaID,
+            uploadedBy: Self.authorID,
+            storagePath: "\(Self.bodegaID.uuidString)/new.jpg",
+            isHidden: false,
+            createdAt: Date()
+        )
+        viewModel.photoWasAdded(newPhoto)
+        viewModel.photoWasAdded(newPhoto)
+
+        #expect(viewModel.photos.map(\.id) == [newPhoto.id, existingID])
+    }
 }
 
 }
