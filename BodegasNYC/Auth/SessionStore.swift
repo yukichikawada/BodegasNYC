@@ -21,7 +21,7 @@ import Observation
 @Observable
 final class SessionStore {
     private(set) var currentUserID: UUID?
-    /// Set by `completeAppleSignIn`/`signOut` on failure, cleared at the
+    /// Set by `completeAppleSignIn`/`signIn`/`signOut` on failure, cleared at the
     /// start of each — `SignInView` reads this once per attempt rather
     /// than binding continuously, so a stale error never resurfaces on a
     /// later, unrelated sheet presentation.
@@ -58,6 +58,22 @@ final class SessionStore {
             lastAuthError = error.localizedDescription
         }
     }
+
+    #if DEBUG
+    /// DEBUG-only email/password sign-in so QA agents can exercise
+    /// authenticated flows in the Simulator, where Sign in with Apple can't
+    /// be driven (see `SignInView`'s "Test account (DEBUG)" section).
+    /// Compiled out of Release entirely.
+    func signIn(email: String, password: String) async {
+        lastAuthError = nil
+        do {
+            let session = try await auth.signIn(email: email, password: password)
+            currentUserID = session.user.id
+        } catch {
+            lastAuthError = error.localizedDescription
+        }
+    }
+    #endif
 
     func signOut() async {
         lastAuthError = nil

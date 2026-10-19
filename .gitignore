@@ -1,0 +1,5 @@
+Local.xcconfig
+xcuserdata/
+*.xcuserstate
+.claude/worktrees/
+.DS_Store

@@ -1,0 +1,12 @@
+// Base configuration for the BodegasNYC app target's Debug configuration only.
+//
+// Pulls in an optional, gitignored `Local.xcconfig` at the repo root that can
+// define TEST_ACCOUNT_EMAIL / TEST_ACCOUNT_PASSWORD for the DEBUG-only test
+// account sign-in (see `Local.xcconfig.example` and CLAUDE.md). `#include?`
+// makes a missing file a no-op, so CI and fresh checkouts build unchanged and
+// the keys resolve to empty strings.
+//
+// Target-level build settings in project.pbxproj (e.g. SUPABASE_URL) take
+// precedence over anything defined here.
+
+#include? "../Local.xcconfig"
