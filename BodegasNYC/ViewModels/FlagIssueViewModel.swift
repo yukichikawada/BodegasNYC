@@ -34,7 +34,18 @@ final class FlagIssueViewModel: Identifiable {
         case other = "Other"
 
         var id: Self { self }
+
+        /// "Closed permanently" only makes sense for the bodega itself, not
+        /// for one of its reviews or photos.
+        static func options(for target: FlagTarget) -> [Reason] {
+            if case .bodega = target { return allCases }
+            return allCases.filter { $0 != .closedPermanently }
+        }
     }
+
+    /// Reasons offered in the picker for this view model's `target`. The
+    /// default `reason` (`.wrongDetails`) is in every target's list.
+    var reasonOptions: [Reason] { Reason.options(for: target) }
 
     /// Shown instead of PostgREST's raw "duplicate key value violates unique
     /// constraint …" message — see `failureMessage(for:)`.

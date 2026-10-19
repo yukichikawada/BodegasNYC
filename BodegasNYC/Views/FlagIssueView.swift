@@ -23,7 +23,7 @@ struct FlagIssueView: View {
             Form {
                 Section("What's wrong?") {
                     Picker("Reason", selection: $viewModel.reason) {
-                        ForEach(FlagIssueViewModel.Reason.allCases) { reason in
+                        ForEach(viewModel.reasonOptions) { reason in
                             Text(reason.rawValue).tag(reason)
                         }
                     }

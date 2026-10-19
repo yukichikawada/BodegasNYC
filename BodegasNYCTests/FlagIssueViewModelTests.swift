@@ -144,6 +144,16 @@ struct FlagIssueViewModelTests {
         #expect(json["review_id"] == nil)
     }
 
+    @Test func closedPermanentlyIsOfferedOnlyForTheBodegaTarget() throws {
+        let session = makeTestSession()
+        #expect(try makeViewModel(session: session).reasonOptions.contains(.closedPermanently))
+        let reviewOptions = try makeViewModel(target: .review(Self.reviewID), session: session).reasonOptions
+        let photoOptions = try makeViewModel(target: .photo(Self.photoID), session: session).reasonOptions
+        #expect(!reviewOptions.contains(.closedPermanently))
+        #expect(!photoOptions.contains(.closedPermanently))
+        #expect(reviewOptions.contains(.wrongDetails), "default reason must be offered for every target")
+    }
+
     @Test func nonBlankDetailsAreAppendedToTheReason() async throws {
         let viewModel = try makeViewModel(session: makeTestSession())
         viewModel.reason = .other
