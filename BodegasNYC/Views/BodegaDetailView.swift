@@ -1,8 +1,9 @@
 import SwiftUI
 
 /// Bodega detail: data points, hours, address, photo gallery, reviews, and
-/// aggregate rating — plus an Add/Edit-review action. Add-photo and
-/// flag-an-issue remain separate follow-up slices, not built here.
+/// aggregate rating — plus an Add/Edit-review action and Flag-an-Issue
+/// (the bodega via a button, a review or photo via its context menu).
+/// Add-photo remains a separate follow-up slice, not built here.
 ///
 /// Unlike `MapScreenView`/`BodegaListView`, this view legitimately owns its
 /// `@State private var viewModel` rather than receiving one already-built —
@@ -12,14 +13,33 @@ import SwiftUI
 struct BodegaDetailView: View {
     @State private var viewModel: BodegaDetailViewModel
     @State private var addReviewViewModel: AddReviewViewModel?
+    @State private var flagIssueViewModel: FlagIssueViewModel?
+    /// Set by `FlagIssueView`'s `onSubmitted`, but only turned into the
+    /// visible confirmation alert from the flag sheet's `onDismiss` —
+    /// presenting an alert while the sheet is still animating away is
+    /// dropped by SwiftUI ("already presenting").
+    @State private var flagSubmittedPendingConfirmation = false
+    @State private var showingFlagConfirmation = false
     private let reviewService: ReviewService
+    private let flagService: FlagService
     let sessionStore: SessionStore
 
-    init(bodega: Bodega, reviewService: ReviewService, photoService: PhotoService, sessionStore: SessionStore) {
+    init(
+        bodega: Bodega,
+        reviewService: ReviewService,
+        photoService: PhotoService,
+        flagService: FlagService,
+        sessionStore: SessionStore
+    ) {
         self.reviewService = reviewService
+        self.flagService = flagService
         self.sessionStore = sessionStore
         _viewModel = State(
-            initialValue: BodegaDetailViewModel(bodega: bodega, reviewService: reviewService, photoService: photoService)
+            initialValue: BodegaDetailViewModel(
+                bodega: bodega,
+                reviewService: reviewService,
+                photoService: photoService
+            )
         )
     }
 
@@ -42,9 +62,19 @@ struct BodegaDetailView: View {
                 if let hours = viewModel.bodega.hours {
                     HoursSection(hours: hours)
                 }
-                PhotoGallerySection(photos: viewModel.photos, urlFor: viewModel.photoURL(for:))
-                ReviewsSection(reviews: viewModel.reviews)
-                reviewActionButton
+                PhotoGallerySection(photos: viewModel.photos, urlFor: viewModel.photoURL(for:)) { photo in
+                    presentFlagSheet(for: .photo(photo.id))
+                }
+                ReviewsSection(reviews: viewModel.reviews, currentUserID: sessionStore.currentUserID) { review in
+                    presentFlagSheet(for: .review(review.id))
+                }
+                HStack(spacing: 12) {
+                    reviewActionButton
+                    Button("Flag an Issue", systemImage: "flag") {
+                        presentFlagSheet(for: .bodega(viewModel.bodega.id))
+                    }
+                    .buttonStyle(.bordered)
+                }
                 if case .failed(let message) = viewModel.loadState {
                     Text(message)
                         .font(.footnote)
@@ -67,6 +97,26 @@ struct BodegaDetailView: View {
                 self.addReviewViewModel = nil
             }
         }
+        .sheet(item: $flagIssueViewModel, onDismiss: {
+            if flagSubmittedPendingConfirmation {
+                flagSubmittedPendingConfirmation = false
+                showingFlagConfirmation = true
+            }
+        }, content: { flagIssueViewModel in
+            FlagIssueView(viewModel: flagIssueViewModel, sessionStore: sessionStore) { _ in
+                flagSubmittedPendingConfirmation = true
+                self.flagIssueViewModel = nil
+            }
+        })
+        .alert("Thanks for the heads-up", isPresented: $showingFlagConfirmation) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("Your flag was submitted.")
+        }
+    }
+
+    private func presentFlagSheet(for target: FlagTarget) {
+        flagIssueViewModel = FlagIssueViewModel(target: target, flagService: flagService, sessionStore: sessionStore)
     }
 
     private var reviewActionButton: some View {
@@ -97,13 +147,19 @@ struct BodegaDetailView: View {
 private struct DataPointsSection: View {
     let bodega: Bodega
 
-    private var points: [(label: String, systemImage: String, isPresent: Bool)] {
+    private struct DataPoint {
+        let label: String
+        let systemImage: String
+        let isPresent: Bool
+    }
+
+    private var points: [DataPoint] {
         [
-            ("Cat", "cat", bodega.hasCat),
-            ("Hot food", "flame", bodega.servesHotFood),
-            ("Cigarettes", "smoke", bodega.sellsCigarettes),
-            ("Beer", "mug", bodega.sellsBeer),
-            ("Lotto", "ticket", bodega.sellsLotto)
+            DataPoint(label: "Cat", systemImage: "cat", isPresent: bodega.hasCat),
+            DataPoint(label: "Hot food", systemImage: "flame", isPresent: bodega.servesHotFood),
+            DataPoint(label: "Cigarettes", systemImage: "smoke", isPresent: bodega.sellsCigarettes),
+            DataPoint(label: "Beer", systemImage: "mug", isPresent: bodega.sellsBeer),
+            DataPoint(label: "Lotto", systemImage: "ticket", isPresent: bodega.sellsLotto)
         ]
     }
 
@@ -178,6 +234,7 @@ private struct HoursSection: View {
 private struct PhotoGallerySection: View {
     let photos: [Photo]
     let urlFor: (Photo) -> URL?
+    let onFlag: (Photo) -> Void
 
     var body: some View {
         if !photos.isEmpty {
@@ -193,6 +250,9 @@ private struct PhotoGallerySection: View {
                             }
                             .frame(width: 120, height: 120)
                             .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .contextMenu {
+                                Button("Flag Photo", systemImage: "flag") { onFlag(photo) }
+                            }
                         }
                     }
                 }
@@ -203,6 +263,8 @@ private struct PhotoGallerySection: View {
 
 private struct ReviewsSection: View {
     let reviews: [Review]
+    let currentUserID: UUID?
+    let onFlag: (Review) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -211,7 +273,16 @@ private struct ReviewsSection: View {
                 Text("No reviews yet").font(.subheadline).foregroundStyle(.secondary)
             } else {
                 ForEach(reviews) { review in
-                    ReviewRow(review: review)
+                    // No flag option on your own review — edit it instead
+                    // (the "Edit Your Review" button below).
+                    if review.authorId == currentUserID {
+                        ReviewRow(review: review)
+                    } else {
+                        ReviewRow(review: review)
+                            .contextMenu {
+                                Button("Flag Review", systemImage: "flag") { onFlag(review) }
+                            }
+                    }
                 }
             }
         }

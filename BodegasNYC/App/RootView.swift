@@ -24,6 +24,7 @@ struct RootView: View {
                 bodegaService: environment.bodegaService,
                 reviewService: environment.reviewService,
                 photoService: environment.photoService,
+                flagService: environment.flagService,
                 sessionStore: environment.sessionStore,
                 locationPermissionClient: environment.locationPermissionClient,
                 streetsWalkedViewModel: environment.streetsWalkedViewModel
