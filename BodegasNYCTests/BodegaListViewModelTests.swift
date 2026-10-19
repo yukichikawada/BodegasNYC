@@ -17,7 +17,7 @@ extension NetworkingTests {
 @Suite
 @MainActor
 struct BodegaListViewModelTests {
-    private static func bodegaJSON(name: String) -> String {
+    private static func bodegaJSON(name: String, hasCat: Bool = false) -> String {
         """
         {
           "id": "\(UUID().uuidString)",
@@ -26,7 +26,7 @@ struct BodegaListViewModelTests {
           "latitude": 40.7291,
           "longitude": -73.9965,
           "address": null,
-          "has_cat": false,
+          "has_cat": \(hasCat),
           "serves_hot_food": false,
           "sells_cigarettes": false,
           "sells_beer": false,
@@ -100,6 +100,35 @@ struct BodegaListViewModelTests {
             Issue.record("expected .failed, got \(viewModel.loadState)")
             return
         }
+    }
+
+    @Test func settingAFilterNarrowsFilteredBodegasWithoutRefetching() async throws {
+        MockURLProtocol.reset()
+        let requestCount = Captured(0)
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),\(Self.bodegaJSON(name: "Plain Deli"))]"
+        MockURLProtocol.stub(body: Data(body.utf8)) { _ in
+            requestCount.set(requestCount.get() + 1)
+        }
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.filteredBodegas.count == 2)
+
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        #expect(viewModel.filteredBodegas.map(\.name) == ["Cat Deli"])
+        // The unfiltered set is untouched, so the view can still tell "no
+        // matches" apart from "nothing loaded".
+        #expect(viewModel.bodegas.count == 2)
+
+        viewModel.filter = BodegaFilter(searchText: "plain")
+        #expect(viewModel.filteredBodegas.map(\.name) == ["Plain Deli"])
+
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat], searchText: "plain")
+        #expect(viewModel.filteredBodegas.isEmpty)
+
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.loadState == .loaded)
+        #expect(requestCount.get() == 1)
     }
 }
 
