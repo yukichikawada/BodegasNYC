@@ -1,0 +1,5 @@
+// Copy to `Local.xcconfig` at the repo root (gitignored) and fill in, or
+// symlink ~/.config/bodegasnyc/test-account.xcconfig there. Debug builds then
+// show a "Sign in with test account" button on the sign-in sheet.
+TEST_ACCOUNT_EMAIL = qa@example.com
+TEST_ACCOUNT_PASSWORD = change-me

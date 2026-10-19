@@ -33,6 +33,7 @@
 		893AAB7730105EA5002B0BB2 /* BodegasNYC.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BodegasNYC.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		893AAB8430105EA7002B0BB2 /* BodegasNYCTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BodegasNYCTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		893AAB8E30105EA7002B0BB2 /* BodegasNYCUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = BodegasNYCUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		D3B6C0A12F0E4A1B00C0FFEE /* Debug.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Debug.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -97,11 +98,20 @@
 		893AAB6E30105EA5002B0BB2 = {
 			isa = PBXGroup;
 			children = (
+				D3B6C0A22F0E4A1B00C0FFEE /* Config */,
 				893AAB7930105EA5002B0BB2 /* BodegasNYC */,
 				893AAB8730105EA7002B0BB2 /* BodegasNYCTests */,
 				893AAB9130105EA7002B0BB2 /* BodegasNYCUITests */,
 				893AAB7830105EA5002B0BB2 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		D3B6C0A22F0E4A1B00C0FFEE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				D3B6C0A12F0E4A1B00C0FFEE /* Debug.xcconfig */,
+			);
+			path = Config;
 			sourceTree = "<group>";
 		};
 		893AAB7830105EA5002B0BB2 /* Products */ = {
@@ -424,6 +434,7 @@
 		};
 		893AAB9930105EA7002B0BB2 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = D3B6C0A12F0E4A1B00C0FFEE /* Debug.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;

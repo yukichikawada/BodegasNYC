@@ -69,6 +69,41 @@ struct SessionStoreTests {
         #expect(store.lastAuthError != nil)
     }
 
+    #if DEBUG
+    @Test func emailPasswordSignInEstablishesASession() async throws {
+        MockURLProtocol.reset()
+        let userID = UUID()
+        let requestedURL = Captured<URL?>(nil)
+        MockURLProtocol.stub(body: Data(Self.sessionJSON(userID: userID).utf8)) { request in
+            requestedURL.set(request.url)
+        }
+        let store = SessionStore(auth: try makeTestAuthClient())
+
+        await store.signIn(email: "qa@example.com", password: "test-password")
+
+        #expect(store.isSignedIn)
+        #expect(store.currentUserID == userID)
+        #expect(store.lastAuthError == nil)
+        let url = try #require(requestedURL.get())
+        #expect(url.path == "/auth/v1/token")
+        #expect(url.query?.contains("grant_type=password") == true)
+    }
+
+    @Test func emailPasswordSignInSurfacesAFailure() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(
+            statusCode: 400,
+            body: Data("{\"error\":\"invalid_grant\",\"error_description\":\"Invalid login credentials\"}".utf8)
+        )
+        let store = SessionStore(auth: try makeTestAuthClient())
+
+        await store.signIn(email: "qa@example.com", password: "wrong-password")
+
+        #expect(store.isSignedIn == false)
+        #expect(store.lastAuthError != nil)
+    }
+    #endif
+
     @Test func signOutClearsAnEstablishedSession() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(body: Data())

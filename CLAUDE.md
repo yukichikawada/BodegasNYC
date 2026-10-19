@@ -57,3 +57,15 @@ Never run the app on the test script's pinned "iPhone 17 Pro" device.
 tap, type_text, swipe, long_press) so QA agents can drive the app, not just screenshot it. The
 server reads it at startup; after changing it, reconnect the MCP server (`/mcp`) or restart the
 session.
+
+### Test account for live QA
+
+Debug builds can sign in with email/password so authenticated flows can be exercised in the
+Simulator without Sign in with Apple. Copy `~/.config/bodegasnyc/test-account.xcconfig` to
+`Local.xcconfig` at the repo root (or symlink it: `ln -s ~/.config/bodegasnyc/test-account.xcconfig Local.xcconfig`),
+then rebuild Debug: the sign-in sheet gains a "Sign in with test account" button. QA agents use
+this instead of Sign in with Apple. `Local.xcconfig` is gitignored and pulled in by
+`Config/Debug.xcconfig` via `#include?`, so without it the button is simply hidden; never commit
+or print the credentials. The whole path is `#if DEBUG` and absent from Release builds.
+The password must not contain `//` or `$`: xcconfig treats `//` as the start of a comment and
+`$` as a variable expansion, so the value would be silently truncated or rewritten.

@@ -46,6 +46,10 @@
 	<string>$(SUPABASE_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>TEST_ACCOUNT_EMAIL</key>
+	<string>$(TEST_ACCOUNT_EMAIL)</string>
+	<key>TEST_ACCOUNT_PASSWORD</key>
+	<string>$(TEST_ACCOUNT_PASSWORD)</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>To show bodegas near you.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
