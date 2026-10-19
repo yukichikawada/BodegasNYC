@@ -153,10 +153,45 @@ final class BodegaMapViewModel {
     /// response landing after this prepend would silently overwrite
     /// `loadedBodegas`, discarding the just-added pin.
     func bodegaWasAdded(_ bodega: Bodega) {
-        currentFetchGeneration += 1
+        supersedeInFlightFetch()
         loadedBodegas.insert(bodega, at: 0)
         if let lastRegion {
             recluster(region: lastRegion)
+        }
+    }
+
+    /// Reflects an Edit Bodega save without a full refetch: replaces the
+    /// loaded bodega with the same id in place (keeping its position, since
+    /// `created_at` ordering doesn't change on edit) and reclusters, which
+    /// also re-applies any active filter to the edited data points. A no-op
+    /// if that bodega isn't currently loaded (e.g. outside the `.nearby`
+    /// radius) — it isn't on the map to update.
+    ///
+    /// Bumps `currentFetchGeneration` like `bodegaWasAdded`, so a fetch
+    /// already in flight from before the save can't land afterward and put
+    /// the pre-edit row back. Only when the bodega was found, so an
+    /// unrelated in-flight fetch isn't discarded for nothing.
+    func bodegaWasUpdated(_ bodega: Bodega) {
+        guard let index = loadedBodegas.firstIndex(where: { $0.id == bodega.id }) else { return }
+        supersedeInFlightFetch()
+        loadedBodegas[index] = bodega
+        if let lastRegion {
+            recluster(region: lastRegion)
+        }
+    }
+
+    /// Bumps `currentFetchGeneration` so any in-flight fetch is dropped when
+    /// it lands, and moves `.loading` to `.loaded`. The dropped fetch fails
+    /// its generation check before it can set `loadState`, so without this
+    /// the state would stay `.loading` forever. Setting `.loaded` here
+    /// assumes we already hold a valid dataset. In practice the dropped
+    /// fetch is a `.nearby` refetch after a pan, layered on data that is
+    /// already loaded. (`BodegaListViewModel.supersedeInFlightFetch()`
+    /// documents the one case where that assumption is weaker.)
+    private func supersedeInFlightFetch() {
+        currentFetchGeneration += 1
+        if loadState == .loading {
+            loadState = .loaded
         }
     }
 

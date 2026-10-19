@@ -123,13 +123,24 @@ struct BrowseView: View {
                     }
                 }
                 .navigationDestination(for: Bodega.self) { bodega in
+                    // `path` is deliberately left holding the pre-edit
+                    // `Bodega` after an edit: the detail screen renders
+                    // from its own view model (updated in place), and
+                    // swapping the path element for a value that hashes
+                    // differently would make SwiftUI treat it as a new
+                    // destination and rebuild the screen, re-fetching
+                    // reviews/photos for nothing.
                     BodegaDetailView(
                         bodega: bodega,
+                        bodegaService: bodegaService,
                         reviewService: reviewService,
                         photoService: photoService,
                         flagService: flagService,
                         sessionStore: sessionStore
-                    )
+                    ) { updatedBodega in
+                        mapViewModel.bodegaWasUpdated(updatedBodega)
+                        listViewModel.bodegaWasUpdated(updatedBodega)
+                    }
                 }
                 .sheet(isPresented: $showingSignIn) {
                     SignInView(sessionStore: sessionStore)

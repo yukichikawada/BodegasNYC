@@ -50,11 +50,22 @@ nonisolated struct NewBodega: Encodable, Sendable {
 
 /// Partial update for a bodega's editable fields (PRD: "any user can propose
 /// an edit to hours/data points"). All-optional so only the keys a caller
-/// sets get sent — Swift's synthesized `Encodable` uses `encodeIfPresent`
-/// for `Optional` properties, so unset fields are omitted from the PATCH
-/// body entirely rather than nulling them out. No `coordinate`/`location`
-/// field: relocating a bodega isn't a PRD requirement for this slice.
+/// sets get sent — `encode(to:)` uses `encodeIfPresent` for each `Optional`
+/// property, so unset fields are omitted from the PATCH body entirely
+/// rather than nulling them out. No `coordinate`/`location` field:
+/// relocating a bodega isn't a PRD requirement for this slice.
+///
+/// Because `nil` means "leave unchanged", clearing one of the two nullable
+/// columns (`address`, `hours`) has to be asked for explicitly via
+/// `fieldsToClear`, which encodes a JSON `null` for that key. Without it,
+/// blanking an address in the Edit Bodega form would silently keep the old
+/// value server-side. A non-nil value for the same field wins.
 nonisolated struct BodegaUpdate: Encodable, Sendable {
+    enum ClearableField: Sendable, Hashable {
+        case address
+        case hours
+    }
+
     var name: String?
     var address: String?
     var hasCat: Bool?
@@ -63,6 +74,7 @@ nonisolated struct BodegaUpdate: Encodable, Sendable {
     var sellsBeer: Bool?
     var sellsLotto: Bool?
     var hours: BodegaHours?
+    var fieldsToClear: Set<ClearableField> = []
 
     private enum CodingKeys: String, CodingKey {
         case name, address, hours
@@ -71,6 +83,26 @@ nonisolated struct BodegaUpdate: Encodable, Sendable {
         case sellsCigarettes = "sells_cigarettes"
         case sellsBeer = "sells_beer"
         case sellsLotto = "sells_lotto"
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encodeIfPresent(name, forKey: .name)
+        if let address {
+            try container.encode(address, forKey: .address)
+        } else if fieldsToClear.contains(.address) {
+            try container.encodeNil(forKey: .address)
+        }
+        try container.encodeIfPresent(hasCat, forKey: .hasCat)
+        try container.encodeIfPresent(servesHotFood, forKey: .servesHotFood)
+        try container.encodeIfPresent(sellsCigarettes, forKey: .sellsCigarettes)
+        try container.encodeIfPresent(sellsBeer, forKey: .sellsBeer)
+        try container.encodeIfPresent(sellsLotto, forKey: .sellsLotto)
+        if let hours {
+            try container.encode(hours, forKey: .hours)
+        } else if fieldsToClear.contains(.hours) {
+            try container.encodeNil(forKey: .hours)
+        }
     }
 }
 

@@ -130,6 +130,62 @@ struct BodegaListViewModelTests {
         #expect(viewModel.loadState == .loaded)
         #expect(requestCount.get() == 1)
     }
+
+    @Test func bodegaWasUpdatedReplacesByIDInPlaceAndRespectsTheFilter() async throws {
+        MockURLProtocol.reset()
+        let requestCount = Captured(0)
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),\(Self.bodegaJSON(name: "Plain Deli"))]"
+        MockURLProtocol.stub(body: Data(body.utf8)) { _ in
+            requestCount.set(requestCount.get() + 1)
+        }
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        #expect(viewModel.filteredBodegas.map(\.name) == ["Cat Deli"])
+        var edited = try #require(viewModel.bodegas.last)
+        edited.name = "Plain Deli (now with cat)"
+        edited.hasCat = true
+
+        viewModel.bodegaWasUpdated(edited)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.bodegas.map(\.name) == ["Cat Deli", "Plain Deli (now with cat)"])
+        #expect(viewModel.filteredBodegas.count == 2)
+        #expect(requestCount.get() == 1)
+    }
+
+    /// Regression for a QA finding: the generation bump drops the in-flight
+    /// fetch, and that used to strand `loadState` at `.loading`, so the list
+    /// showed a spinner forever. Exercised through `bodegaWasAdded`: the
+    /// list has only one fetch (the initial one), and while it is in flight
+    /// `bodegas` is empty, so `bodegaWasUpdated` has nothing to match and
+    /// never bumps. Both methods share `supersedeInFlightFetch()`.
+    @Test func bodegaWasAddedDuringTheInFlightFetchSettlesLoadState() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded()
+        #expect(viewModel.loadState == .loading)
+        viewModel.bodegaWasAdded(try makeTestBodega(name: "Nueva Bodega"))
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega"])
+    }
+
+    @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.bodegaWasUpdated(try makeTestBodega(name: "Elsewhere"))
+
+        #expect(viewModel.bodegas.map(\.name) == ["El Sol"])
+    }
 }
 
 }

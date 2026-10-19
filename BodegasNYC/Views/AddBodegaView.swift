@@ -5,11 +5,18 @@ import SwiftUI
 /// section-per-private-struct convention, as a `Form` inside its own
 /// `NavigationStack` (normal for sheet content — doesn't conflict with
 /// `BrowseView`'s outer stack/`path`).
+///
+/// Also presented from `BodegaDetailView` as "Edit Bodega"
+/// (`viewModel.existingBodega != nil`, fields pre-filled) — same view
+/// either way, only the title and confirm-button label differ, exactly as
+/// `AddReviewView` does for editing a review.
 struct AddBodegaView: View {
     @Bindable var viewModel: AddBodegaViewModel
     let sessionStore: SessionStore
     @Environment(\.dismiss) private var dismiss
     let onSubmitted: (Bodega) -> Void
+
+    private var isEditing: Bool { viewModel.isEditing }
 
     var body: some View {
         NavigationStack {
@@ -38,14 +45,14 @@ struct AddBodegaView: View {
             // silently discarded — `submit()` already snapshotted the
             // fields into its request before the `await`.
             .disabled(viewModel.submissionState == .submitting)
-            .navigationTitle("Add a Bodega")
+            .navigationTitle(isEditing ? "Edit Bodega" : "Add a Bodega")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Submit") { viewModel.submit() }
+                    Button(isEditing ? "Save" : "Submit") { viewModel.submit() }
                         .disabled(!viewModel.isNameValid || viewModel.submissionState == .submitting)
                 }
             }
