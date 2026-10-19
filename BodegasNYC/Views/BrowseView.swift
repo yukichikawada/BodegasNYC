@@ -48,6 +48,7 @@ struct BrowseView: View {
     private let bodegaService: BodegaService
     private let reviewService: ReviewService
     private let photoService: PhotoService
+    private let flagService: FlagService
     private let sessionStore: SessionStore
     private let locationPermissionClient: LocationPermissionClient
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
@@ -56,6 +57,7 @@ struct BrowseView: View {
         bodegaService: BodegaService,
         reviewService: ReviewService,
         photoService: PhotoService,
+        flagService: FlagService,
         sessionStore: SessionStore,
         locationPermissionClient: LocationPermissionClient,
         streetsWalkedViewModel: StreetsWalkedViewModel?
@@ -65,6 +67,7 @@ struct BrowseView: View {
         self.bodegaService = bodegaService
         self.reviewService = reviewService
         self.photoService = photoService
+        self.flagService = flagService
         self.sessionStore = sessionStore
         self.locationPermissionClient = locationPermissionClient
         self.streetsWalkedViewModel = streetsWalkedViewModel
@@ -124,6 +127,7 @@ struct BrowseView: View {
                         bodega: bodega,
                         reviewService: reviewService,
                         photoService: photoService,
+                        flagService: flagService,
                         sessionStore: sessionStore
                     )
                 }
