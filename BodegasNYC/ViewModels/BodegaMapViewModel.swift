@@ -39,6 +39,25 @@ final class BodegaMapViewModel {
         }
     }
 
+    /// True only when a fetch has landed and returned no bodegas at all,
+    /// before any filtering — the map's "nothing here" banners
+    /// (`MapBottomCard`). False while loading, after a failure, and when a
+    /// filter is what hides everything (that is `isFilteredEmpty`).
+    /// Computed so it can never drift from `loadState`/`loadedBodegas`.
+    var isLoadedEmpty: Bool {
+        loadState == .loaded && loadedBodegas.isEmpty
+    }
+
+    /// True when bodegas did load but the active filter matches none of
+    /// them (design DD7). Decided by filtering alone, not by
+    /// `displayItems`, so clustering or the visible region can't change it.
+    var isFilteredEmpty: Bool {
+        loadState == .loaded
+            && !loadedBodegas.isEmpty
+            && filter.isActive
+            && !loadedBodegas.contains(where: filter.matches)
+    }
+
     private let bodegaService: BodegaService
     private var loadedBodegas: [Bodega] = []
     private var lastRegion: MKCoordinateRegion?

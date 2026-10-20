@@ -93,6 +93,76 @@ struct StreetsWalkedViewModelTests {
         #expect(viewModel.lastTrackingError == nil)
     }
 
+    private static func location(
+        latitude: Double,
+        longitude: Double,
+        accuracy: CLLocationAccuracy = 10,
+        timestamp: Date = Date()
+    ) -> CLLocation {
+        CLLocation(
+            coordinate: CLLocationCoordinate2D(latitude: latitude, longitude: longitude),
+            altitude: 0,
+            horizontalAccuracy: accuracy,
+            verticalAccuracy: 10,
+            timestamp: timestamp
+        )
+    }
+
+    // R8. protects: the overlay (and the "No streets yet." card) refresh
+    // while walking. fails_when: saved fixes don't reach `polylines` until
+    // something else reloads them, or an untrustworthy fix is drawn.
+    // no_claim: real CLLocationManager delivery.
+
+    @Test func recordingTwoValidLocationsRefreshesPolylines() throws {
+        let (viewModel, context) = try makeViewModel()
+        let now = Date()
+
+        viewModel.recordLocations([
+            Self.location(latitude: 40.7000, longitude: -73.9900, timestamp: now.addingTimeInterval(-10)),
+            Self.location(latitude: 40.7002, longitude: -73.9898, timestamp: now),
+        ])
+
+        #expect(viewModel.polylines.count == 1)
+        #expect(viewModel.polylines.first?.count == 2)
+        #expect(try context.fetch(FetchDescriptor<WalkedPoint>()).count == 2)
+    }
+
+    @Test func anInaccurateLocationIsNotRecordedAndPolylinesStayEmpty() throws {
+        let (viewModel, context) = try makeViewModel()
+        let now = Date()
+
+        viewModel.recordLocations([
+            Self.location(latitude: 40.7000, longitude: -73.9900, accuracy: 200, timestamp: now.addingTimeInterval(-10)),
+            Self.location(latitude: 40.7002, longitude: -73.9898, accuracy: -1, timestamp: now),
+        ])
+
+        #expect(viewModel.polylines.isEmpty)
+        #expect(try context.fetch(FetchDescriptor<WalkedPoint>()).isEmpty)
+    }
+
+    @Test func emptyBannerDismissalStartsFalseAndIsNotPersisted() throws {
+        let suiteName = "StreetsWalkedViewModelTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let container = try makeInMemoryModelContainer()
+        let first = StreetsWalkedViewModel(
+            locationPermissionClient: LocationPermissionClient(),
+            modelContainer: container,
+            userDefaults: defaults
+        )
+        #expect(first.isEmptyBannerDismissed == false)
+
+        first.isEmptyBannerDismissed = true
+
+        // A fresh instance over the same defaults stands in for a relaunch.
+        let relaunched = StreetsWalkedViewModel(
+            locationPermissionClient: LocationPermissionClient(),
+            modelContainer: container,
+            userDefaults: defaults
+        )
+        #expect(relaunched.isEmptyBannerDismissed == false)
+    }
+
     @Test func shouldRequestFullAccuracyOnlyWhenCurrentlyReduced() {
         #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .reducedAccuracy) == true)
         #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .fullAccuracy) == false)

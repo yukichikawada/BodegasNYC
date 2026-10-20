@@ -114,6 +114,25 @@ struct BodegaFilterTests {
         #expect(blank.matches(bodega))
     }
 
+    @Test func clearingAmenitiesDropsTogglesAndKeepsSearchText() {
+        let filter = BodegaFilter(requiredAmenities: [.hasCat, .sellsBeer], searchText: "deli ")
+
+        let cleared = filter.clearingAmenities()
+
+        #expect(cleared.requiredAmenities.isEmpty)
+        #expect(cleared.searchText == "deli ")
+        #expect(cleared.activeCount == 1)
+        // The original is untouched; this returns a copy.
+        #expect(filter.requiredAmenities == [.hasCat, .sellsBeer])
+    }
+
+    @Test func clearingAmenitiesOnAnAmenityOnlyFilterIsInactive() {
+        let cleared = BodegaFilter(requiredAmenities: [.servesHotFood]).clearingAmenities()
+
+        #expect(cleared == .none)
+        #expect(!cleared.isActive)
+    }
+
     @Test func searchAndAmenitiesMustBothMatch() throws {
         let catDeli = try makeTestBodega(name: "Cat Deli", hasCat: true)
         let catlessDeli = try makeTestBodega(name: "Plain Deli")

@@ -66,6 +66,16 @@ final class BodegaListViewModel {
         refetch()
     }
 
+    /// The load-failed empty state's Retry (design DD5): re-runs the same
+    /// initial-load path by moving `.failed` back to `.idle`. A no-op in
+    /// any other state, so a stray tap can't restart a load in progress or
+    /// throw away loaded rows.
+    func retry() {
+        guard case .failed = loadState else { return }
+        loadState = .idle
+        loadInitialIfNeeded()
+    }
+
     /// Optimistically reflects a just-inserted bodega without a full
     /// refetch — mirrors `BodegaMapViewModel.bodegaWasAdded`. Once data has
     /// loaded, this bumps `currentFetchGeneration` so an already-in-flight

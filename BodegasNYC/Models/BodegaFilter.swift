@@ -75,6 +75,15 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
         requiredAmenities.count + (trimmedSearchText.isEmpty ? 0 : 1)
     }
 
+    /// What the empty states' Clear Filters action applies (design DD6):
+    /// drops every amenity toggle but keeps the search text, so clearing
+    /// filters never also throws away what the user typed.
+    func clearingAmenities() -> BodegaFilter {
+        var copy = self
+        copy.requiredAmenities = []
+        return copy
+    }
+
     func requires(_ amenity: Amenity) -> Bool {
         requiredAmenities.contains(amenity)
     }

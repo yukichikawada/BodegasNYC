@@ -31,6 +31,7 @@ struct MapScreenView: View {
     @Binding private var isPlacingBodega: Bool
     private let onConfirmPlacement: (CLLocationCoordinate2D) -> Void
     private let onSelectBodega: (Bodega) -> Void
+    private let onClearFilters: () -> Void
 
     init(
         viewModel: BodegaMapViewModel,
@@ -39,7 +40,8 @@ struct MapScreenView: View {
         streetsWalkedViewModel: StreetsWalkedViewModel? = nil,
         isPlacingBodega: Binding<Bool>,
         onConfirmPlacement: @escaping (CLLocationCoordinate2D) -> Void,
-        onSelectBodega: @escaping (Bodega) -> Void
+        onSelectBodega: @escaping (Bodega) -> Void,
+        onClearFilters: @escaping () -> Void
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -48,6 +50,30 @@ struct MapScreenView: View {
         _isPlacingBodega = isPlacingBodega
         self.onConfirmPlacement = onConfirmPlacement
         self.onSelectBodega = onSelectBodega
+        self.onClearFilters = onClearFilters
+    }
+
+    /// What the bottom slot shows when the placement bar isn't up — see
+    /// `MapBottomCard.select` for the precedence. #25 supplies `firstAdd`
+    /// and #22 `addTip`; neither exists yet.
+    private var bottomCardContent: MapBottomCard.Content? {
+        MapBottomCard.select(
+            isPlacing: isPlacingBodega,
+            firstAdd: nil,
+            emptyState: MapBottomCard.bodegaEmptyState(
+                browseMode: viewModel.browseMode,
+                isLoadedEmpty: viewModel.isLoadedEmpty,
+                isFilteredEmpty: viewModel.isFilteredEmpty
+            ),
+            addTip: false,
+            streets: streetsWalkedViewModel.map {
+                MapBottomCard.showsStreetsBanner(
+                    isTrackingEnabled: $0.isTrackingEnabled,
+                    hasPolylines: !$0.polylines.isEmpty,
+                    isDismissed: $0.isEmptyBannerDismissed
+                )
+            } ?? false
+        )
     }
 
     var body: some View {
@@ -61,7 +87,7 @@ struct MapScreenView: View {
                         coordinate: bodega.coordinate.clLocationCoordinate
                     )
                     .tag(bodega.id)
-                    .tint(bodega.hasCat ? .orange : .red)
+                    .tint(bodega.hasCat ? Color.catPin : Color.pin)
                 case .cluster(let cluster):
                     Annotation(
                         "\(cluster.bodegaIDs.count) bodegas",
@@ -116,15 +142,28 @@ struct MapScreenView: View {
             }
         }
         .safeAreaInset(edge: .bottom) {
-            if isPlacingBodega {
-                PlacementBottomBar(
-                    onUseThisLocation: {
-                        onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
-                        isPlacingBodega = false
-                    },
-                    onCancel: { isPlacingBodega = false }
-                )
+            VStack(spacing: 0) {
+                if isPlacingBodega {
+                    PlacementBottomBar(
+                        onUseThisLocation: {
+                            onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
+                            isPlacingBodega = false
+                        },
+                        onCancel: { isPlacingBodega = false }
+                    )
+                } else if let content = bottomCardContent {
+                    // `.id` makes a change of content a remove + insert, so
+                    // every swap in the slot runs the same transition.
+                    MapBottomCard(
+                        content: content,
+                        onAction: { performBottomCardAction(for: content) },
+                        onDismiss: { streetsWalkedViewModel?.isEmptyBannerDismissed = true }
+                    )
+                    .id(content)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.easeInOut(duration: 0.25), value: bottomCardContent)
         }
         .task {
             viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
@@ -162,6 +201,17 @@ struct MapScreenView: View {
                 Task { await clearStreetsWalkedHistory() }
             }
             Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private func performBottomCardAction(for content: MapBottomCard.Content) {
+        switch content {
+        case .emptyState(.noneNearby), .emptyState(.noBodegas):
+            isPlacingBodega = true
+        case .emptyState(.noFilterMatches):
+            onClearFilters()
+        case .emptyState(.noStreets), .firstAdd, .addTip:
+            break
         }
     }
 

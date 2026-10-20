@@ -217,6 +217,121 @@ struct BodegaMapViewModelTests {
         #expect(requestCount.get() == 1)
     }
 
+    // MARK: Empty-state flags (#24). protects: the map banner gating.
+    // fails_when: either flag is true while loading, after a failure, or in
+    // the other flag's case. no_claim: banner rendering.
+
+    @Test func isLoadedEmptyIsTrueOnlyOnceALoadReturnsZeroRows() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        let viewModel = makeViewModel()
+        #expect(viewModel.isLoadedEmpty == false)
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        #expect(viewModel.loadState == .loading)
+        #expect(viewModel.isLoadedEmpty == false)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        #expect(viewModel.isLoadedEmpty == true)
+        #expect(viewModel.isFilteredEmpty == false)
+    }
+
+    @Test func emptyFlagsAreFalseAfterANonEmptyLoad() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.isLoadedEmpty == false)
+        #expect(viewModel.isFilteredEmpty == false)
+    }
+
+    @Test func aFilterThatHidesEveryPinIsFilteredEmptyNotLoadedEmpty() async throws {
+        MockURLProtocol.reset()
+        let body = "[\(Self.bodegaJSON(name: "Plain Deli")),"
+            + "\(Self.bodegaJSON(name: "Other Deli", latitude: 40.80, longitude: -73.90))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+
+        #expect(viewModel.displayItems.isEmpty)
+        #expect(viewModel.isLoadedEmpty == false)
+        #expect(viewModel.isFilteredEmpty == true)
+
+        // A search-only filter that matches nothing counts too.
+        viewModel.filter = BodegaFilter(searchText: "bakery")
+        #expect(viewModel.isFilteredEmpty == true)
+
+        // Clearing the amenities (search kept, still matching) ends it.
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat], searchText: "deli").clearingAmenities()
+        #expect(viewModel.isFilteredEmpty == false)
+        viewModel.filter = .none
+        #expect(viewModel.isFilteredEmpty == false)
+    }
+
+    @Test func aFilterThatStillMatchesSomethingIsNotFilteredEmpty() async throws {
+        MockURLProtocol.reset()
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),"
+            + "\(Self.bodegaJSON(name: "Plain Deli", latitude: 40.80, longitude: -73.90))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+
+        #expect(viewModel.isFilteredEmpty == false)
+        #expect(viewModel.isLoadedEmpty == false)
+    }
+
+    @Test func anEmptyLoadUnderAFilterIsLoadedEmptyNotFilteredEmpty() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.isLoadedEmpty == true)
+        #expect(viewModel.isFilteredEmpty == false)
+    }
+
+    @Test func emptyFlagsAreFalseAfterAFailedLoad() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        guard case .failed = viewModel.loadState else {
+            Issue.record("expected .failed, got \(viewModel.loadState)")
+            return
+        }
+        #expect(viewModel.isLoadedEmpty == false)
+        #expect(viewModel.isFilteredEmpty == false)
+    }
+
+    @Test func addingABodegaToAnEmptyMapEndsLoadedEmpty() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.isLoadedEmpty == true)
+
+        viewModel.bodegaWasAdded(try makeTestBodega(name: "Nueva Bodega"))
+
+        #expect(viewModel.isLoadedEmpty == false)
+    }
+
     private static func pins(in items: [MapDisplayItem]) -> [Bodega] {
         items.compactMap { item in
             if case .pin(let bodega) = item { return bodega }
