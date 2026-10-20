@@ -30,8 +30,12 @@ struct PlacementCrosshair: View {
                 if isShown {
                     // `figure.wave` has no directional "point" the way
                     // `mappin` does, so its centre is the submitted point.
+                    // Fixed at `.largeTitle`'s default 34pt, like the pin's
+                    // glyph (DESIGN.md: symbol sizes are fixed): it marks a
+                    // point on the map, and growing with Dynamic Type would
+                    // push it into the card in landscape.
                     Image(systemName: "figure.wave")
-                        .font(.largeTitle)
+                        .font(.system(size: 34))
                         .foregroundStyle(.red)
                         .onGeometryChange(for: CGPoint.self) { proxy in
                             let frame = proxy.frame(in: .global)

@@ -253,12 +253,15 @@ rectangle, `{spacing.lg}` 16pt padding and side inset, `maxWidth` 480pt, `{spaci
 the slot's 24pt attribution clearance, shadow radius 2 y 1 under the shape. Text column: a title
 `.headline` in voice (`AppCopy.placementCardTitle`), no body, no symbol column. Action row below:
 Near Me and Cancel `{components.button-secondary}`, Use This Location
-`{components.button-primary}`; stacked from `.xLarge` up (Near Me and Cancel on one row while
-they fit, Use This Location full width below). It is a task panel: the material groups the task
+`{components.button-primary}`, on one row only while all three fit without wrapping (on a
+402pt-wide iPhone they do not, so it stacks there too); stacked: Near Me and Cancel on one row
+while they fit, Use This Location full width below; always stacked from `.xLarge` up. In
+landscape at accessibility sizes the title keeps to one line (scale factor down to 0.5) so the
+crosshair still fits above the card. It is a task panel: the material groups the task
 and its buttons keep native control styling. This is the one material-under-controls exception
 to the Colors rule. The placement tip is a popover on Use This Location, arrow at the bottom,
 presented 0.3s after the card appears and dismissed before the card leaves. The crosshair
-(`figure.wave`, red, `.largeTitle`) is centred in the band the card leaves uncovered and is
+(`figure.wave`, red, fixed 34pt, `.largeTitle`'s default; a symbol, so it does not scale) is centred in the band the card leaves uncovered and is
 hidden from VoiceOver; the card's title is the instruction.
 
 **Cluster badge:** same family as the pin, `systemGray` fill, white count, same stroke and shadow.

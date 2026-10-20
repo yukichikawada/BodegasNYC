@@ -24,6 +24,7 @@ struct PlacementBottomBar: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     /// False until the slot transition settles (`.task` below), so the
     /// popover anchors to a resting button; set false by `dismissTip()`
     /// before the card is removed.
@@ -31,11 +32,20 @@ struct PlacementBottomBar: View {
 
     private var isStacked: Bool { dynamicTypeSize >= .xLarge }
 
+    /// Landscape at accessibility sizes: a two-line title leaves no room
+    /// above the card for the crosshair, so the title keeps to one line
+    /// there, shrinking rather than wrapping (as the map card's body does).
+    private var isTitleOneLine: Bool {
+        verticalSizeClass == .compact && dynamicTypeSize.isAccessibilitySize
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(AppCopy.placementCardTitle.copy.text)
                 .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(isTitleOneLine ? 1 : nil)
+                .minimumScaleFactor(isTitleOneLine ? 0.5 : 1)
+                .fixedSize(horizontal: false, vertical: !isTitleOneLine)
                 .accessibilityAddTraits(.isHeader)
             actions
         }
