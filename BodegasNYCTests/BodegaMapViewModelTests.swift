@@ -26,6 +26,7 @@ struct BodegaMapViewModelTests {
     )
 
     private static func bodegaJSON(
+        id: UUID = UUID(),
         name: String,
         latitude: Double = 40.7291,
         longitude: Double = -73.9965,
@@ -33,7 +34,7 @@ struct BodegaMapViewModelTests {
     ) -> String {
         """
         {
-          "id": "\(UUID().uuidString)",
+          "id": "\(id.uuidString)",
           "created_by": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
           "name": "\(name)",
           "latitude": \(latitude),
@@ -307,6 +308,66 @@ struct BodegaMapViewModelTests {
 
         #expect(viewModel.loadState == .loaded)
         #expect(viewModel.displayItems.count == 2)
+    }
+
+    /// Regression for issue #35: adding a bodega while the initial `.all`
+    /// fetch is in flight used to drop that fetch, leaving only the added
+    /// pin. The fetch now lands and the added row is merged into its
+    /// result. Coordinates differ so the two land in separate grid cells
+    /// and render as two pins, not one cluster.
+    @Test func bodegaWasAddedDuringTheInitialFetchIsMergedIntoItsResult() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        #expect(viewModel.loadState == .loading)
+        viewModel.bodegaWasAdded(try makeTestBodega(name: "Nueva Bodega", latitude: 40.80, longitude: -73.90))
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        let pins = Self.pins(in: viewModel.displayItems)
+        #expect(pins.count == 2)
+        #expect(Set(pins.map(\.name)) == ["El Sol", "Nueva Bodega"])
+    }
+
+    @Test func bodegaWasAddedDuringTheInitialFetchAppearsOnceWhenTheFetchAlsoReturnsIt() async throws {
+        MockURLProtocol.reset()
+        let addedID = UUID()
+        let body = "[\(Self.bodegaJSON(name: "El Sol")),"
+            + "\(Self.bodegaJSON(id: addedID, name: "Server Copy", latitude: 40.80, longitude: -73.90))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        viewModel.bodegaWasAdded(
+            try makeTestBodega(id: addedID, name: "Nueva Bodega", latitude: 40.80, longitude: -73.90)
+        )
+        await viewModel.waitForPendingFetchForTesting()
+
+        let pins = Self.pins(in: viewModel.displayItems)
+        #expect(pins.count == 2)
+        #expect(pins.filter { $0.id == addedID }.map(\.name) == ["Nueva Bodega"])
+    }
+
+    @Test func bodegaWasUpdatedDuringTheInitialFetchWinsOverTheFetchedCopy() async throws {
+        MockURLProtocol.reset()
+        let editedID = UUID()
+        let body = "[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true)),"
+            + "\(Self.bodegaJSON(id: editedID, name: "Plain Deli", latitude: 40.80, longitude: -73.90))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        viewModel.bodegaWasUpdated(
+            try makeTestBodega(id: editedID, name: "Renamed Deli", latitude: 40.80, longitude: -73.90)
+        )
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        let pins = Self.pins(in: viewModel.displayItems)
+        #expect(pins.count == 2)
+        #expect(pins.first { $0.id == editedID }?.name == "Renamed Deli")
     }
 
     @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {

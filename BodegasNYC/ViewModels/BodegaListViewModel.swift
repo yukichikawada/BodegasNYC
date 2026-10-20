@@ -49,6 +49,11 @@ final class BodegaListViewModel {
     /// though there's currently only one call site (`loadInitialIfNeeded`),
     /// as cheap insurance against a future manual-refresh action racing it.
     private var currentFetchGeneration = 0
+    /// Whether any fetch has succeeded yet. Until one has, local changes
+    /// are buffered in `pendingLocalChanges` rather than superseding the
+    /// in-flight fetch — see `isFirstFetchInFlight`.
+    private var hasLoadedOnce = false
+    private var pendingLocalChanges = PendingBodegaChanges()
 
     init(bodegaService: BodegaService) {
         self.bodegaService = bodegaService
@@ -62,36 +67,56 @@ final class BodegaListViewModel {
     }
 
     /// Optimistically reflects a just-inserted bodega without a full
-    /// refetch — mirrors `BodegaMapViewModel.bodegaWasAdded`, including the
-    /// `currentFetchGeneration` bump that stops an already-in-flight
-    /// refetch from landing afterward and silently overwriting this
-    /// prepend. Note: if `loadState` is currently `.failed`,
-    /// `BodegaListView` still renders the failure state regardless of
-    /// `bodegas`' contents — a known, accepted gap.
+    /// refetch — mirrors `BodegaMapViewModel.bodegaWasAdded`. Once data has
+    /// loaded, this bumps `currentFetchGeneration` so an already-in-flight
+    /// refetch can't land afterward and silently overwrite this prepend.
+    /// During the *first* fetch it instead buffers the row and lets that
+    /// fetch land, merging the row into its result (issue #35) — dropping
+    /// the fetch would leave the list holding only this one bodega. Note:
+    /// if `loadState` is currently `.failed`, `BodegaListView` still
+    /// renders the failure state regardless of `bodegas`' contents — a
+    /// known, accepted gap.
     func bodegaWasAdded(_ bodega: Bodega) {
-        supersedeInFlightFetch()
+        if isFirstFetchInFlight {
+            pendingLocalChanges.recordAdded(bodega)
+        } else {
+            supersedeInFlightFetch()
+        }
         bodegas.insert(bodega, at: 0)
     }
 
     /// Reflects an Edit Bodega save without a full refetch: replaces the
     /// bodega with the same id in place (edits don't change `created_at`
-    /// ordering). A no-op if it isn't loaded. Bumps
+    /// ordering). A no-op if it isn't loaded, except during the first
+    /// fetch, when the edit is buffered so it wins over that fetch's
+    /// (possibly pre-edit) copy of the row. Otherwise bumps
     /// `currentFetchGeneration` for the same reason as
     /// `BodegaMapViewModel.bodegaWasUpdated`, and only when found.
     func bodegaWasUpdated(_ bodega: Bodega) {
-        guard let index = bodegas.firstIndex(where: { $0.id == bodega.id }) else { return }
-        supersedeInFlightFetch()
-        bodegas[index] = bodega
+        let index = bodegas.firstIndex(where: { $0.id == bodega.id })
+        if isFirstFetchInFlight {
+            pendingLocalChanges.recordUpdated(bodega)
+        } else {
+            guard index != nil else { return }
+            supersedeInFlightFetch()
+        }
+        if let index {
+            bodegas[index] = bodega
+        }
+    }
+
+    /// True while the fetch in flight would be the first dataset this view
+    /// model holds, so there's nothing valid to fall back on if it were
+    /// dropped.
+    private var isFirstFetchInFlight: Bool {
+        loadState == .loading && !hasLoadedOnce
     }
 
     /// Same as `BodegaMapViewModel.supersedeInFlightFetch()`: drops any
     /// in-flight fetch and moves `.loading` to `.loaded`, so the spinner
-    /// can't be stranded by a fetch whose result is now ignored. One caveat:
-    /// if `bodegaWasAdded` lands during the list's *initial* fetch (the list
-    /// tab hasn't loaded yet), the list will show only the added bodega
-    /// until the next load. A partial list is still better than a spinner
-    /// that never goes away. `bodegaWasUpdated` can't hit that case, since
-    /// it only acts on a bodega that is already loaded.
+    /// can't be stranded by a fetch whose result is now ignored. Only used
+    /// once a fetch has succeeded; during the first fetch, local changes go
+    /// through `pendingLocalChanges` instead.
     private func supersedeInFlightFetch() {
         currentFetchGeneration += 1
         if loadState == .loading {
@@ -104,15 +129,21 @@ final class BodegaListViewModel {
         currentFetchGeneration += 1
         let generation = currentFetchGeneration
         loadState = .loading
+        // This fetch starts after every change buffered so far, so its
+        // result already reflects them.
+        pendingLocalChanges = PendingBodegaChanges()
 
         fetchTask = Task { [bodegaService] in
             do {
                 let fetched = try await bodegaService.fetchAll()
                 guard generation == currentFetchGeneration else { return }
-                bodegas = fetched
+                bodegas = pendingLocalChanges.applied(to: fetched)
+                pendingLocalChanges = PendingBodegaChanges()
+                hasLoadedOnce = true
                 loadState = .loaded
             } catch {
                 guard generation == currentFetchGeneration else { return }
+                pendingLocalChanges = PendingBodegaChanges()
                 loadState = .failed(error.localizedDescription)
             }
         }

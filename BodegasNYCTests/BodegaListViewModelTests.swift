@@ -17,10 +17,10 @@ extension NetworkingTests {
 @Suite
 @MainActor
 struct BodegaListViewModelTests {
-    private static func bodegaJSON(name: String, hasCat: Bool = false) -> String {
+    private static func bodegaJSON(id: UUID = UUID(), name: String, hasCat: Bool = false) -> String {
         """
         {
-          "id": "\(UUID().uuidString)",
+          "id": "\(id.uuidString)",
           "created_by": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
           "name": "\(name)",
           "latitude": 40.7291,
@@ -155,13 +155,14 @@ struct BodegaListViewModelTests {
         #expect(requestCount.get() == 1)
     }
 
-    /// Regression for a QA finding: the generation bump drops the in-flight
-    /// fetch, and that used to strand `loadState` at `.loading`, so the list
-    /// showed a spinner forever. Exercised through `bodegaWasAdded`: the
-    /// list has only one fetch (the initial one), and while it is in flight
-    /// `bodegas` is empty, so `bodegaWasUpdated` has nothing to match and
-    /// never bumps. Both methods share `supersedeInFlightFetch()`.
-    @Test func bodegaWasAddedDuringTheInFlightFetchSettlesLoadState() async throws {
+    /// Regression for issue #35 (and, before it, a QA finding that the same
+    /// scenario stranded `loadState` at `.loading`): adding a bodega while
+    /// the initial fetch is in flight used to drop that fetch, leaving the
+    /// list holding only the added bodega. The fetch now lands and the
+    /// added row is merged in front of its result. The test is
+    /// `@MainActor`, so the fetch's Task can't start before the synchronous
+    /// `bodegaWasAdded` call right after `loadInitialIfNeeded`.
+    @Test func bodegaWasAddedDuringTheInitialFetchIsMergedIntoItsResult() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
         let viewModel = makeViewModel()
@@ -172,7 +173,56 @@ struct BodegaListViewModelTests {
         await viewModel.waitForPendingFetchForTesting()
 
         #expect(viewModel.loadState == .loaded)
-        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega"])
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega", "El Sol"])
+    }
+
+    /// The fetch can race the insert and already contain the added row:
+    /// it must appear once, at the front, with the locally held data.
+    @Test func bodegaWasAddedDuringTheInitialFetchAppearsOnceWhenTheFetchAlsoReturnsIt() async throws {
+        MockURLProtocol.reset()
+        let addedID = UUID()
+        let body = "[\(Self.bodegaJSON(name: "El Sol")),\(Self.bodegaJSON(id: addedID, name: "Server Copy"))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded()
+        viewModel.bodegaWasAdded(try makeTestBodega(id: addedID, name: "Nueva Bodega"))
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega", "El Sol"])
+        #expect(viewModel.bodegas.filter { $0.id == addedID }.count == 1)
+    }
+
+    @Test func bodegaWasUpdatedDuringTheInitialFetchWinsOverTheFetchedCopy() async throws {
+        MockURLProtocol.reset()
+        let editedID = UUID()
+        let body = "[\(Self.bodegaJSON(name: "El Sol")),\(Self.bodegaJSON(id: editedID, name: "Plain Deli"))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded()
+        viewModel.bodegaWasUpdated(try makeTestBodega(id: editedID, name: "Renamed Deli", hasCat: true))
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        #expect(viewModel.bodegas.map(\.name) == ["El Sol", "Renamed Deli"])
+        #expect(viewModel.bodegas.last?.hasCat == true)
+    }
+
+    /// An add followed by an edit of that same bodega, both during the
+    /// initial fetch, keeps one row at the front with the edited data.
+    @Test func bodegaAddedThenUpdatedDuringTheInitialFetchKeepsTheEditAtTheFront() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+        let addedID = UUID()
+
+        viewModel.loadInitialIfNeeded()
+        viewModel.bodegaWasAdded(try makeTestBodega(id: addedID, name: "Nueva Bodega"))
+        viewModel.bodegaWasUpdated(try makeTestBodega(id: addedID, name: "Nueva Bodega (edited)"))
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega (edited)", "El Sol"])
     }
 
     @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {
