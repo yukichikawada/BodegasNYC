@@ -39,6 +39,18 @@ final class BodegaMapViewModel {
         }
     }
 
+    /// The just-added bodega while its drop plays (eng review R7), set and
+    /// cleared by `AddCompletionCoordinator`. `recluster` keeps it out of
+    /// the filter and the clustering input and appends it as its own
+    /// `.pin`, so a filter that doesn't match it, or a neighbour in the same
+    /// grid cell, can't hide the pin the camera just flew to.
+    var highlightedBodegaID: Bodega.ID? {
+        didSet {
+            guard highlightedBodegaID != oldValue, let lastRegion else { return }
+            recluster(region: lastRegion)
+        }
+    }
+
     /// True only when a fetch has landed and returned no bodegas at all,
     /// before any filtering — the map's "nothing here" banners
     /// (`MapBottomCard`). False during the initial load, after a failure,
@@ -171,14 +183,25 @@ final class BodegaMapViewModel {
     /// Filters *before* clustering, so a cluster's count only ever reflects
     /// bodegas that actually match — clustering first and then hiding
     /// clusters would leave badges counting bodegas the user filtered out.
+    ///
+    /// The highlighted bodega (R7) skips both steps and goes last, so it is
+    /// always its own pin and draws above its neighbours (design DD3).
     private func recluster(region: MKCoordinateRegion) {
-        let visible = filter.isActive ? loadedBodegas.filter(filter.matches) : loadedBodegas
-        displayItems = Self.cluster(visible, visibleRegion: region)
+        let highlighted = highlightedBodegaID.flatMap { id in loadedBodegas.first { $0.id == id } }
+        let candidates = highlighted.map { pinned in loadedBodegas.filter { $0.id != pinned.id } } ?? loadedBodegas
+        let visible = filter.isActive ? candidates.filter(filter.matches) : candidates
+        var items = Self.cluster(visible, visibleRegion: region)
+        if let highlighted {
+            items.append(.pin(highlighted))
+        }
+        displayItems = items
     }
 
     /// Optimistically reflects a just-inserted bodega without a full
-    /// refetch — see `AddBodegaViewModel`/`BrowseView`. Prepended to match
-    /// `fetchAll`'s `created_at desc` ordering. Safe regardless of
+    /// refetch — see `AddCompletionCoordinator`. Prepended to match
+    /// `fetchAll`'s `created_at desc` ordering. Idempotent (eng review R6):
+    /// if a refetch already landed with this row (a `.nearby` refetch after
+    /// the camera settles on it), it is replaced in place, never doubled. Safe regardless of
     /// `loadState`: `MapScreenView` renders `displayItems` unconditionally,
     /// not gated on `loadState`.
     ///
@@ -196,7 +219,11 @@ final class BodegaMapViewModel {
         } else {
             supersedeInFlightFetch()
         }
-        loadedBodegas.insert(bodega, at: 0)
+        if let index = loadedBodegas.firstIndex(where: { $0.id == bodega.id }) {
+            loadedBodegas[index] = bodega
+        } else {
+            loadedBodegas.insert(bodega, at: 0)
+        }
         if let lastRegion {
             recluster(region: lastRegion)
         }
@@ -272,6 +299,19 @@ final class BodegaMapViewModel {
         )
         let distance = center.distance(from: northEdge)
         return min(max(distance, nearbyRadiusRange.lowerBound), nearbyRadiusRange.upperBound)
+    }
+
+    /// `items` with the given bodega ids moved to the end, in their
+    /// existing relative order: MapKit draws later annotations above
+    /// earlier ones, so the selected and highlighted pins sit on top
+    /// (design DD3). Pure, for `MapScreenView`.
+    nonisolated static func drawOrdered(_ items: [MapDisplayItem], frontIDs: Set<Bodega.ID>) -> [MapDisplayItem] {
+        guard !frontIDs.isEmpty else { return items }
+        func isFront(_ item: MapDisplayItem) -> Bool {
+            if case .pin(let bodega) = item { return frontIDs.contains(bodega.id) }
+            return false
+        }
+        return items.filter { !isFront($0) } + items.filter(isFront)
     }
 
 #if DEBUG

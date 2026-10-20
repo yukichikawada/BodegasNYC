@@ -14,6 +14,10 @@ nonisolated struct Coordinate: Codable, Sendable, Hashable {
 
 #if canImport(CoreLocation)
 extension Coordinate {
+    init(_ coordinate: CLLocationCoordinate2D) {
+        self.init(latitude: coordinate.latitude, longitude: coordinate.longitude)
+    }
+
     var clLocationCoordinate: CLLocationCoordinate2D {
         CLLocationCoordinate2D(latitude: latitude, longitude: longitude)
     }

@@ -94,13 +94,23 @@ Submit-time sign-in sheet got new copy and a half-sheet presentation. Debug buil
 tips with the `-ResetTips` launch argument. No backend changes. Covered by unit tests; live
 checks via QA on the branch simulator.
 
+**Delight Moment** (#25) — every add now lands: the sheet closes, the camera flies to the new
+pin at street zoom, and the pin drops in with a spring and a success haptic. All pins (and the
+cluster badges) moved from MapKit `Marker`s to one custom `BodegaPinView` (red, or orange with
+the cat), so the dropped pin looks like its neighbours; tapping a pin still opens detail. The
+first add on a device also gets a one-time card, "One down." (the cat walks into it when the
+bodega has one), dismissed by Done, by leaving the map, or after 8 s (never under VoiceOver);
+VoiceOver announces every add. One `AddCompletionCoordinator` owns the sequence; the new pin is
+inserted immediately and idempotently, and stays visible through filters and clustering while it
+drops. Reduce Motion fades instead of dropping. No backend changes. Covered by unit tests; live
+checks via QA on the branch simulator.
+
 ## Remaining MVP feature work
 
 | Feature | Category | One-liner | Effort | Needs Your Sign-Off? | Notes / Dependencies |
 |---|---|---|---|---|---|
 | Duplicate-Bodega Check on Submit | Add-a-Bodega | Basic proximity check when submitting a new bodega to catch obvious duplicates. | S–M | **Yes** — exact UX (merge vs. reject vs. flag-for-review) is explicitly left unspecified in PRD §4.1. | Depends on picking a UX before building — don't let this get built ahead of that decision. |
 | Custom Map↔List↔Detail Transitions | Portfolio/Design | Deliberate transitions between the three core views — map should never feel like it "goes away." | L | **Yes** — PRD §7 itself calls out that map-heavy screens deserve a focused `/plan` session once actually being built. | PRD §4.3/§8. Easy to underestimate — likely the largest single item here. |
-| Delight Moment | Portfolio/Design | At least one genuine delight moment tied to a meaningful action — leading candidate is right after a user's first bodega gets added. | S–M | **Yes** — needs your creative direction on what the moment actually is. | PRD §4.3/§8. |
 
 ---
 

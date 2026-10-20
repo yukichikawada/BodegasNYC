@@ -92,7 +92,13 @@ final class BodegaListViewModel {
         } else {
             supersedeInFlightFetch()
         }
-        bodegas.insert(bodega, at: 0)
+        // Idempotent (eng review R6): a fetch that already brought this row
+        // back keeps one copy, updated in place.
+        if let index = bodegas.firstIndex(where: { $0.id == bodega.id }) {
+            bodegas[index] = bodega
+        } else {
+            bodegas.insert(bodega, at: 0)
+        }
     }
 
     /// Reflects an Edit Bodega save without a full refetch: replaces the

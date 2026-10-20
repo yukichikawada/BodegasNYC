@@ -77,7 +77,10 @@ enum VoiceRule: CaseIterable, CustomTestStringConvertible {
 
 struct AppCopyVoiceTests {
     static let shippedCopy: [CopyString] =
-        AppCopy.allCases.map(\.copy) + [AppCopy.noSearchMatchesTitle("Deli")]
+        AppCopy.allCases.map(\.copy) + [
+            AppCopy.noSearchMatchesTitle("Deli"),
+            AppCopy.addedAnnouncement(name: "Deli")
+        ]
 
     @Test(arguments: VoiceRule.allCases)
     func everyShippedStringPasses(_ rule: VoiceRule) {
@@ -93,6 +96,11 @@ struct AppCopyVoiceTests {
 
     @Test func searchTitlePutsThePeriodInsideTheCurlyQuote() {
         #expect(AppCopy.noSearchMatchesTitle("Deli").text == "Nothing called \u{201C}Deli.\u{201D}")
+    }
+
+    @Test func addedAnnouncementNamesTheBodega() {
+        #expect(AppCopy.addedAnnouncement(name: "Deli").text == "Deli is on the map.")
+        #expect(AppCopy.addedAnnouncement(name: "Deli").kind == .body)
     }
 
     @Test func reviewsEmptyStateUsesTheCatLineOnlyWithACat() {

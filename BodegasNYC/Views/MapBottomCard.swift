@@ -23,8 +23,9 @@ struct MapBottomCard: View {
         case noStreets
     }
 
-    /// Placeholder payload for #25's first-add card, defined now so the
-    /// precedence table is real. #25 fills in what it carries.
+    /// The first-add card (#25): shown once per device, after the first
+    /// bodega lands. `hasCat` picks the body line and whether the cat walks
+    /// into the symbol column.
     nonisolated struct FirstAdd: Hashable, Sendable {
         let hasCat: Bool
     }
@@ -89,7 +90,7 @@ struct MapBottomCard: View {
 
     let content: Content
     /// The card's action: the empty state's Add a Bodega or Clear Filters,
-    /// or the add tip's Add a Bodega.
+    /// the add tip's Add a Bodega, or the first-add card's Done.
     let onAction: () -> Void
     /// The close button, shown only for dismissible content (`noStreets`).
     let onDismiss: () -> Void
@@ -98,9 +99,8 @@ struct MapBottomCard: View {
         switch content {
         case .emptyState(let state):
             EmptyStateCard(state: state, onAction: onAction, onDismiss: onDismiss)
-        case .firstAdd:
-            // Rendered by #25 (delight: first-add card).
-            EmptyView()
+        case .firstAdd(let firstAdd):
+            FirstAddCard(hasCat: firstAdd.hasCat, onDone: onAction)
         case .addTip:
             // The tutorial's Add tip (#22), inline rather than a toolbar
             // popover (eng review R1). The card supplies the material, so
@@ -149,16 +149,31 @@ private extension MapBottomCard.EmptyState {
 /// The DD13 card chrome every slot content shares: 16pt padding, material
 /// rounded rectangle, 480pt max width centered, 16pt side inset, 8pt above
 /// the bottom safe area.
-private struct MapBottomCardChrome: ViewModifier {
+struct MapBottomCardChrome: ViewModifier {
+    /// Clips the content to the card's shape, so something entering from
+    /// outside (the first-add cat) is cut at the card's edge (DD11).
+    var clips = false
+
     func body(content: Content) -> some View {
-        content
-            .padding(16)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        clipped(
+            content
+                .padding(16)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+        )
             .accessibilityElement(children: .contain)
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
+    }
+
+    @ViewBuilder
+    private func clipped(_ card: some View) -> some View {
+        if clips {
+            card.clipShape(RoundedRectangle(cornerRadius: 16))
+        } else {
+            card
+        }
     }
 }
 
