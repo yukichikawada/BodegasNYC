@@ -152,12 +152,14 @@ Contrast: 5.4:1 on white, 9.6:1 on black.
 corner at night; the map tiles already switch, so the chrome follows the system appearance.
 
 **Rules:**
-- Deli Green signals "tappable": buttons, links, toggles-on, the selected tab, text actions,
-  and the icon buttons on the Liquid Glass toolbar (filter, account, add, Locate Me, walked). It
-  is never used for a status ("open now", success, loading spinners) and never on a pin. The
-  `AccentColor` asset carries it; toggles need an explicit `.tint(.accentColor)` on their
-  `Section` because iOS switches ignore the asset. The user-location dot stays system blue
-  (`.tint(.blue)` on the Map): it is status, not a control.
+- Deli Green signals "tappable" in content: buttons, links, text actions, toggles-on, the
+  selected tab. Icon and text buttons on Liquid Glass toolbars (filter, account, add, Locate Me,
+  walked; a sheet's Cancel) take the label color, which is the iOS 26 system behavior for glass;
+  do not force the tint on them. It is never used for a status ("open now", success, loading
+  spinners) and never on a pin. The `AccentColor` asset carries it; toggles need an explicit
+  `.tint(.accentColor)` on their `Section` because iOS switches ignore the asset, and there is no
+  app-root tint because it would color every `ProgressView`. The user-location dot stays system
+  blue (`.tint(.blue)` on the Map): it is status, not a control.
 - Red appears in two forms that never share a surface at the same size: filled 28pt pin circles
   on the map, and plain text for form errors and destructive actions in sheets.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
@@ -323,4 +325,4 @@ the card; the card supplies the material.
 | 2026-10-20 | D6 onboarding keeps DD1's opaque system background | The memorable thing is the data on the map; a saturated opener sets an expectation the quiet app does not keep |
 | 2026-10-20 | catPin stays systemOrange with a white glyph; stars stay yellow | Glyph already encodes cat vs non-cat; color is redundant encoding |
 | 2026-10-20 | iOS 26: Liquid Glass for controls, material for floating content, opaque pages | HIG layering; text over a busy map needs a material surface |
-| 2026-10-20 | #66: `.tint(.accentColor)` on the toggle sections (not the root) so switches follow the tint without tinting spinners; Map `.tint(.blue)` keeps the location dot blue | iOS switches ignore AccentColor; the tint never encodes status, and a root tint would color every ProgressView |
+| 2026-10-20 | #66: `.tint(.accentColor)` on the toggle sections, no root tint; glass toolbar buttons keep the label color; Map `.tint(.blue)` keeps the location dot blue | iOS switches ignore AccentColor; a root tint colored every ProgressView, and label-colored glass buttons are the iOS 26 default and keep the chrome quiet |
