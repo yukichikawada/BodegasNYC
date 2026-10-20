@@ -1,6 +1,5 @@
 import MapKit
 import SwiftUI
-import TipKit
 import UIKit
 
 /// The map screen's `Map` content: bodega pins/clusters (`BodegaMapViewModel`)
@@ -169,18 +168,12 @@ struct MapScreenView: View {
                     .allowsHitTesting(false)
             }
         }
-        .safeAreaInset(edge: .bottom) {
+        // An overlay, not a safe-area inset, so the map doesn't shift when a
+        // card comes or goes (#58); it still sits on the bottom safe area
+        // (DD13), and VoiceOver still reads it after the map's content (DD15).
+        .overlay(alignment: .bottom) {
             VStack(spacing: 0) {
-                if isPlacingBodega {
-                    PlacementBottomBar(
-                        onUseThisLocation: {
-                            onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
-                            isPlacingBodega = false
-                        },
-                        onCancel: { isPlacingBodega = false },
-                        onNearMe: { Task { await locateMe() } }
-                    )
-                } else if let content = bottomCardContent {
+                if let content = bottomCardContent {
                     // `.id` makes a change of content a remove + insert, so
                     // every swap in the slot runs the same transition.
                     MapBottomCard(
@@ -193,6 +186,21 @@ struct MapScreenView: View {
                 }
             }
             .animation(.easeInOut(duration: AddCompletionCoordinator.cardTransitionSeconds), value: bottomCardContent)
+            // An overlay is otherwise read before the map's content.
+            .accessibilitySortPriority(-1)
+        }
+        // Placement is a mode: its bar insets the map, centring the crosshair.
+        .safeAreaInset(edge: .bottom) {
+            if isPlacingBodega {
+                PlacementBottomBar(
+                    onUseThisLocation: {
+                        onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
+                        isPlacingBodega = false
+                    },
+                    onCancel: { isPlacingBodega = false },
+                    onNearMe: { Task { await locateMe() } }
+                )
+            }
         }
         .task {
             viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
@@ -330,69 +338,5 @@ private struct TrackingErrorBanner: View {
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .padding(.horizontal)
         .padding(.top, 8)
-    }
-}
-
-/// The confirm/cancel bar shown while `isPlacingBodega` — pans underneath a
-/// fixed center-screen pin (see `MapScreenView`'s `.overlay`); "Use This
-/// Location" reads whatever coordinate is currently under that pin.
-///
-/// "Near Me" (DD2) uses the toolbar's `locateMe()` path; always present.
-/// From `.xLarge` up the bar wraps to two rows. The placement tip (#22) is a
-/// popover on Use This Location (not a toolbar item, so R1 allows it).
-private struct PlacementBottomBar: View {
-    let onUseThisLocation: () -> Void
-    let onCancel: () -> Void
-    let onNearMe: () -> Void
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @Environment(\.colorScheme) private var colorScheme
-    @State private var isPlacementTipPresented = true
-
-    private var isStacked: Bool { dynamicTypeSize >= .xLarge }
-
-    var body: some View {
-        VStack(spacing: 12) {
-            if isStacked {
-                // One row only while neither label has to wrap (AX sizes).
-                ViewThatFits(in: .horizontal) {
-                    HStack { nearMeButton.fixedSize(); Spacer(); cancelButton.fixedSize() }
-                    VStack(spacing: 12) { nearMeButton; cancelButton }
-                }
-                useThisLocationButton
-            } else {
-                HStack { nearMeButton; cancelButton; Spacer(); useThisLocationButton }
-            }
-        }
-        .padding()
-        .background(.regularMaterial)
-    }
-
-    private var cancelButton: some View { Button("Cancel", action: onCancel) }
-
-    private var nearMeButton: some View {
-        Button(action: onNearMe) {
-            Label(AppCopy.nearMeAction.copy.text, systemImage: "location.fill")
-        }
-        .buttonStyle(.bordered)
-    }
-
-    private var useThisLocationButton: some View {
-        Button(action: onUseThisLocation) {
-            Text("Use This Location")
-                .frame(maxWidth: isStacked ? .infinity : nil)
-        }
-        .buttonStyle(.borderedProminent)
-        .popoverTip(PlacementTip(), isPresented: $isPlacementTipPresented, arrowEdge: .bottom)
-        // A popover tip keeps the appearance it was presented with; re-present
-        // it after a light/dark switch.
-        .onChange(of: colorScheme) {
-            guard isPlacementTipPresented else { return }
-            isPlacementTipPresented = false
-            Task {
-                try? await Task.sleep(for: .milliseconds(350))
-                isPlacementTipPresented = true
-            }
-        }
     }
 }

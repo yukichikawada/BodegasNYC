@@ -62,11 +62,12 @@ final class AddCompletionCoordinator {
     /// The span the camera flies to for a new pin (street zoom).
     static let cameraSpan = 0.004
     /// How far the settled camera center may be from the new pin and still
-    /// count as "settled on it": a quarter of the target span. The reported
-    /// center is the full view's, which a bottom card in the safe-area slot
-    /// shifts off the pin, so this is screen-relative rather than tight. A
-    /// settle from an earlier, unrelated camera change is still rejected;
-    /// the fallback covers it.
+    /// count as "settled on it": a quarter of the target span. The bottom
+    /// card floats over the map rather than insetting it (#58), so the
+    /// reported center is the pin's; the tolerance stays screen-relative
+    /// rather than tight to absorb MapKit's rounding. A settle from an
+    /// earlier, unrelated camera change is still rejected; the fallback
+    /// covers it.
     static let settleTolerance = cameraSpan / 4
 
     private(set) var dropState: DropState = .none
