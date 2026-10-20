@@ -6,8 +6,16 @@ import SwiftUI
 /// the `cat` symbol (D11), swappable for an illustration here later.
 ///
 /// Rendered inside `Annotation(_, coordinate:, anchor: .center)`: the name
-/// label is an overlay below the circle, outside its layout, so showing it
+/// label is an overlay above the circle, outside its layout, so showing it
 /// never moves the pin off its coordinate.
+///
+/// Why above (#59): each `Annotation` is its own MapKit annotation view, and
+/// MapKit stacks those by screen position (lower on screen draws in front),
+/// not by `ForEach` order, and SwiftUI's `Map` exposes no z-priority. So a
+/// neighbour just south of a dropping or selected pin is drawn over it, and
+/// a label hung below the circle sat under that neighbour's circle. Above
+/// the circle, any annotation drawn in front of this one has its centre at
+/// or below this pin's, so its circle can't reach the label.
 struct BodegaPinView: View {
     static let diameter: CGFloat = 28
     nonisolated static let maxLabelCharacters = 18
@@ -49,14 +57,15 @@ struct BodegaPinView: View {
     var body: some View {
         circle
             .scaleEffect(isSelected ? 1.15 : 1)
-            .overlay(alignment: .top) {
+            .overlay(alignment: .bottom) {
                 if showsLabel {
                     nameLabel
                         .fixedSize()
-                        // Hang the label below the circle (clear of the
-                        // selected 1.15 scale); an alignment guide here is
-                        // not honored inside the annotation.
-                        .offset(y: Self.diameter + 4)
+                        // Sit the label above the circle (clear of the
+                        // selected 1.15 scale; see the type comment for why
+                        // not below); an alignment guide here is not honored
+                        // inside the annotation.
+                        .offset(y: -(Self.diameter + 4))
                 }
             }
             .offset(y: dropOffset)
