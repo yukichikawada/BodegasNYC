@@ -74,6 +74,18 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case rootLoading
     case rootLoadFailed
 
+    // MARK: Tutorial tips and sign-in (#22)
+
+    case tutorialAddTipTitle
+    case tutorialAddTipBody
+    case tutorialPlacementTipTitle
+    case tutorialPlacementTipBody
+    case tutorialFormTipTitle
+    case tutorialFormTipBody
+    case signInTitle
+    case signInBody
+    case nearMeAction
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -125,6 +137,20 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .onboardingReplayMenuItem: CopyString(kind: .label, text: "Show Intro Again")
         case .rootLoading: CopyString(kind: .body, text: "Getting the map.")
         case .rootLoadFailed: CopyString(kind: .title, text: "Couldn't reach the map.")
+        case .tutorialAddTipTitle: CopyString(kind: .title, text: "Know one that's not here?")
+        case .tutorialAddTipBody: CopyString(kind: .body, text: "Add it. Takes a minute.")
+        case .tutorialPlacementTipTitle: CopyString(kind: .title, text: "Put the marker on the door.")
+        case .tutorialPlacementTipBody:
+            CopyString(
+                kind: .body,
+                text: "Zoom in to your block. Drag the map, not the marker. Then tap Use This Location."
+            )
+        case .tutorialFormTipTitle: CopyString(kind: .title, text: "Only the name is required.")
+        case .tutorialFormTipBody: CopyString(kind: .body, text: "The rest is what people filter by.")
+        case .signInTitle: CopyString(kind: .title, text: "Sign in to put it on the map.")
+        case .signInBody:
+            CopyString(kind: .body, text: "Looking never needs an account. Adding, reviewing, and photos do.")
+        case .nearMeAction: CopyString(kind: .label, text: "Near Me")
         }
     }
 

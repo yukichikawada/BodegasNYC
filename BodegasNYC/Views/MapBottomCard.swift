@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 
 /// The one card that sits in the map's bottom slot (eng review R5): empty
 /// states now (#24), the first-add card (#25) and the inline add tip (#22)
@@ -87,7 +88,8 @@ struct MapBottomCard: View {
     }
 
     let content: Content
-    /// The empty state's action: Add a Bodega or Clear Filters.
+    /// The card's action: the empty state's Add a Bodega or Clear Filters,
+    /// or the add tip's Add a Bodega.
     let onAction: () -> Void
     /// The close button, shown only for dismissible content (`noStreets`).
     let onDismiss: () -> Void
@@ -100,8 +102,14 @@ struct MapBottomCard: View {
             // Rendered by #25 (delight: first-add card).
             EmptyView()
         case .addTip:
-            // Rendered by #22 (tutorial: inline AddBodegaTip).
-            EmptyView()
+            // The tutorial's Add tip (#22), inline rather than a toolbar
+            // popover (eng review R1). The card supplies the material, so
+            // the tip style draws no background (DD13).
+            TipView(AddBodegaTip()) { action in
+                if action.id == AddBodegaTip.addActionID { onAction() }
+            }
+            .tipViewStyle(BodegaTipStyle(inline: true))
+            .modifier(MapBottomCardChrome())
         }
     }
 }
@@ -138,6 +146,22 @@ private extension MapBottomCard.EmptyState {
     var isDismissible: Bool { self == .noStreets }
 }
 
+/// The DD13 card chrome every slot content shares: 16pt padding, material
+/// rounded rectangle, 480pt max width centered, 16pt side inset, 8pt above
+/// the bottom safe area.
+private struct MapBottomCardChrome: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .padding(16)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
+            .accessibilityElement(children: .contain)
+            .frame(maxWidth: 480)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 8)
+    }
+}
+
 private struct EmptyStateCard: View {
     let state: MapBottomCard.EmptyState
     let onAction: () -> Void
@@ -157,13 +181,7 @@ private struct EmptyStateCard: View {
                 gridLayout
             }
         }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        .accessibilityElement(children: .contain)
-        .frame(maxWidth: 480)
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
+        .modifier(MapBottomCardChrome())
     }
 
     /// The DD13 grid: symbol column, text column, trailing close, action

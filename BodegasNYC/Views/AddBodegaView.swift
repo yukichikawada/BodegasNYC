@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 
 /// Presented as `.sheet(item:)` from `BrowseView` once a placement
 /// coordinate is confirmed. Composition follows `BodegaDetailView`'s
@@ -21,6 +22,12 @@ struct AddBodegaView: View {
     var body: some View {
         NavigationStack {
             Form {
+                // Tutorial (#22): the form tip sits above Basics on Add only;
+                // Edit Bodega never shows it.
+                if !isEditing {
+                    TipView(FormTip())
+                        .tipViewStyle(BodegaTipStyle(inline: true))
+                }
                 Section("Basics") {
                     TextField("Name", text: $viewModel.name)
                     TextField("Address (optional)", text: $viewModel.address)
@@ -78,7 +85,10 @@ struct AddBodegaView: View {
                     }
                 )
             ) {
+                // Design DD10: a half sheet over the form, not a full one.
                 SignInView(sessionStore: sessionStore)
+                    .presentationDetents([.medium])
+                    .presentationBackground(.regularMaterial)
             }
         }
     }

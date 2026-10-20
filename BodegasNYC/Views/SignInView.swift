@@ -22,10 +22,10 @@ struct SignInView: View {
     var body: some View {
         VStack(spacing: 16) {
             Spacer()
-            Text("Sign in to add bodegas, reviews, and photos")
+            Text(AppCopy.signInTitle.copy.text)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            Text("Browsing never requires an account — this is only needed to contribute.")
+            Text(AppCopy.signInBody.copy.text)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

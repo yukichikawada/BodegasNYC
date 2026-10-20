@@ -1,0 +1,183 @@
+import SwiftUI
+import TipKit
+
+/// The first-run tutorial (#22): three TipKit coachmarks over the real UI
+/// (spec D6/D9), never a scripted walkthrough.
+///
+/// - `AddBodegaTip`: inline in the map's bottom card slot
+///   (`MapBottomCard.Content.addTip`), never a popover on a toolbar item
+///   (eng review R1: popover tips don't render on iOS 26 toolbar menus).
+/// - `PlacementTip`: popover on "Use This Location" in placement mode.
+/// - `FormTip`: inline at the top of the Add a Bodega form (never Edit).
+///
+/// The parameters below are mirrored from `BrowseView` state (on appear and
+/// on change). Closing a tip only closes that tip; the first successful add
+/// invalidates all three (`invalidateAll`). Nothing else dismisses one.
+nonisolated enum TutorialTips {
+    /// Mirrors `FirstRunState.hasAddedFirstBodega`. Persisted by TipKit, but
+    /// re-mirrored on every appear, so `FirstRunState` stays the truth.
+    @Parameter static var hasAddedFirstBodega: Bool = false
+
+    /// Mirrors `RootView`'s onboarding overlay. Transient: reset every
+    /// launch, since the overlay is decided fresh each launch.
+    @Parameter(.transient) static var isOnboardingVisible: Bool = false
+
+    /// Mirrors `BrowseView.isPlacingBodega`. Transient for the same reason.
+    @Parameter(.transient) static var isPlacingBodega: Bool = false
+
+    /// Donated each time a bodega detail screen opens, from any path (map
+    /// pin or list row; both go through `BrowseView`'s
+    /// `navigationDestination`). The Add tip waits for one (design DD4): ask
+    /// for a contribution only after the user has looked at one.
+    static let didOpenBodegaDetail = Tips.Event(id: "didOpenBodegaDetail")
+
+    /// The Add tip's gating, as a pure function so the truth table is unit
+    /// tested without TipKit (`TutorialTipsTests`). `AddBodegaTip.rules`
+    /// encode the same four inputs.
+    static func shouldOfferAddTip(
+        hasAddedFirstBodega: Bool,
+        isOnboardingVisible: Bool,
+        isPlacingBodega: Bool,
+        hasOpenedDetail: Bool
+    ) -> Bool {
+        !hasAddedFirstBodega && !isOnboardingVisible && !isPlacingBodega && hasOpenedDetail
+    }
+
+    /// The first successful add ends the tutorial: none of the three tips
+    /// shows again, including after relaunch.
+    static func invalidateAll() {
+        AddBodegaTip().invalidate(reason: .actionPerformed)
+        PlacementTip().invalidate(reason: .actionPerformed)
+        FormTip().invalidate(reason: .actionPerformed)
+    }
+}
+
+/// What `BrowseView` needs to know about the Add tip beyond its own state.
+/// The bottom card shows the tip only when `shouldOfferAddTip` and
+/// `isDisplayable` agree, so it never draws an empty card around a tip
+/// TipKit won't render.
+@Observable
+final class AddTipState {
+    /// TipKit's own verdict (rules, close, invalidation), followed from
+    /// `shouldDisplayUpdates`: a close (`.tipClosed`), the first add
+    /// (`.actionPerformed`) or a parameter change all collapse the card.
+    private(set) var isDisplayable = false
+    /// Whether `didOpenBodegaDetail` has any donation. Read from TipKit when
+    /// observation starts, set on each donation.
+    private(set) var hasOpenedDetail = false
+
+    /// Runs for the lifetime of the calling view's `.task`.
+    func observe() async {
+        hasOpenedDetail = !TutorialTips.didOpenBodegaDetail.donations.isEmpty
+        for await isDisplayable in AddBodegaTip().shouldDisplayUpdates {
+            self.isDisplayable = isDisplayable
+        }
+    }
+
+    /// Every path into detail (map pin, list row) lands in `BrowseView`'s
+    /// `navigationDestination`, so donating there covers them all (DD4).
+    func donateDidOpenBodegaDetail() async {
+        await TutorialTips.didOpenBodegaDetail.donate()
+        hasOpenedDetail = true
+    }
+}
+
+/// "Know one that's not here?" Inline in the map's bottom card. Its one
+/// action, "Add a Bodega", enters placement mode on the Map tab (DD4).
+nonisolated struct AddBodegaTip: Tip {
+    static let addActionID = "addBodega"
+
+    var title: Text { Text(AppCopy.tutorialAddTipTitle.copy.text) }
+    var message: Text? { Text(AppCopy.tutorialAddTipBody.copy.text) }
+
+    var actions: [Action] {
+        Action(id: Self.addActionID, title: AppCopy.addBodegaAction.copy.text)
+    }
+
+    var rules: [Rule] {
+        #Rule(TutorialTips.$hasAddedFirstBodega) { $0 == false }
+        #Rule(TutorialTips.$isOnboardingVisible) { $0 == false }
+        #Rule(TutorialTips.$isPlacingBodega) { $0 == false }
+        #Rule(TutorialTips.didOpenBodegaDetail) { $0.donations.count >= 1 }
+    }
+}
+
+/// "Put the marker on the door." Popover on "Use This Location".
+nonisolated struct PlacementTip: Tip {
+    var title: Text { Text(AppCopy.tutorialPlacementTipTitle.copy.text) }
+    var message: Text? { Text(AppCopy.tutorialPlacementTipBody.copy.text) }
+
+    var rules: [Rule] {
+        #Rule(TutorialTips.$hasAddedFirstBodega) { $0 == false }
+    }
+}
+
+/// "Only the name is required." Inline above Basics in the add form.
+nonisolated struct FormTip: Tip {
+    var title: Text { Text(AppCopy.tutorialFormTipTitle.copy.text) }
+    var message: Text? { Text(AppCopy.tutorialFormTipBody.copy.text) }
+
+    var rules: [Rule] {
+        #Rule(TutorialTips.$hasAddedFirstBodega) { $0 == false }
+    }
+}
+
+/// The tips' one look (spec D9, design DD13): headline title, secondary
+/// subheadline message, no image, a close button, actions as `.bordered`
+/// buttons. A popover gets a `.regularMaterial` background; inline (the
+/// map card, the form row) gets none, because the container already
+/// supplies it.
+struct BodegaTipStyle: TipViewStyle {
+    var inline: Bool = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        let content = VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if let title = configuration.title {
+                        title
+                            .font(.headline)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .accessibilityAddTraits(.isHeader)
+                    }
+                    if let message = configuration.message {
+                        message
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Button {
+                    configuration.tip.invalidate(reason: .tipClosed)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .frame(width: 44, height: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                // Same as the map card's close: pull the 44pt target back
+                // so the glyph lines up with the title.
+                .padding(.top, -12)
+                .padding(.trailing, -12)
+                .accessibilityLabel(AppCopy.dismissAction.copy.text)
+            }
+            ForEach(configuration.actions) { action in
+                Button(action: action.handler) {
+                    action.label()
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .accessibilityElement(children: .contain)
+
+        if inline {
+            content
+        } else {
+            content
+                .padding(16)
+                .background(.regularMaterial)
+        }
+    }
+}
