@@ -92,7 +92,9 @@ struct MapScreenView: View {
         )
     }
 
-    /// Selected and highlighted pins drawn last, above neighbours (DD3).
+    /// Selected and highlighted pins declared last. MapKit stacks by screen
+    /// position, so this only settles ties at equal height (see
+    /// `BodegaMapViewModel.drawOrdered`, #59).
     private var orderedDisplayItems: [MapDisplayItem] {
         let front = [selectedItemID.flatMap(UUID.init(uuidString:)), viewModel.highlightedBodegaID]
         return BodegaMapViewModel.drawOrdered(viewModel.displayItems, frontIDs: Set(front.compactMap { $0 }))

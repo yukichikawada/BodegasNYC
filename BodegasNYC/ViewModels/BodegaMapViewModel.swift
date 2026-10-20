@@ -75,6 +75,12 @@ final class BodegaMapViewModel {
             && !loadedBodegas.contains(where: filter.matches)
     }
 
+    /// The filter the map card's Clear Filters should apply (#57), judged
+    /// against everything loaded: see `BodegaFilter.clearingForMapCard(in:)`.
+    func clearedFilterForMapCard(from filter: BodegaFilter) -> BodegaFilter {
+        filter.clearingForMapCard(in: loadedBodegas)
+    }
+
     private let bodegaService: BodegaService
     private var loadedBodegas: [Bodega] = []
     private var lastRegion: MKCoordinateRegion?
@@ -185,7 +191,9 @@ final class BodegaMapViewModel {
     /// clusters would leave badges counting bodegas the user filtered out.
     ///
     /// The highlighted bodega (R7) skips both steps and goes last, so it is
-    /// always its own pin and draws above its neighbours (design DD3).
+    /// always its own pin. Going last does not put it above a neighbour to
+    /// its south (MapKit stacks by screen position, see `drawOrdered`);
+    /// `BodegaPinView` puts its label above the circle for that (#59).
     private func recluster(region: MKCoordinateRegion) {
         let highlighted = highlightedBodegaID.flatMap { id in loadedBodegas.first { $0.id == id } }
         let candidates = highlighted.map { pinned in loadedBodegas.filter { $0.id != pinned.id } } ?? loadedBodegas
@@ -302,9 +310,15 @@ final class BodegaMapViewModel {
     }
 
     /// `items` with the given bodega ids moved to the end, in their
-    /// existing relative order: MapKit draws later annotations above
-    /// earlier ones, so the selected and highlighted pins sit on top
-    /// (design DD3). Pure, for `MapScreenView`.
+    /// existing relative order. Pure, for `MapScreenView`.
+    ///
+    /// Weaker than its DD3 intent: MapKit stacks annotation views by screen
+    /// position (lower on screen draws in front), not by declaration order,
+    /// so this cannot lift a pin above a neighbour to its south (#59). The
+    /// only effect seen live is at equal screen height, where the later
+    /// annotation (the highlighted pin) drew on top; that test could not
+    /// tell this ordering apart from MapKit adding the new pin last. Kept
+    /// for those ties; removing it is a separate cleanup.
     nonisolated static func drawOrdered(_ items: [MapDisplayItem], frontIDs: Set<Bodega.ID>) -> [MapDisplayItem] {
         guard !frontIDs.isEmpty else { return items }
         func isFront(_ item: MapDisplayItem) -> Bool {

@@ -267,7 +267,7 @@ struct BrowseView: View {
                 isPlacingBodega: $isPlacingBodega,
                 onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
                 onSelectBodega: { path.append($0) },
-                onClearFilters: { filter = filter.clearingForMapCard() },
+                onClearFilters: { filter = mapViewModel.clearedFilterForMapCard(from: filter) },
                 showsAddTip: showsAddTip,
                 addCompletion: addCompletion
             )

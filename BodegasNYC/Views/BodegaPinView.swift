@@ -15,7 +15,9 @@ import SwiftUI
 /// neighbour just south of a dropping or selected pin is drawn over it, and
 /// a label hung below the circle sat under that neighbour's circle. Above
 /// the circle, any annotation drawn in front of this one has its centre at
-/// or below this pin's, so its circle can't reach the label.
+/// or below this pin's, so its circle can't reach the label. The trade-off:
+/// a neighbour just north of a dropping or selected pin sits behind it, so
+/// the label covers that neighbour's circle for as long as it shows.
 struct BodegaPinView: View {
     static let diameter: CGFloat = 28
     nonisolated static let maxLabelCharacters = 18

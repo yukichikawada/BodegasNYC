@@ -133,26 +133,34 @@ struct BodegaFilterTests {
         #expect(!cleared.isActive)
     }
 
-    @Test func clearingForMapCardWithOnlyASearchClearsTheSearch() {
-        // #57: the map has no search field, so a search-only miss must be
-        // clearable from the map card.
-        let filter = BodegaFilter(searchText: "zzz")
-
-        let cleared = filter.clearingForMapCard()
-
-        #expect(cleared == .none)
-        #expect(!cleared.isActive)
+    // #57: the map card's Clear Filters is decided by outcome, so one tap
+    // always brings pins back.
+    private func mapCardFixtures() throws -> [Bodega] {
+        [
+            try makeTestBodega(name: "Plain Deli"),
+            try makeTestBodega(name: "Corner Grocery")
+        ]
     }
 
-    @Test func clearingForMapCardWithAmenitiesKeepsTheSearch() {
-        // DD6 still holds on the map whenever a toggle is on.
+    @Test func clearingForMapCardKeepsTheSearchWhenClearingTogglesRevealsPins() throws {
+        // DD6: the search alone still matches "Plain Deli".
         let filter = BodegaFilter(requiredAmenities: [.hasCat], searchText: "deli")
 
-        let cleared = filter.clearingForMapCard()
+        let cleared = filter.clearingForMapCard(in: try mapCardFixtures())
 
-        #expect(cleared == filter.clearingAmenities())
-        #expect(cleared.requiredAmenities.isEmpty)
-        #expect(cleared.searchText == "deli")
+        #expect(cleared == BodegaFilter(searchText: "deli"))
+    }
+
+    @Test func clearingForMapCardClearsEverythingWhenClearingTogglesRevealsNothing() throws {
+        let filter = BodegaFilter(requiredAmenities: [.hasCat], searchText: "zzz")
+
+        #expect(filter.clearingForMapCard(in: try mapCardFixtures()) == .none)
+    }
+
+    @Test func clearingForMapCardWithOnlyASearchClearsTheSearch() throws {
+        let filter = BodegaFilter(searchText: "zzz")
+
+        #expect(filter.clearingForMapCard(in: try mapCardFixtures()) == .none)
     }
 
     @Test func searchAndAmenitiesMustBothMatch() throws {
