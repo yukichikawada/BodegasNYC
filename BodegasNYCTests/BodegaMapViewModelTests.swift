@@ -370,6 +370,53 @@ struct BodegaMapViewModelTests {
         #expect(pins.first { $0.id == editedID }?.name == "Renamed Deli")
     }
 
+    @Test func bodegaAddedThenUpdatedDuringTheInitialFetchKeepsTheEditAtTheFront() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+        let addedID = UUID()
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        viewModel.bodegaWasAdded(
+            try makeTestBodega(id: addedID, name: "Nueva Bodega", latitude: 40.80, longitude: -73.90)
+        )
+        viewModel.bodegaWasUpdated(
+            try makeTestBodega(id: addedID, name: "Nueva Bodega (edited)", latitude: 40.80, longitude: -73.90)
+        )
+        await viewModel.waitForPendingFetchForTesting()
+
+        let pins = Self.pins(in: viewModel.displayItems)
+        #expect(pins.count == 2)
+        #expect(pins.filter { $0.id == addedID }.map(\.name) == ["Nueva Bodega (edited)"])
+        #expect(Set(pins.map(\.name)) == ["El Sol", "Nueva Bodega (edited)"])
+    }
+
+    /// The first fetch failing after an add: `loadState` settles on
+    /// `.failed`, and the buffered add is cleared, so the next successful
+    /// fetch shows only what it returned rather than re-applying the add.
+    @Test func bodegaWasAddedDuringAFailingInitialFetchSettlesOnFailedAndClearsTheBuffer() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        viewModel.bodegaWasAdded(try makeTestBodega(name: "Nueva Bodega", latitude: 40.80, longitude: -73.90))
+        #expect(viewModel.loadState == .loading)
+        await viewModel.waitForPendingFetchForTesting()
+
+        guard case .failed = viewModel.loadState else {
+            Issue.record("expected .failed, got \(viewModel.loadState)")
+            return
+        }
+
+        viewModel.browseModeDidChange(.nearby, currentRegion: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        #expect(Self.pins(in: viewModel.displayItems).map(\.name) == ["El Sol"])
+    }
+
     @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))

@@ -225,6 +225,36 @@ struct BodegaListViewModelTests {
         #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega (edited)", "El Sol"])
     }
 
+    /// The first fetch failing after an add: `loadState` must settle on
+    /// `.failed` (not stay `.loading`), and the optimistic row stays held.
+    /// The list has no way to refetch once past `.idle`, so the buffer being
+    /// cleared on failure is exercised by the `BodegaMapViewModelTests`
+    /// counterpart, which can trigger a second fetch.
+    @Test func bodegaWasAddedDuringAFailingInitialFetchSettlesOnFailed() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))
+        let viewModel = makeViewModel()
+
+        viewModel.loadInitialIfNeeded()
+        viewModel.bodegaWasAdded(try makeTestBodega(name: "Nueva Bodega"))
+        #expect(viewModel.loadState == .loading)
+        await viewModel.waitForPendingFetchForTesting()
+
+        guard case .failed = viewModel.loadState else {
+            Issue.record("expected .failed, got \(viewModel.loadState)")
+            return
+        }
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega"])
+        // Still a no-op: `.failed` is past `.idle`, so nothing restarts a
+        // fetch that could leave the state at `.loading`.
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+        guard case .failed = viewModel.loadState else {
+            Issue.record("expected .failed, got \(viewModel.loadState)")
+            return
+        }
+    }
+
     @Test func bodegaWasUpdatedIgnoresABodegaThatIsNotLoaded() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
