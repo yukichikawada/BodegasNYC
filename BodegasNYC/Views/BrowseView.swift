@@ -84,6 +84,8 @@ struct BrowseView: View {
     @State private var addTipState = AddTipState()
     /// Everything after a successful add (#25); camera bound on appear.
     @State var addCompletion: AddCompletionCoordinator
+    @Namespace var detailTransition // pin → detail zoom source (#23)
+    @State var pinMotion = PinMotionState()
 
     init(
         bodegaService: BodegaService,
@@ -170,6 +172,7 @@ struct BrowseView: View {
                         mapViewModel.bodegaWasUpdated(updatedBodega)
                         listViewModel.bodegaWasUpdated(updatedBodega)
                     }
+                    .pinToDetailTransition(sourceID: bodega.id, in: detailTransition, fromMap: activeTab == .map)
                     .task { await addTipState.donateDidOpenBodegaDetail() }
                 }
                 .sheet(isPresented: $showingSignIn) {

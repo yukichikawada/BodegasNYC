@@ -334,7 +334,13 @@ the card; the card supplies the material.
     the card enters through the bottom slot (move with opacity, 0.25s ease-in-out); the tip
     appears at +0.3s. Leaving: tip dismissed, card leaves through the slot, crosshair fades 0.15s.
     From the List tab the page leaves first (its own duration), then placement starts.
-  - Pin to detail: pin hold 0.25s, system zoom, release measured in PR 2.
+  - Pin to detail (measured on the iPhone 17 Pro simulator, iOS 26): the tapped pin takes its
+    selected look (0.15s `easeOut`) and rests 0.10s: hold 0.25s, then the detail is pushed with
+    the system zoom from the pin (about 0.5s); a list row keeps the standard push. Back or a
+    completed swipe shrinks the detail into the pin (zoom pop about 0.3s, median of three
+    back-button recordings); the pin releases 0.1s after the pop, `releaseSeconds = 0.4` (pop +
+    0.1s, rounded to 0.05s). The detail's spinner waits 0.5s, so the page grows out of the pin
+    with its content. Under Reduce Motion the system zoom becomes a crossfade.
   - No haptic on pin tap; the first add keeps the app's one haptic.
 
 ## Follow-ups

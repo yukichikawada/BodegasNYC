@@ -51,6 +51,10 @@ struct BodegaPinView: View {
 
     private var showsLabel: Bool { isSelected || phase != .atRest }
 
+    /// Reduce Motion (#23 design review 7A): the selected look keeps its
+    /// stroke, shadow and label but doesn't grow.
+    private var selectedScale: CGFloat { isSelected && !reduceMotion ? 1.15 : 1 }
+
     /// Reduce Motion (DD14): the pin fades in where it lands, no fall and
     /// no squash.
     private var dropOffset: CGFloat { isAtRest || reduceMotion ? 0 : -48 }
@@ -58,7 +62,7 @@ struct BodegaPinView: View {
 
     var body: some View {
         circle
-            .scaleEffect(isSelected ? 1.15 : 1)
+            .scaleEffect(selectedScale)
             .overlay(alignment: .bottom) {
                 if showsLabel {
                     nameLabel
@@ -81,7 +85,7 @@ struct BodegaPinView: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(bodega.name)
             .accessibilityValue(bodega.hasCat ? AppCopy.pinHasCatValue.copy.text : "")
-            .accessibilityAddTraits(.isButton)
+            .accessibilityAddTraits(isSelected ? [.isButton, .isSelected] : .isButton)
     }
 
     private var circle: some View {
