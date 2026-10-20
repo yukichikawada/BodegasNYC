@@ -107,3 +107,10 @@ this instead of Sign in with Apple. `Local.xcconfig` is gitignored and pulled in
 or print the credentials. The whole path is `#if DEBUG` and absent from Release builds.
 The password must not contain `//` or `$`: xcconfig treats `//` as the start of a comment and
 `$` as a variable expansion, so the value would be silently truncated or rewritten.
+
+## Design System
+
+Read `DESIGN.md` before visual or UI work: it defines the fonts, colors, spacing, and aesthetic
+direction. Ask the user before departing from it. When reviewing or QA-ing UI, flag code that
+doesn't match `DESIGN.md`. It supersedes the DD1 to DD16 comments on #21/#22/#24/#25 where they
+differ (D5 amends DD1's title weight and width).

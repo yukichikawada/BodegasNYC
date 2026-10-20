@@ -14,18 +14,8 @@
 **Priority:** P3
 **Depends on:** None
 
-## Design
-
-### Create DESIGN.md with /design-consultation
-
-**What:** Run `/design-consultation` and move the interim visual contract (onboarding page contract, pin contract, `MapBottomCard` grid, `pin`/`catPin` colors, the one slot transition) out of the spec comments on #21/#22/#24/#25 into a DESIGN.md.
-
-**Why:** Future features and design reviews calibrate against one file instead of re-deciding card radius, tints and type per feature.
-
-**Context:** The 2026-10-19 design review of the voice and first-run spec found no DESIGN.md and wrote tokens into the spec as DD1, DD3 and DD13. PRD §8 defers the full visual pass; the trigger is the first UI work after the #24 → #21 → #22 → #25 stack merges. Start from the DD13 block in the design-review comment on #24.
-
-**Effort:** M
-**Priority:** P3
-**Depends on:** The #24/#21/#22/#25 stack merged
-
 ## Completed
+
+### Create DESIGN.md with /design-consultation (done 2026-10-20)
+
+`DESIGN.md` written from the DD1-DD16 contract plus D4-D6 from the consultation; code follow-up is #66, ideas #67/#68.
