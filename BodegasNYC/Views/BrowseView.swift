@@ -320,7 +320,7 @@ struct BrowseView: View {
     private func presentAddBodegaSheet(coordinate: CLLocationCoordinate2D) {
         isPlacingBodega = false
         addBodegaViewModel = AddBodegaViewModel(
-            coordinate: Coordinate(latitude: coordinate.latitude, longitude: coordinate.longitude),
+            coordinate: Coordinate(coordinate),
             bodegaService: bodegaService,
             sessionStore: sessionStore
         )

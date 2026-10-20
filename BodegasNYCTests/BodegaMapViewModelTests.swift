@@ -729,8 +729,9 @@ struct BodegaMapViewModelTests {
     }
 
     /// R3: the ids and kinds `displayItems` yields for a fixed fixture and
-    /// region, snapshotted when pins moved from `Marker` to `BodegaPinView`.
-    /// The migration changed only rendering; this list must not move.
+    /// region, snapshotted when pins moved from `Marker` to `BodegaPinView`
+    /// and updated once for the F1 overlap merge (adjacent-cell A and B now
+    /// cluster). Rendering changes must not move this list.
     @Test func displayItemsForAFixedFixtureAreUnchangedByThePinViewMigration() async throws {
         MockURLProtocol.reset()
         let ids = (1...5).map { UUID(uuidString: "00000000-0000-0000-0000-00000000000\($0)")! }
@@ -756,11 +757,12 @@ struct BodegaMapViewModelTests {
     }
 
     /// Grid keys at span 0.05 / 12: D and E share cell (9771, -17763); A
-    /// (9774), B (9775) and C (9777) each have their own. Sorted by key.
+    /// (9774, -17760) and B (9775, -17760) sit in adjacent cells about 14 m
+    /// apart, so the overlap merge (F1: items in adjacent cells must not
+    /// overlap on screen) joins them under A's key; C (9777) stands alone.
     private static let fixtureSnapshot = [
         "cluster:cluster-9771_-17763:[\"00000000-0000-0000-0000-000000000004\", \"00000000-0000-0000-0000-000000000005\"]",
-        "pin:00000000-0000-0000-0000-000000000001",
-        "pin:00000000-0000-0000-0000-000000000002",
+        "cluster:cluster-9774_-17760:[\"00000000-0000-0000-0000-000000000001\", \"00000000-0000-0000-0000-000000000002\"]",
         "pin:00000000-0000-0000-0000-000000000003"
     ]
 

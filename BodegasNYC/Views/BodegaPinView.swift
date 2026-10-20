@@ -120,9 +120,14 @@ struct ClusterBadge: View {
             .foregroundStyle(.white)
             .padding(6)
             .frame(minWidth: BodegaPinView.diameter, minHeight: BodegaPinView.diameter)
-            .background(Color.secondary, in: Circle())
+            // Opaque, so the white count keeps its contrast over light tiles.
+            .background(Color(.systemGray), in: Circle())
             .overlay(Circle().stroke(.white, lineWidth: 2))
             .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            // Same 44pt target as a pin, so a neighbouring pin can't steal
+            // the tap.
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
     }
 }

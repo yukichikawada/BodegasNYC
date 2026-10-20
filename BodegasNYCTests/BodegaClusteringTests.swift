@@ -95,4 +95,51 @@ struct BodegaClusteringTests {
 
         #expect(Set(forward) == Set(reversed))
     }
+
+    // MARK: Overlap merge (#25 QA F1). protects: no rendered item sits on
+    // top of another, so a tap on a badge can't land on a pin hidden under
+    // it. fails_when: items in adjacent cells within 1.5 cells stay
+    // separate, or items further apart get merged. no_claim: MapKit hit
+    // testing itself (checked live on the simulator).
+
+    @Test func itemsInAdjacentCellsThatWouldOverlapAreMerged() throws {
+        // 0.0002° apart but straddling the 40.70 cell boundary.
+        let south = try makeTestBodega(latitude: 40.6999, longitude: -73.995)
+        let north = try makeTestBodega(latitude: 40.7001, longitude: -73.995)
+
+        let items = BodegaMapViewModel.cluster([south, north], visibleRegion: Self.wideRegion)
+
+        #expect(items.count == 1)
+        guard case .cluster(let cluster) = items.first else {
+            Issue.record("expected one cluster, got \(items)")
+            return
+        }
+        #expect(Set(cluster.bodegaIDs) == [south.id, north.id])
+        // The merged group keeps the smaller grid key.
+        #expect(cluster.id == "cluster-4069_-7400")
+    }
+
+    @Test func itemsTwoCellsApartStaySeparate() throws {
+        let first = try makeTestBodega(latitude: 40.701, longitude: -73.995)
+        let second = try makeTestBodega(latitude: 40.721, longitude: -73.995)
+
+        let items = BodegaMapViewModel.cluster([first, second], visibleRegion: Self.wideRegion)
+
+        #expect(Set(items) == [.pin(first), .pin(second)])
+    }
+
+    @Test func aPinBesideAClusterIsAbsorbedIntoIt() throws {
+        let clusterA = try makeTestBodega(latitude: 40.705, longitude: -73.995)
+        let clusterB = try makeTestBodega(latitude: 40.706, longitude: -73.995)
+        let neighbour = try makeTestBodega(latitude: 40.7105, longitude: -73.995)
+
+        let items = BodegaMapViewModel.cluster([clusterA, clusterB, neighbour], visibleRegion: Self.wideRegion)
+
+        #expect(items.count == 1)
+        if case .cluster(let cluster) = items.first {
+            #expect(cluster.bodegaIDs.count == 3)
+        } else {
+            Issue.record("expected one cluster, got \(items)")
+        }
+    }
 }

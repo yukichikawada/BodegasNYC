@@ -14,6 +14,8 @@ struct FirstAddCard: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ScaledMetric(relativeTo: .title2) private var symbolColumnWidth: CGFloat = 36
+    /// Scales like the column, so the cat tracks it at large sizes.
+    @ScaledMetric(relativeTo: .title2) private var catSize: CGFloat = 36
     @State private var catHasEntered = false
     @State private var catBounces = 0
     private static let columnSpacing: CGFloat = 12
@@ -79,7 +81,7 @@ struct FirstAddCard: View {
     private var symbol: some View {
         if hasCat {
             Image(systemName: "cat")
-                .font(.system(size: 36))
+                .font(.system(size: catSize))
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(Color.catPin)
                 .symbolEffect(.bounce, value: catBounces)

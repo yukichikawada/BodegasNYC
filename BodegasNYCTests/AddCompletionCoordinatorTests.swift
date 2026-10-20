@@ -9,11 +9,13 @@
 //
 //  protects: insert happens before the camera moves; the pin drops only
 //  after the camera settles on it (or the 0.65 s fallback), with the haptic;
-//  the card appears only on the first add, 0.6 s after the drop; a second
-//  add shows no card; cancelling after the insert skips the card and haptic
-//  and clears only its own id; a second add is never cleared by the first
-//  add's timers; the announcement is posted on every add; auto-dismiss is
-//  off under VoiceOver.
+//  the card appears only on the first add, 0.6 s after the drop; the first
+//  add's highlight holds until its card goes, later adds' clear at 1.5 s; a
+//  second add shows no card; cancelling after the insert skips the card,
+//  haptic and announcement and clears only its own id; a second add is
+//  never cleared by the first add's timers; the announcement is posted with
+//  every drop; auto-dismiss is off under VoiceOver; a settle a little off
+//  the pin (a bottom card shifting the view center) still counts.
 //  fails_when: any of those orderings or guards breaks.
 //  no_claim: the spring, the camera animation, or that the haptic is felt
 //  (the simulator can't; `.sensoryFeedback` is bound to `hapticTrigger` in
@@ -163,7 +165,6 @@ final class AddCompletionCoordinatorTests {
             .insert("Deli"),
             .highlight("Deli"),
             .firstAdd,
-            .announce("Deli is on the map."),
             .camera("40.73,-73.99")
         ])
         #expect(coordinator.dropState == .pending(deli.id))
@@ -220,11 +221,58 @@ final class AddCompletionCoordinatorTests {
         #expect(coordinator.firstAddCard?.id == deli.id)
         #expect(coordinator.firstAddCard?.hasCat == true)
 
-        // 1.5 s after the drop: drop state and highlight clear, card stays.
+        // 1.5 s after the drop: the drop state clears, the card stays, and
+        // so does the highlight under it (F4).
         await advance(.milliseconds(900))
         #expect(coordinator.dropState == .none)
-        #expect(events.last == .highlight(nil))
+        #expect(!events.contains(.highlight(nil)))
         #expect(coordinator.firstAddCard?.id == deli.id)
+
+        coordinator.dismissFirstAddCard()
+        #expect(events.last == .highlight(nil))
+    }
+
+    @Test func theFirstAddsHighlightHoldsUntilTheCardAutoDismisses() async throws {
+        let coordinator = makeCoordinator()
+        let deli = try bodega("Deli")
+        coordinator.bodegaWasSubmitted(deli)
+        coordinator.cameraDidSettle(center: deli.coordinate)
+        await advance(.milliseconds(600))
+        await advance(.milliseconds(900))
+        #expect(!events.contains(.highlight(nil)))
+
+        await advance(.milliseconds(7350))
+
+        #expect(coordinator.firstAddCard == nil)
+        #expect(events.last == .highlight(nil))
+    }
+
+    @Test func aLaterAddsHighlightClearsWithTheDrop() async throws {
+        FirstRunState(userDefaults: defaults).markFirstBodegaAdded()
+        let coordinator = makeCoordinator()
+        let deli = try bodega("Deli")
+        coordinator.bodegaWasSubmitted(deli)
+        coordinator.cameraDidSettle(center: deli.coordinate)
+
+        await advance(.milliseconds(1499))
+        #expect(!events.contains(.highlight(nil)))
+        await advance(.milliseconds(1))
+
+        #expect(coordinator.dropState == .none)
+        #expect(events.last == .highlight(nil))
+    }
+
+    @Test func aSettleSlightlyOffThePinStillStartsTheDrop() throws {
+        let coordinator = makeCoordinator()
+        let deli = try bodega("Deli")
+        coordinator.bodegaWasSubmitted(deli)
+
+        // A bottom card shifts the reported center by a fraction of the span.
+        coordinator.cameraDidSettle(
+            center: Coordinate(latitude: deli.coordinate.latitude - 0.0008, longitude: deli.coordinate.longitude)
+        )
+
+        #expect(coordinator.dropState == .dropping(deli.id))
     }
 
     @Test func aSecondAddShowsNoCard() async throws {
@@ -312,6 +360,7 @@ final class AddCompletionCoordinatorTests {
         await drain()
         #expect(coordinator.hapticTrigger == 0)
         #expect(coordinator.firstAddCard == nil)
+        #expect(!events.contains { if case .announce = $0 { true } else { false } })
         // The first add was still recorded; it is not offered again.
         #expect(FirstRunState(userDefaults: defaults).hasAddedFirstBodega)
     }
@@ -357,10 +406,16 @@ final class AddCompletionCoordinatorTests {
         #expect(coordinator.dropState == .none)
     }
 
-    @Test func theAnnouncementIsPostedOnEveryAdd() throws {
+    @Test func theAnnouncementIsPostedWithEveryDrop() throws {
         let coordinator = makeCoordinator()
-        coordinator.bodegaWasSubmitted(try bodega("Deli"))
-        coordinator.bodegaWasSubmitted(try bodega("Corner Store", latitude: 40.75))
+        let deli = try bodega("Deli")
+        coordinator.bodegaWasSubmitted(deli)
+        // Not at submit: the sheet is still closing then (F5).
+        #expect(!events.contains { if case .announce = $0 { true } else { false } })
+        coordinator.cameraDidSettle(center: deli.coordinate)
+        let corner = try bodega("Corner Store", latitude: 40.75)
+        coordinator.bodegaWasSubmitted(corner)
+        coordinator.cameraDidSettle(center: corner.coordinate)
 
         let announcements = events.compactMap { event -> String? in
             if case .announce(let text) = event { return text }

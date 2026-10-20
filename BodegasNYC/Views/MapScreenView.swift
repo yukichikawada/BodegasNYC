@@ -24,7 +24,10 @@ struct MapScreenView: View {
 
     private let viewModel: BodegaMapViewModel
     @Binding private var cameraPosition: MapCameraPosition
-    @State private var selectedBodegaID: Bodega.ID?
+    /// The tapped pin or cluster. Both are tagged so MapKit's one tap
+    /// recognizer decides every tap; a badge tap gesture used to zoom first,
+    /// then MapKit's delayed selection opened a member now under the finger.
+    @State private var selectedItemID: MapDisplayItem.ID?
     @State private var lastVisibleRegion: MKCoordinateRegion?
     @State private var showingClearConfirmation = false
     private let locationPermissionClient: LocationPermissionClient
@@ -88,14 +91,12 @@ struct MapScreenView: View {
 
     /// Selected and highlighted pins drawn last, above neighbours (DD3).
     private var orderedDisplayItems: [MapDisplayItem] {
-        BodegaMapViewModel.drawOrdered(
-            viewModel.displayItems,
-            frontIDs: Set([selectedBodegaID, viewModel.highlightedBodegaID].compactMap { $0 })
-        )
+        let front = [selectedItemID.flatMap(UUID.init(uuidString:)), viewModel.highlightedBodegaID]
+        return BodegaMapViewModel.drawOrdered(viewModel.displayItems, frontIDs: Set(front.compactMap { $0 }))
     }
 
     var body: some View {
-        Map(position: $cameraPosition, selection: $selectedBodegaID) {
+        Map(position: $cameraPosition, selection: $selectedItemID) {
             ForEach(orderedDisplayItems) { item in
                 switch item {
                 case .pin(let bodega):
@@ -103,11 +104,11 @@ struct MapScreenView: View {
                     Annotation(bodega.name, coordinate: bodega.coordinate.clLocationCoordinate, anchor: .center) {
                         BodegaPinView(
                             bodega: bodega,
-                            isSelected: selectedBodegaID == bodega.id,
+                            isSelected: selectedItemID == item.id,
                             phase: addCompletion?.pinPhase(for: bodega.id) ?? .atRest
                         )
                     }
-                    .tag(bodega.id)
+                    .tag(item.id)
                     .annotationTitles(.hidden)
                 case .cluster(let cluster):
                     Annotation(
@@ -115,8 +116,9 @@ struct MapScreenView: View {
                         coordinate: cluster.coordinate.clLocationCoordinate
                     ) {
                         ClusterBadge(count: cluster.bodegaIDs.count)
-                            .onTapGesture { zoom(into: cluster) }
                     }
+                    .tag(item.id)
+                    .annotationTitles(.hidden)
                 }
             }
             if let streetsWalkedViewModel, streetsWalkedViewModel.isTrackingEnabled {
@@ -135,14 +137,18 @@ struct MapScreenView: View {
             viewModel.regionDidSettle(context.region)
             addCompletion?.cameraDidSettle(center: Coordinate(context.region.center))
         }
-        .onChange(of: selectedBodegaID) { _, newValue in
+        .onChange(of: selectedItemID) { _, newValue in
+            guard let newValue else { return }
+            // Clears MapKit's selection either way, so returning to this
+            // screen doesn't show a stale one and the same item can be
+            // tapped again.
+            selectedItemID = nil
             guard !isPlacingBodega else { return }
-            guard let newValue, let bodega = bodega(withID: newValue) else { return }
-            onSelectBodega(bodega)
-            // Clears MapKit's selected-marker highlight after navigating
-            // away, so returning to this screen doesn't show a stale
-            // selection.
-            selectedBodegaID = nil
+            switch viewModel.displayItems.first(where: { $0.id == newValue }) {
+            case .pin(let bodega): onSelectBodega(bodega)
+            case .cluster(let cluster): zoom(into: cluster)
+            case nil: break
+            }
         }
         .overlay(alignment: .top) {
             if let error = streetsWalkedViewModel?.lastTrackingError {
@@ -186,7 +192,7 @@ struct MapScreenView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
-            .animation(.easeInOut(duration: 0.25), value: bottomCardContent)
+            .animation(.easeInOut(duration: AddCompletionCoordinator.cardTransitionSeconds), value: bottomCardContent)
         }
         .task {
             viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
@@ -238,19 +244,6 @@ struct MapScreenView: View {
         case .emptyState(.noStreets):
             break
         }
-    }
-
-    /// Only `.pin` items carry a full `Bodega` — `.cluster` items hold only
-    /// `bodegaIDs`, with no back-reference, so a selected ID that resolves
-    /// to a cluster (which shouldn't happen, since clusters are never
-    /// tagged/added to `selection`) simply finds nothing here.
-    private func bodega(withID id: Bodega.ID) -> Bodega? {
-        for item in viewModel.displayItems {
-            if case .pin(let bodega) = item, bodega.id == id {
-                return bodega
-            }
-        }
-        return nil
     }
 
     /// Standard map UX for a cluster tap: zoom in rather than navigate,

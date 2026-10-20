@@ -9,14 +9,19 @@ import UIKit
 /// Timeline for one add (`bodegaWasSubmitted`):
 /// 1. Synchronously: insert into both view models (R6), highlight the pin
 ///    (R7), record the first add (the app's single `markFirstBodegaAdded()`
-///    call site), post the announcement, mark the pin `.pending` (rendered
-///    invisible) and move the camera.
+///    call site), mark the pin `.pending` (rendered invisible) and move the
+///    camera.
 /// 2. When the camera settles on the pin (`cameraDidSettle`), or after a
-///    0.65 s fallback: `.dropping` (the pin's spring) and the haptic.
+///    0.65 s fallback: `.dropping` (the pin's spring), the haptic, and the
+///    VoiceOver announcement (DD15), posted here rather than at submit so
+///    the add sheet's dismissal can't interrupt it.
 /// 3. First add only, 0.6 s after the drop (the 0.5 s spring has landed):
 ///    the first-add card. It auto-dismisses 8 s after its 0.25 s entrance
 ///    transition, unless VoiceOver is running.
-/// 4. 1.5 s after the drop: the drop state and highlight are cleared.
+/// 4. 1.5 s after the drop: the drop state clears. The highlight clears
+///    with it, except on the first add, where it holds until the card is
+///    dismissed so the pin it celebrates can't be clustered or filtered
+///    away underneath it.
 ///
 /// Each add owns its bodega id: a later step, or `cancel()`, only clears the
 /// drop state and highlight while they still belong to that id, so an older
@@ -51,12 +56,18 @@ final class AddCompletionCoordinator {
     /// clock starts when the card has finished appearing (DD11); it is
     /// counted from here rather than from a view callback, so the whole
     /// timeline stays on one injected clock.
-    static let cardTransition: Duration = .milliseconds(250)
+    static let cardTransitionSeconds: TimeInterval = 0.25
+    static let cardTransition: Duration = .seconds(cardTransitionSeconds)
     static let cardAutoDismiss: Duration = .seconds(8)
+    /// The span the camera flies to for a new pin (street zoom).
+    static let cameraSpan = 0.004
     /// How far the settled camera center may be from the new pin and still
-    /// count as "settled on it" (about 50 m). A settle from an earlier,
-    /// unrelated camera change is ignored; the fallback covers it.
-    static let settleTolerance = 0.0005
+    /// count as "settled on it": a quarter of the target span. The reported
+    /// center is the full view's, which a bottom card in the safe-area slot
+    /// shifts off the pin, so this is screen-relative rather than tight. A
+    /// settle from an earlier, unrelated camera change is still rejected;
+    /// the fallback covers it.
+    static let settleTolerance = cameraSpan / 4
 
     private(set) var dropState: DropState = .none
     private(set) var firstAddCard: Bodega?
@@ -80,6 +91,9 @@ final class AddCompletionCoordinator {
     @ObservationIgnored private var currentIsFirstAdd = false
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var cardDismissTask: Task<Void, Never>?
+    /// The bodega this coordinator last highlighted, so it only ever clears
+    /// its own highlight.
+    @ObservationIgnored private var highlightedID: Bodega.ID?
 
     init(
         firstRunState: FirstRunState,
@@ -87,7 +101,7 @@ final class AddCompletionCoordinator {
         moveCamera: @escaping (Coordinate) -> Void,
         setHighlighted: @escaping (Bodega.ID?) -> Void,
         isVoiceOverRunning: @escaping () -> Bool = { UIAccessibility.isVoiceOverRunning },
-        announce: @escaping (String) -> Void = { AccessibilityNotification.Announcement($0).post() },
+        announce: @escaping (String) -> Void = { AddCompletionCoordinator.postHighPriorityAnnouncement($0) },
         onFirstAdd: @escaping () -> Void = {},
         clock: any Clock<Duration> = ContinuousClock()
     ) {
@@ -117,13 +131,13 @@ final class AddCompletionCoordinator {
         cancel()
 
         insert(bodega)
+        highlightedID = bodega.id
         setHighlighted(bodega.id)
         let isFirstAdd = firstRunState.markFirstBodegaAdded()
         if isFirstAdd {
             // The first add ends the tutorial (#22).
             onFirstAdd()
         }
-        announce(AppCopy.addedAnnouncement(name: bodega.name).text)
 
         current = bodega
         currentIsFirstAdd = isFirstAdd
@@ -165,6 +179,7 @@ final class AddCompletionCoordinator {
         task = nil
         if let current {
             clearDrop(ifOwnedBy: current.id)
+            clearHighlight(ifOwnedBy: current.id)
         }
         current = nil
         currentIsFirstAdd = false
@@ -172,10 +187,22 @@ final class AddCompletionCoordinator {
     }
 
     /// Done on the card, or its auto-dismiss.
+    /// Also releases the first add's highlight, held while the card was up.
     func dismissFirstAddCard() {
         cardDismissTask?.cancel()
         cardDismissTask = nil
+        if let card = firstAddCard, current?.id != card.id {
+            clearHighlight(ifOwnedBy: card.id)
+        }
         firstAddCard = nil
+    }
+
+    /// DD15's announcement at high priority, so other speech doesn't cut it
+    /// off.
+    static func postHighPriorityAnnouncement(_ text: String) {
+        var message = AttributedString(text)
+        message.accessibilitySpeechAnnouncementPriority = .high
+        AccessibilityNotification.Announcement(message).post()
     }
 
     // MARK: Steps
@@ -185,6 +212,7 @@ final class AddCompletionCoordinator {
         task?.cancel()
         dropState = .dropping(id)
         hapticTrigger += 1
+        announce(AppCopy.addedAnnouncement(name: bodega.name).text)
 
         let clock = clock
         let showsCard = currentIsFirstAdd
@@ -225,6 +253,11 @@ final class AddCompletionCoordinator {
     private func finish(_ id: Bodega.ID) {
         guard current?.id == id else { return }
         clearDrop(ifOwnedBy: id)
+        // The first add keeps its highlight while its card is up (see
+        // `dismissFirstAddCard`).
+        if firstAddCard?.id != id {
+            clearHighlight(ifOwnedBy: id)
+        }
         current = nil
         currentIsFirstAdd = false
         task = nil
@@ -233,7 +266,12 @@ final class AddCompletionCoordinator {
     private func clearDrop(ifOwnedBy id: Bodega.ID) {
         if dropState.bodegaID == id {
             dropState = .none
-            setHighlighted(nil)
         }
+    }
+
+    private func clearHighlight(ifOwnedBy id: Bodega.ID) {
+        guard highlightedID == id else { return }
+        highlightedID = nil
+        setHighlighted(nil)
     }
 }

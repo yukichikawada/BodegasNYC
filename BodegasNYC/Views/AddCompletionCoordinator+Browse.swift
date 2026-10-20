@@ -34,17 +34,11 @@ extension AddCompletionCoordinator {
                 cameraPosition.wrappedValue = .region(
                     MKCoordinateRegion(
                         center: coordinate.clLocationCoordinate,
-                        span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
+                        span: MKCoordinateSpan(latitudeDelta: cameraSpan, longitudeDelta: cameraSpan)
                     )
                 )
             }
         }
-    }
-}
-
-extension Coordinate {
-    init(_ coordinate: CLLocationCoordinate2D) {
-        self.init(latitude: coordinate.latitude, longitude: coordinate.longitude)
     }
 }
 
