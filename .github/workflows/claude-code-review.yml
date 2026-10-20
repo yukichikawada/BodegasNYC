@@ -16,6 +16,8 @@
 # that the PR carries a comment from the Claude app; if not, the review runs once more, and
 # if it is still missing the job fails, so a green check always means a review was posted.
 # PRs that change this workflow file are exempt: the action refuses to run on them by design.
+# On "opened" events the job first waits 90s: reviews started within about a minute of the PR
+# being opened reliably ended without a comment, and the same job re-run later worked.
 name: Claude Code Review
 on:
   pull_request:
@@ -32,6 +34,12 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
+      - name: Let GitHub finish preparing a just-opened PR
+        if: github.event.action == 'opened'
+        # Measured on #54, #55 and #63: reviews started within ~70s of the PR being opened
+        # ended after 2-4 turns with no comment, while the same job re-run minutes later
+        # reviewed normally. Waiting before the first attempt avoids burning the retry.
+        run: sleep 90
       - name: Review
         uses: anthropics/claude-code-action@v1
         with:
