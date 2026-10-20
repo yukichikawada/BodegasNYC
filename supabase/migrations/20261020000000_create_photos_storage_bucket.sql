@@ -19,12 +19,17 @@
 --   - delete: only the object's owner.
 --   - no update policy (objects are immutable; nothing upserts).
 --
--- Written to be re-runnable (on conflict / drop policy if exists) because
--- it is also applied to the hosted project by hand.
+-- Written to be re-runnable (upsert on the bucket / drop policy if exists)
+-- because it is also applied to the hosted project by hand. The bucket
+-- insert upserts its settings, so a hand-created "photos" bucket with
+-- different public / size / mime settings is corrected rather than kept.
 
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('photos', 'photos', true, 5242880, array['image/jpeg'])
-on conflict (id) do nothing;
+on conflict (id) do update set
+    public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists "photos_objects_select" on storage.objects;
 create policy "photos_objects_select" on storage.objects
