@@ -213,8 +213,11 @@ struct BrowseView: View {
 
     /// Filled icon plus a count badge whenever any filter (including a
     /// search typed on the List tab) is active — the only on-screen signal
-    /// on the Map tab that pins are being hidden. Hand-drawn overlay rather
-    /// than `.badge`, which toolbar buttons don't render.
+    /// on the Map tab that pins are being hidden. Uses the system `.badge`,
+    /// which iOS 26 draws on toolbar items (a count of 0 hides it). A
+    /// hand-drawn overlay doesn't survive the iOS 26 toolbar: it renders
+    /// only the label's icon, dropping the overlay and leaking its text
+    /// into the button's accessibility label (#43).
     private var filterButton: some View {
         Button {
             showingFilters = true
@@ -225,20 +228,8 @@ struct BrowseView: View {
                     ? "line.3.horizontal.decrease.circle.fill"
                     : "line.3.horizontal.decrease.circle"
             )
-            .overlay(alignment: .topTrailing) {
-                if filter.isActive {
-                    Text("\(filter.activeCount)")
-                        .font(.caption2.bold())
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 4)
-                        .frame(minWidth: 16, minHeight: 16)
-                        .background(.red, in: Capsule())
-                        .offset(x: 8, y: -6)
-                        .accessibilityHidden(true)
-                }
-            }
         }
+        .badge(filter.activeCount)
         .accessibilityValue(filter.isActive ? "\(filter.activeCount) active" : "None active")
     }
 
