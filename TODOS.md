@@ -14,6 +14,18 @@
 **Priority:** P3
 **Depends on:** None
 
+### Check the zoom swipe-back on a physical iPhone
+
+**What:** After PR 2 is on `main`, run pin → detail → swipe-back five times on a device and confirm the pin stays visible and aligned.
+
+**Why:** Apple forum thread 807715 reports the source view vanishing only on device, which simulator QA cannot see.
+
+**Context:** #23 T1, `BrowseMotion.PinToDetail`.
+
+**Effort:** S
+**Priority:** P2
+**Depends on:** PR 2 merged
+
 ## Completed
 
 ### Create DESIGN.md with /design-consultation (done 2026-10-20)

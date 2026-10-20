@@ -28,6 +28,9 @@ struct BodegaDetailView: View {
     @State private var flagSubmittedPendingConfirmation = false
     @State private var showingFlagConfirmation = false
     @State private var editBodegaViewModel: AddBodegaViewModel?
+    /// Set once the load has run `spinnerDelaySeconds`; see the overlay.
+    @State private var showsSpinner = false
+    private static let spinnerDelaySeconds: TimeInterval = 0.5
     private let bodegaService: BodegaService
     private let reviewService: ReviewService
     private let photoService: PhotoService
@@ -120,8 +123,14 @@ struct BodegaDetailView: View {
             }
         }
         .task { viewModel.loadIfNeeded() }
+        // Only a load still running after 0.5s shows the spinner, so the
+        // page zooms out of its pin showing its content (#23 design 6A).
+        .task {
+            guard (try? await Task.sleep(for: .seconds(Self.spinnerDelaySeconds))) != nil else { return }
+            showsSpinner = true
+        }
         .overlay {
-            if viewModel.loadState == .loading {
+            if showsSpinner, viewModel.loadState == .loading {
                 ProgressView()
             }
         }

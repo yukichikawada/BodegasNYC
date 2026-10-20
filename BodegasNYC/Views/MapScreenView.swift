@@ -43,6 +43,7 @@ struct MapScreenView: View {
     @State private var placementCardHeight: CGFloat = 0
     @State private var crosshairPoint: CGPoint?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(PinMotionState.self) private var pinMotion // held pin (#23 T1)
     private let locationPermissionClient: LocationPermissionClient
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
     @Binding private var isPlacingBodega: Bool
@@ -112,11 +113,13 @@ struct MapScreenView: View {
         )
     }
 
-    /// Selected and highlighted pins declared last. MapKit stacks by screen
+    /// Selected, held and highlighted pins declared last. MapKit stacks by screen
     /// position, so this only settles ties at equal height (see
     /// `BodegaMapViewModel.drawOrdered`, #59).
     private var orderedDisplayItems: [MapDisplayItem] {
-        let front = [selectedItemID.flatMap(UUID.init(uuidString:)), viewModel.highlightedBodegaID]
+        let front = [
+            selectedItemID.flatMap(UUID.init(uuidString:)), pinMotion.phase.bodega?.id, viewModel.highlightedBodegaID
+        ]
         return BodegaMapViewModel.drawOrdered(viewModel.displayItems, frontIDs: Set(front.compactMap { $0 }))
     }
 
@@ -125,6 +128,7 @@ struct MapScreenView: View {
             // Back to front (spec layer order): map, bottom slot, crosshair
             // (never covered by the card), tracking-error banner.
             map
+                .overlay { PinTransitionAnchor(proxy: proxy) }
                 // An overlay, not a safe-area inset, so the map doesn't shift
                 // when a card or the placement card comes or goes (#58, #23).
                 // Lifted clear of the Apple Maps logo and Legal link, which
@@ -193,9 +197,9 @@ struct MapScreenView: View {
                 case .pin(let bodega):
                     // One pin view for all (D10); the tag keeps tap-to-detail.
                     Annotation(bodega.name, coordinate: bodega.coordinate.clLocationCoordinate, anchor: .center) {
-                        BodegaPinView(
+                        HeldPinView(
                             bodega: bodega,
-                            isSelected: selectedItemID == item.id,
+                            motion: pinMotion,
                             phase: addCompletion?.pinPhase(for: bodega.id) ?? .atRest
                         )
                     }
@@ -212,6 +216,7 @@ struct MapScreenView: View {
                     .annotationTitles(.hidden)
                 }
             }
+            pinMotion.standInAnnotation(among: viewModel.displayItems)
             if let streetsWalkedViewModel, streetsWalkedViewModel.isTrackingEnabled {
                 ForEach(Array(streetsWalkedViewModel.polylines.enumerated()), id: \.offset) { _, path in
                     MapPolyline(coordinates: path.map(\.clLocationCoordinate))
@@ -240,15 +245,12 @@ struct MapScreenView: View {
         }
         .onChange(of: selectedItemID) { _, newValue in
             guard let newValue else { return }
-            // Clears MapKit's selection either way, so returning to this
-            // screen doesn't show a stale one and the same item can be
-            // tapped again.
+            // Cleared at once, so every later tap (the same pin too) is a
+            // change; the held look comes from `pinMotion`, not MapKit.
             selectedItemID = nil
             guard !isPlacingBodega else { return }
-            switch viewModel.displayItems.first(where: { $0.id == newValue }) {
-            case .pin(let bodega): onSelectBodega(bodega)
-            case .cluster(let cluster): zoom(into: cluster)
-            case nil: break
+            if let cluster = pinMotion.tapped(newValue, among: viewModel.displayItems, onPush: onSelectBodega) {
+                zoom(into: cluster)
             }
         }
     }

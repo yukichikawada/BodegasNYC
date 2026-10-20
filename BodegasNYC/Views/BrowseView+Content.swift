@@ -26,6 +26,16 @@ extension BrowseView {
                 addCompletion: addCompletion,
                 showsToolbar: activeTab == .map
             )
+            // Pin → detail (#23 T1): the held pin's state and the zoom's
+            // namespace, and the pop / placement / List tab events it reacts to.
+            .environment(pinMotion)
+            .environment(\.pinZoomNamespace, detailTransition)
+            .pinMotionEvents(
+                pinMotion,
+                presentedBodegaID: path.last?.id,
+                isPlacing: isPlacingBodega,
+                showsMap: activeTab == .map
+            )
             // The List tab's search bar adds a bottom container inset, and
             // MapKit re-centres on any inset change, so the map ignores the
             // container's bottom inset and keeps the window's own (home
