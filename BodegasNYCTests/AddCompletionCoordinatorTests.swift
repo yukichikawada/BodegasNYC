@@ -15,7 +15,9 @@
 //  haptic and announcement and clears only its own id; a second add is
 //  never cleared by the first add's timers; the announcement is posted with
 //  every drop; auto-dismiss is off under VoiceOver; a settle a little off
-//  the pin (a bottom card shifting the view center) still counts.
+//  the camera's target still counts (MapKit rounds the settled center and
+//  the top chrome offsets the visible area); the camera targets a point a
+//  sixth of the span south of the pin, so the pin sits above the card.
 //  fails_when: any of those orderings or guards breaks.
 //  no_claim: the spring, the camera animation, or that the haptic is felt
 //  (the simulator can't; `.sensoryFeedback` is bound to `hapticTrigger` in
@@ -161,11 +163,14 @@ final class AddCompletionCoordinatorTests {
 
         coordinator.bodegaWasSubmitted(deli)
 
+        let target = AddCompletionCoordinator.cameraCenter(for: deli.coordinate)
+        #expect(target.latitude < deli.coordinate.latitude)
+        #expect(abs(deli.coordinate.latitude - target.latitude - AddCompletionCoordinator.cameraSpan / 6) < 1e-12)
         #expect(events == [
             .insert("Deli"),
             .highlight("Deli"),
             .firstAdd,
-            .camera("40.73,-73.99")
+            .camera("\(target.latitude),-73.99")
         ])
         #expect(coordinator.dropState == .pending(deli.id))
         #expect(coordinator.pinPhase(for: deli.id) == .pending)
@@ -183,7 +188,7 @@ final class AddCompletionCoordinatorTests {
         #expect(coordinator.dropState == .pending(deli.id))
         #expect(coordinator.hapticTrigger == 0)
 
-        coordinator.cameraDidSettle(center: deli.coordinate)
+        coordinator.cameraDidSettle(center: AddCompletionCoordinator.cameraCenter(for: deli.coordinate))
         #expect(coordinator.dropState == .dropping(deli.id))
         #expect(coordinator.pinPhase(for: deli.id) == .dropping)
         #expect(coordinator.hapticTrigger == 1)
@@ -267,9 +272,12 @@ final class AddCompletionCoordinatorTests {
         let deli = try bodega("Deli")
         coordinator.bodegaWasSubmitted(deli)
 
-        // A bottom card shifts the reported center by a fraction of the span.
+        // MapKit rounds the settled center, and the top chrome makes the
+        // visible area's centre differ from the full view's, so a settle a
+        // fraction of the span off the camera's (offset) target still counts.
+        let target = AddCompletionCoordinator.cameraCenter(for: deli.coordinate)
         coordinator.cameraDidSettle(
-            center: Coordinate(latitude: deli.coordinate.latitude - 0.0008, longitude: deli.coordinate.longitude)
+            center: Coordinate(latitude: target.latitude - 0.0008, longitude: target.longitude)
         )
 
         #expect(coordinator.dropState == .dropping(deli.id))
