@@ -1,7 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(scripts/run-tests.sh:*)"
-    ]
-  }
-}
