@@ -108,7 +108,7 @@ struct MapBottomCard: View {
             TipView(AddBodegaTip()) { action in
                 if action.id == AddBodegaTip.addActionID { onAction() }
             }
-            .tipViewStyle(BodegaTipStyle(inline: true))
+            .inlineBodegaTipStyle()
             .modifier(MapBottomCardChrome())
         }
     }

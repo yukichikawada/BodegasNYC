@@ -26,7 +26,7 @@ struct AddBodegaView: View {
                 // Edit Bodega never shows it.
                 if !isEditing {
                     TipView(FormTip())
-                        .tipViewStyle(BodegaTipStyle(inline: true))
+                        .inlineBodegaTipStyle()
                 }
                 Section("Basics") {
                     TextField("Name", text: $viewModel.name)

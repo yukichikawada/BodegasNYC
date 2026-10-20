@@ -181,3 +181,15 @@ struct BodegaTipStyle: TipViewStyle {
         }
     }
 }
+
+extension View {
+    /// An inline `TipView` in `BodegaTipStyle`. TipKit still draws its own
+    /// rounded background behind a custom style (and clips the text to its
+    /// corners), so inline tips clear it: the container (the map card's
+    /// material, the form row) is the only background (DD13).
+    func inlineBodegaTipStyle() -> some View {
+        tipViewStyle(BodegaTipStyle(inline: true))
+            .tipBackground(Color.clear)
+            .tipCornerRadius(0)
+    }
+}
