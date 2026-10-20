@@ -101,6 +101,13 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     /// A pin's VoiceOver value when the bodega has a cat (design DD15).
     case pinHasCatValue
 
+    // MARK: Detail data points (#70)
+
+    /// VoiceOver values for the detail screen's five data points, which
+    /// otherwise show presence only by the symbol's opacity.
+    case dataPointPresentValue
+    case dataPointAbsentValue
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -175,6 +182,8 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         // DD15 writes it "Has a cat"; as a label it takes Title Case. VoiceOver
         // reads both the same.
         case .pinHasCatValue: CopyString(kind: .label, text: "Has a Cat")
+        case .dataPointPresentValue: CopyString(kind: .label, text: "Yes")
+        case .dataPointAbsentValue: CopyString(kind: .label, text: "No")
         }
     }
 
