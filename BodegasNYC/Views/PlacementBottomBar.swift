@@ -49,19 +49,34 @@ struct PlacementBottomBar: View {
         }
     }
 
+    /// One row while every label fits on one line; otherwise (narrow
+    /// widths, or always from `.xLarge` up) the stacked layout, so Use This
+    /// Location never wraps inside its capsule.
     @ViewBuilder
     private var actions: some View {
         if isStacked {
-            VStack(spacing: 12) {
-                // One row only while neither label has to wrap (AX sizes).
-                ViewThatFits(in: .horizontal) {
-                    HStack { nearMeButton.fixedSize(); Spacer(); cancelButton.fixedSize() }
-                    VStack(spacing: 12) { nearMeButton; cancelButton }
-                }
-                useThisLocationButton
-            }
+            stackedActions
         } else {
-            HStack { nearMeButton; cancelButton; Spacer(); useThisLocationButton }
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    nearMeButton.fixedSize()
+                    cancelButton.fixedSize()
+                    Spacer(minLength: 0)
+                    useThisLocationButton.fixedSize()
+                }
+                stackedActions
+            }
+        }
+    }
+
+    private var stackedActions: some View {
+        VStack(spacing: 12) {
+            // One row only while neither label has to wrap (AX sizes).
+            ViewThatFits(in: .horizontal) {
+                HStack { nearMeButton.fixedSize(); Spacer(); cancelButton.fixedSize() }
+                VStack(spacing: 12) { nearMeButton; cancelButton }
+            }
+            useThisLocationButton
         }
     }
 
@@ -89,7 +104,7 @@ struct PlacementBottomBar: View {
             endPlacement(onUseThisLocation)
         } label: {
             Text("Use This Location")
-                .frame(maxWidth: isStacked ? .infinity : nil)
+                .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
         .popoverTip(PlacementTip(), isPresented: $isPlacementTipPresented, arrowEdge: .bottom)
