@@ -13,19 +13,26 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         var headers: [String: String]
         var body: Data
         var onRequest: (@Sendable (URLRequest) -> Void)?
+        var gate: StubGate?
     }
 
     private static let lock = NSLock()
     nonisolated(unsafe) private static var stubs: [Stub] = []
 
+    /// `gate`: hold the response back until `gate.open()`, without blocking
+    /// the loading thread, to stand in for a stalled request. `onRequest`
+    /// still runs at once, so a test can tell the request has started.
     static func stub(
         statusCode: Int = 200,
         headers: [String: String] = ["Content-Type": "application/json"],
         body: Data,
+        gate: StubGate? = nil,
         onRequest: (@Sendable (URLRequest) -> Void)? = nil
     ) {
         lock.withLock {
-            stubs.append(Stub(statusCode: statusCode, headers: headers, body: body, onRequest: onRequest))
+            stubs.append(Stub(
+                statusCode: statusCode, headers: headers, body: body, onRequest: onRequest, gate: gate
+            ))
         }
     }
 
@@ -53,6 +60,33 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
             return
         }
         stub.onRequest?(Self.materializingBody(of: request))
+        guard let gate = stub.gate else {
+            respond(with: stub)
+            return
+        }
+        // Client callbacks belong on the loading thread, so the held
+        // response hops back to it when the gate opens.
+        heldStub = stub
+        // Only used to schedule onto; `Thread` isn't `Sendable`.
+        nonisolated(unsafe) let loadingThread = Thread.current
+        gate.whenOpen { [self] in
+            perform(#selector(respondWithHeldStub), on: loadingThread, with: nil, waitUntilDone: false)
+        }
+    }
+
+    override func stopLoading() {
+        heldStub = nil
+    }
+
+    nonisolated(unsafe) private var heldStub: Stub?
+
+    @objc private func respondWithHeldStub() {
+        guard let stub = heldStub else { return }
+        heldStub = nil
+        respond(with: stub)
+    }
+
+    private func respond(with stub: Stub) {
         let response = HTTPURLResponse(
             url: request.url ?? URL(string: "https://example.supabase.co")!,
             statusCode: stub.statusCode,
@@ -63,8 +97,6 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         client?.urlProtocol(self, didLoad: stub.body)
         client?.urlProtocolDidFinishLoading(self)
     }
-
-    override func stopLoading() {}
 
     /// `URLSession` commonly moves a request's body from `httpBody` into
     /// `httpBodyStream` before handing the request to a custom
@@ -89,6 +121,32 @@ final class MockURLProtocol: URLProtocol, @unchecked Sendable {
         }
         request.httpBody = data
         return request
+    }
+}
+
+/// Holds a `MockURLProtocol` stub's response until `open()`. Opening twice,
+/// or opening before the request arrives, is fine.
+final class StubGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var isOpen = false
+    private var waiting: [@Sendable () -> Void] = []
+
+    func open() {
+        let released: [@Sendable () -> Void] = lock.withLock {
+            isOpen = true
+            defer { waiting = [] }
+            return waiting
+        }
+        released.forEach { $0() }
+    }
+
+    func whenOpen(_ action: @escaping @Sendable () -> Void) {
+        let runNow: Bool = lock.withLock {
+            if isOpen { return true }
+            waiting.append(action)
+            return false
+        }
+        if runNow { action() }
     }
 }
 

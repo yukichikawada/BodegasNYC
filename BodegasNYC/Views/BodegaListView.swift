@@ -188,22 +188,6 @@ struct BodegaListView: View {
     }
 }
 
-private struct BodegaRow: View {
-    let bodega: Bodega
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(bodega.name)
-                .font(.headline)
-            if let address = bodega.address {
-                Text(address)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-}
-
 /// Row top edges in global coordinates and the list's visible top edge. A
 /// class on purpose: updating it while scrolling must not re-render.
 private final class RowTops {

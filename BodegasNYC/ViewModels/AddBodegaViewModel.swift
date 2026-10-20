@@ -34,8 +34,21 @@ final class AddBodegaViewModel: Identifiable {
         /// string. The user must tap Submit again after signing in; no
         /// auto-retry-on-sign-in.
         case signInRequired
+        /// Add mode only: the duplicate check (#20) found visible bodegas
+        /// within `duplicateRadiusMeters` of the pin, nearest first.
+        /// `AddBodegaView` shows them in `DuplicateBodegaSheet`; the user
+        /// opens one (the draft is dropped), says it's new (`confirmNew()`),
+        /// or swipes the sheet away (`dismissDuplicatePrompt()`).
+        case possibleDuplicates([Bodega])
         case failed(String)
     }
+
+    /// How close an existing bodega has to be to the pin to be offered as a
+    /// possible duplicate on Submit (owner decision on #20).
+    nonisolated static let duplicateRadiusMeters: Double = 50
+    /// The duplicate check is advisory: past this, Submit goes ahead as if
+    /// nothing was nearby (#20 eng review R2).
+    nonisolated static let duplicateCheckTimeout: Duration = .seconds(5)
 
     struct DayEntry: Identifiable, Equatable {
         let id: String // "mon"..."sun" — matches BodegaHours' stored keys.
@@ -62,7 +75,12 @@ final class AddBodegaViewModel: Identifiable {
 
     private let bodegaService: BodegaService
     private let sessionStore: SessionStore
+    private let clock: any Clock<Duration>
     private var submitTask: Task<Void, Never>?
+    /// Set by `confirmNew()` and never reset: the pin can't move, so once
+    /// the user has said this draft is new the check is done for this view
+    /// model's life, including a retry after a failed insert.
+    private var hasConfirmedNew = false
 
     var isNameValid: Bool {
         !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -74,12 +92,14 @@ final class AddBodegaViewModel: Identifiable {
         coordinate: Coordinate,
         existingBodega: Bodega? = nil,
         bodegaService: BodegaService,
-        sessionStore: SessionStore
+        sessionStore: SessionStore,
+        clock: any Clock<Duration> = ContinuousClock()
     ) {
         self.coordinate = coordinate
         self.existingBodega = existingBodega
         self.bodegaService = bodegaService
         self.sessionStore = sessionStore
+        self.clock = clock
         if let existingBodega {
             name = existingBodega.name
             address = existingBodega.address ?? ""
@@ -92,11 +112,63 @@ final class AddBodegaViewModel: Identifiable {
         }
     }
 
+    // Submit in add mode (#20). Edit mode skips the check and keeps the old
+    // order: sign-in guard, then the update (`submitEdit()`).
+    //
+    //   submit()
+    //     name invalid ──────────────────────────► .failed("Please enter a name.")
+    //     request = signed in ? snapshot : nil     (synchronous, before the Task)
+    //     .submitting
+    //     hasConfirmedNew? ── yes ─────────────────────────────────┐
+    //        └ no ─► fetchNearby(pin, 50 m) raced against 5 s       │
+    //                  ├ throws or times out ─► []                  │
+    //                  ├ hidden rows dropped                        │
+    //                  ├ [] ───────────────────────────────────────┤
+    //                  └ [matches] ─► .possibleDuplicates(matches)  │
+    //                       ├ confirmNew() ─► hasConfirmedNew = true, submit()
+    //                       ├ dismissDuplicatePrompt() ─► .idle
+    //                       └ a match opened ─► sheet closes, view model dropped
+    //     cancelled (cancelSubmit) ─► return, state untouched ◄────┤
+    //     request == nil ─► .signInRequired ◄─────────────────────┤
+    //     insert ─► .submitted(bodega) or .failed(message) ◄───────┘
     func submit() {
         guard isNameValid else {
             submissionState = .failed("Please enter a name.")
             return
         }
+        guard !isEditing else {
+            submitEdit()
+            return
+        }
+        submitTask?.cancel()
+        // Snapshotted synchronously, before the Task: edits made while the
+        // check or the insert is in flight can't leak into it. nil means
+        // nobody is signed in, which is asked only after the check (#20 D1).
+        let request = sessionStore.currentUserID.map { makeRequest(userID: $0) }
+        let checksNearby = !hasConfirmedNew
+        submissionState = .submitting
+        submitTask = Task { [bodegaService, coordinate, clock] in
+            if checksNearby {
+                let matches = await Self.visibleNearbyMatches(
+                    at: coordinate,
+                    bodegaService: bodegaService,
+                    clock: clock
+                )
+                guard !Task.isCancelled else { return }
+                if !matches.isEmpty {
+                    submissionState = .possibleDuplicates(matches)
+                    return
+                }
+            }
+            guard let request else {
+                submissionState = .signInRequired
+                return
+            }
+            await send(request)
+        }
+    }
+
+    private func submitEdit() {
         guard let userID = sessionStore.currentUserID else {
             submissionState = .signInRequired
             return
@@ -106,21 +178,25 @@ final class AddBodegaViewModel: Identifiable {
         // Snapshotted synchronously, before the Task: edits made while the
         // request is in flight can't leak into it.
         let request = makeRequest(userID: userID)
-        submitTask = Task { [bodegaService, request] in
-            do {
-                let saved: Bodega
-                switch request {
-                case .insert(let draft):
-                    saved = try await bodegaService.insert(draft)
-                case .update(let id, let values):
-                    saved = try await bodegaService.update(id: id, values)
-                }
-                guard !Task.isCancelled else { return }
-                submissionState = .submitted(saved)
-            } catch {
-                guard !Task.isCancelled else { return }
-                submissionState = .failed(error.localizedDescription)
+        submitTask = Task { await send(request) }
+    }
+
+    private func send(_ request: SubmitRequest) async {
+        // A Cancel that landed during the check must never insert (#20 R4).
+        guard !Task.isCancelled else { return }
+        do {
+            let saved: Bodega
+            switch request {
+            case .insert(let draft):
+                saved = try await bodegaService.insert(draft)
+            case .update(let id, let values):
+                saved = try await bodegaService.update(id: id, values)
             }
+            guard !Task.isCancelled else { return }
+            submissionState = .submitted(saved)
+        } catch {
+            guard !Task.isCancelled else { return }
+            submissionState = .failed(error.localizedDescription)
         }
     }
 
@@ -247,4 +323,32 @@ final class AddBodegaViewModel: Identifiable {
         await submitTask?.value
     }
 #endif
+}
+
+// MARK: - Duplicate check (#20)
+
+extension AddBodegaViewModel {
+    /// "No, It's New" on the duplicate prompt: submits again and skips the
+    /// check from now on. A no-op outside the prompt.
+    func confirmNew() {
+        guard case .possibleDuplicates = submissionState else { return }
+        hasConfirmedNew = true
+        submit()
+    }
+
+    /// Called when `DuplicateBodegaSheet` is swiped away: back to the
+    /// untouched form, and the next Submit checks again. A no-op outside
+    /// the prompt, for the same reason as `dismissSignInPrompt()`.
+    func dismissDuplicatePrompt() {
+        guard case .possibleDuplicates = submissionState else { return }
+        submissionState = .idle
+    }
+
+    /// Called when `AddBodegaView` goes away (Cancel, or a match opened), so
+    /// a check still in flight never reaches the insert (#20 R4). The state
+    /// is left as it is; nothing observes it any more.
+    func cancelSubmit() {
+        submitTask?.cancel()
+        submitTask = nil
+    }
 }

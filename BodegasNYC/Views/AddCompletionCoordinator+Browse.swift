@@ -43,26 +43,69 @@ extension AddCompletionCoordinator {
     }
 }
 
+extension BrowseView {
+    /// Opens a duplicate-prompt match (#20) once the add sheet has closed.
+    /// The match goes into both view models first (an idempotent upsert),
+    /// so a bodega added since launch is on the map and list after Back and
+    /// an Edit from its detail lands somewhere (eng R6). No coordinator,
+    /// highlight, camera move or first-add: nothing was added. The push is
+    /// standard, not the pin zoom (`detailOpenedFromAddFlow`).
+    func openExisting(_ bodega: Bodega) {
+        mapViewModel.bodegaWasAdded(bodega)
+        listViewModel.bodegaWasAdded(bodega)
+        detailOpenedFromAddFlow = bodega.id
+        path.append(bodega)
+    }
+
+    /// The detail destination's zoom gate: from the pin on the Map tab,
+    /// except for a detail opened from the duplicate prompt, which gets a
+    /// standard push since its pin may be clustered, off screen or not yet
+    /// loaded and iOS 26 would zoom from the screen centre (#20). Cleared
+    /// when the path empties.
+    func zoomsFromPin(to bodega: Bodega) -> Bool {
+        activeTab == .map && detailOpenedFromAddFlow != bodega.id
+    }
+}
+
 extension View {
+    // Six parameters is the #20 eng review's D2 shape: the parked match stays
+    // `BrowseView` state, passed in, rather than a modifier of its own.
+    // swiftlint:disable function_parameter_count
+
     /// Presents the Add a Bodega sheet for `viewModel`. On a successful
     /// submit: the sheet closes, `onLanding` puts the user on the map, and
     /// `completion` takes over (insert, camera, drop, haptic, first-add
     /// card). The new pin is never left selected, since selecting a pin
     /// navigates (DD11).
+    ///
+    /// When the duplicate prompt's match is tapped (#20), the sheet closes
+    /// with the draft, the match is parked in `existingToOpen`, and
+    /// `openExisting` runs from `onDismiss`, so the push starts only after
+    /// the sheet has finished going away.
     func addBodegaFlow(
         _ viewModel: Binding<AddBodegaViewModel?>,
         sessionStore: SessionStore,
         completion: AddCompletionCoordinator,
+        existingToOpen: Binding<Bodega?>,
+        openExisting: @escaping (Bodega) -> Void,
         onLanding: @escaping () -> Void
     ) -> some View {
-        sheet(item: viewModel) { addViewModel in
+        sheet(item: viewModel, onDismiss: {
+            guard let bodega = existingToOpen.wrappedValue else { return }
+            existingToOpen.wrappedValue = nil
+            openExisting(bodega)
+        }, content: { addViewModel in
             AddBodegaView(viewModel: addViewModel, sessionStore: sessionStore) { bodega in
                 viewModel.wrappedValue = nil
                 onLanding()
                 completion.bodegaWasSubmitted(bodega)
+            } onOpenExisting: { bodega in
+                existingToOpen.wrappedValue = bodega
+                viewModel.wrappedValue = nil
             }
-        }
+        })
     }
+    // swiftlint:enable function_parameter_count
 
     /// Hooks `coordinator` up to the browse screen: binds its camera move
     /// to `camera` on appear, plays the success haptic when the pin drops

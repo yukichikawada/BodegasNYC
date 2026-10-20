@@ -108,6 +108,14 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case dataPointPresentValue
     case dataPointAbsentValue
 
+    // MARK: Duplicate check (#20)
+
+    case duplicatePromptTitle
+    case duplicatePromptBody
+    /// Under the body, and every match row's VoiceOver hint (design DS3).
+    case duplicatePromptFootnote
+    case duplicateConfirmNewAction
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -184,6 +192,11 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .pinHasCatValue: CopyString(kind: .label, text: "Has a Cat")
         case .dataPointPresentValue: CopyString(kind: .label, text: "Yes")
         case .dataPointAbsentValue: CopyString(kind: .label, text: "No")
+        case .duplicatePromptTitle: CopyString(kind: .title, text: "Is this one of these?")
+        case .duplicatePromptBody:
+            CopyString(kind: .body, text: "The map already has something right there. If it's the same place, open it.")
+        case .duplicatePromptFootnote: CopyString(kind: .body, text: "Opening one drops what you typed.")
+        case .duplicateConfirmNewAction: CopyString(kind: .label, text: "No, It's New")
         }
     }
 
