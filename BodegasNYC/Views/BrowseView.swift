@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import TipKit
 
 /// The map/list toggle container: owns the single `NavigationStack` for the
 /// whole browse session (previously `MapScreenView` wrapped itself in its
@@ -72,6 +73,9 @@ struct BrowseView: View {
     /// sets it, and it going false is this view's cue to land on the map.
     @Binding private var showingOnboarding: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// The tutorial's Add tip: TipKit's display verdict and whether a
+    /// detail has been opened (#22).
+    @State private var addTipState = AddTipState()
 
     init(
         bodegaService: BodegaService,
@@ -175,6 +179,7 @@ struct BrowseView: View {
                         mapViewModel.bodegaWasUpdated(updatedBodega)
                         listViewModel.bodegaWasUpdated(updatedBodega)
                     }
+                    .task { await addTipState.donateDidOpenBodegaDetail() }
                 }
                 .sheet(isPresented: $showingSignIn) {
                     SignInView(sessionStore: sessionStore)
@@ -191,12 +196,16 @@ struct BrowseView: View {
                         mapViewModel.bodegaWasAdded(insertedBodega)
                         listViewModel.bodegaWasAdded(insertedBodega)
                         // The single call site until #25's coordinator
-                        // takes it over and uses the return value.
-                        firstRunState.markFirstBodegaAdded()
+                        // takes it over and uses the return value. The
+                        // first add ends the tutorial (#22).
+                        if firstRunState.markFirstBodegaAdded() {
+                            TutorialTips.invalidateAll()
+                        }
                         addBodegaViewModel = nil
                     }
                 }
                 .onChange(of: showingOnboarding) { _, isShowing in
+                    syncTipParameters()
                     guard !isShowing else { return }
                     landAfterOnboarding()
                 }
@@ -207,7 +216,14 @@ struct BrowseView: View {
                     if firstRunState.pendingTutorialAdd {
                         landAfterOnboarding()
                     }
+                    syncTipParameters()
                 }
+                .onChange(of: isPlacingBodega) { syncTipParameters() }
+                .onChange(of: firstRunState.hasAddedFirstBodega) { syncTipParameters() }
+                .task { await addTipState.observe() }
+                // Popover tips (the placement tip) inherit this; the inline
+                // tips set their own inline variant.
+                .tipViewStyle(BodegaTipStyle())
                 .overlay {
                     if isResolvingCurrentLocation {
                         ProgressView()
@@ -254,7 +270,8 @@ struct BrowseView: View {
                 isPlacingBodega: $isPlacingBodega,
                 onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
                 onSelectBodega: { path.append($0) },
-                onClearFilters: { filter = filter.clearingAmenities() }
+                onClearFilters: { filter = filter.clearingAmenities() },
+                showsAddTip: showsAddTip
             )
         case .list:
             BodegaListView(viewModel: listViewModel, filter: $filter) {
@@ -354,5 +371,29 @@ extension BrowseView {
         activeTab = .map
         isPlacingBodega = firstRunState.pendingTutorialAdd
         firstRunState.pendingTutorialAdd = false
+    }
+}
+
+// MARK: - Tutorial (#22)
+
+extension BrowseView {
+    /// The Add tip takes the map's bottom slot only when the pure gating
+    /// agrees (no first add yet, onboarding gone, not placing, a detail
+    /// opened) and TipKit itself would render it. `MapScreenView` only
+    /// exists on the Map tab, so the List tab never shows it.
+    private var showsAddTip: Bool {
+        TutorialTips.shouldOfferAddTip(
+            hasAddedFirstBodega: firstRunState.hasAddedFirstBodega,
+            isOnboardingVisible: showingOnboarding,
+            isPlacingBodega: isPlacingBodega,
+            hasOpenedDetail: addTipState.hasOpenedDetail
+        ) && addTipState.isDisplayable
+    }
+
+    /// Mirrors the state the tips' rules read into their TipKit parameters.
+    private func syncTipParameters() {
+        TutorialTips.hasAddedFirstBodega = firstRunState.hasAddedFirstBodega
+        TutorialTips.isOnboardingVisible = showingOnboarding
+        TutorialTips.isPlacingBodega = isPlacingBodega
     }
 }

@@ -6,9 +6,28 @@
 //
 
 import SwiftUI
+import TipKit
 
 @main
 struct BodegasNYCApp: App {
+    init() {
+        #if DEBUG
+        // QA: launch with `-ResetTips` to wipe TipKit's datastore before it
+        // loads, so the first-run tutorial tips (#22) show again. It must run
+        // before `configure`. Pair it with a fresh install (or cleared
+        // defaults) to replay onboarding too.
+        if CommandLine.arguments.contains("-ResetTips") {
+            try? Tips.resetDatastore()
+        }
+        #endif
+        // `.immediate`: the tutorial's tips are gated by their own rules,
+        // not by TipKit's default once-a-day pacing.
+        try? Tips.configure([
+            .displayFrequency(.immediate),
+            .datastoreLocation(.applicationDefault)
+        ])
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

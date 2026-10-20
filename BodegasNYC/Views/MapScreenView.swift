@@ -1,5 +1,6 @@
 import MapKit
 import SwiftUI
+import TipKit
 import UIKit
 
 /// The map screen's `Map` content: bodega pins/clusters (`BodegaMapViewModel`)
@@ -32,6 +33,10 @@ struct MapScreenView: View {
     private let onConfirmPlacement: (CLLocationCoordinate2D) -> Void
     private let onSelectBodega: (Bodega) -> Void
     private let onClearFilters: () -> Void
+    /// Whether the tutorial's Add tip may take the bottom slot. `BrowseView`
+    /// computes it (the four `shouldOfferAddTip` inputs plus TipKit's own
+    /// verdict), so the slot never shows an empty card.
+    private let showsAddTip: Bool
 
     init(
         viewModel: BodegaMapViewModel,
@@ -41,7 +46,8 @@ struct MapScreenView: View {
         isPlacingBodega: Binding<Bool>,
         onConfirmPlacement: @escaping (CLLocationCoordinate2D) -> Void,
         onSelectBodega: @escaping (Bodega) -> Void,
-        onClearFilters: @escaping () -> Void
+        onClearFilters: @escaping () -> Void,
+        showsAddTip: Bool = false
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -51,11 +57,11 @@ struct MapScreenView: View {
         self.onConfirmPlacement = onConfirmPlacement
         self.onSelectBodega = onSelectBodega
         self.onClearFilters = onClearFilters
+        self.showsAddTip = showsAddTip
     }
 
     /// What the bottom slot shows when the placement bar isn't up — see
-    /// `MapBottomCard.select` for the precedence. #25 supplies `firstAdd`
-    /// and #22 `addTip`; neither exists yet.
+    /// `MapBottomCard.select` for the precedence. #25 supplies `firstAdd`.
     private var bottomCardContent: MapBottomCard.Content? {
         MapBottomCard.select(
             isPlacing: isPlacingBodega,
@@ -65,7 +71,7 @@ struct MapScreenView: View {
                 isLoadedEmpty: viewModel.isLoadedEmpty,
                 isFilteredEmpty: viewModel.isFilteredEmpty
             ),
-            addTip: false,
+            addTip: showsAddTip,
             streets: streetsWalkedViewModel.map {
                 MapBottomCard.showsStreetsBanner(
                     isTrackingEnabled: $0.isTrackingEnabled,
@@ -149,7 +155,8 @@ struct MapScreenView: View {
                             onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
                             isPlacingBodega = false
                         },
-                        onCancel: { isPlacingBodega = false }
+                        onCancel: { isPlacingBodega = false },
+                        onNearMe: { Task { await locateMe() } }
                     )
                 } else if let content = bottomCardContent {
                     // `.id` makes a change of content a remove + insert, so
@@ -206,11 +213,11 @@ struct MapScreenView: View {
 
     private func performBottomCardAction(for content: MapBottomCard.Content) {
         switch content {
-        case .emptyState(.noneNearby), .emptyState(.noBodegas):
+        case .emptyState(.noneNearby), .emptyState(.noBodegas), .addTip:
             isPlacingBodega = true
         case .emptyState(.noFilterMatches):
             onClearFilters()
-        case .emptyState(.noStreets), .firstAdd, .addTip:
+        case .emptyState(.noStreets), .firstAdd:
             break
         }
     }
@@ -318,19 +325,64 @@ private struct TrackingErrorBanner: View {
 /// The confirm/cancel bar shown while `isPlacingBodega` — pans underneath a
 /// fixed center-screen pin (see `MapScreenView`'s `.overlay`); "Use This
 /// Location" reads whatever coordinate is currently under that pin.
+///
+/// "Near Me" (DD2) uses the toolbar's `locateMe()` path; always present.
+/// From `.xLarge` up the bar wraps to two rows. The placement tip (#22) is a
+/// popover on Use This Location (not a toolbar item, so R1 allows it).
 private struct PlacementBottomBar: View {
     let onUseThisLocation: () -> Void
     let onCancel: () -> Void
+    let onNearMe: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isPlacementTipPresented = true
+
+    private var isStacked: Bool { dynamicTypeSize >= .xLarge }
 
     var body: some View {
-        HStack {
-            Button("Cancel", action: onCancel)
-            Spacer()
-            Button("Use This Location", action: onUseThisLocation)
-                .buttonStyle(.borderedProminent)
+        VStack(spacing: 12) {
+            if isStacked {
+                // One row only while neither label has to wrap (AX sizes).
+                ViewThatFits(in: .horizontal) {
+                    HStack { nearMeButton.fixedSize(); Spacer(); cancelButton.fixedSize() }
+                    VStack(spacing: 12) { nearMeButton; cancelButton }
+                }
+                useThisLocationButton
+            } else {
+                HStack { nearMeButton; cancelButton; Spacer(); useThisLocationButton }
+            }
         }
         .padding()
         .background(.regularMaterial)
+    }
+
+    private var cancelButton: some View { Button("Cancel", action: onCancel) }
+
+    private var nearMeButton: some View {
+        Button(action: onNearMe) {
+            Label(AppCopy.nearMeAction.copy.text, systemImage: "location.fill")
+        }
+        .buttonStyle(.bordered)
+    }
+
+    private var useThisLocationButton: some View {
+        Button(action: onUseThisLocation) {
+            Text("Use This Location")
+                .frame(maxWidth: isStacked ? .infinity : nil)
+        }
+        .buttonStyle(.borderedProminent)
+        .popoverTip(PlacementTip(), isPresented: $isPlacementTipPresented, arrowEdge: .bottom)
+        // A popover tip keeps the appearance it was presented with; re-present
+        // it after a light/dark switch.
+        .onChange(of: colorScheme) {
+            guard isPlacementTipPresented else { return }
+            isPlacementTipPresented = false
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                isPlacementTipPresented = true
+            }
+        }
     }
 }
 

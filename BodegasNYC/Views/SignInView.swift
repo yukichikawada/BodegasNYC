@@ -19,16 +19,27 @@ struct SignInView: View {
         self.sessionStore = sessionStore
     }
 
+    /// Scrolls, top-aligned, so the Apple button stays reachable when the
+    /// Submit-time presentation pins this to a `.medium` detent (DD10) at
+    /// accessibility text sizes.
     var body: some View {
+        ScrollView {
+            content
+                .padding()
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: 16) {
-            Spacer()
-            Text("Sign in to add bodegas, reviews, and photos")
+            Text(AppCopy.signInTitle.copy.text)
                 .font(.headline)
                 .multilineTextAlignment(.center)
-            Text("Browsing never requires an account — this is only needed to contribute.")
+                .fixedSize(horizontal: false, vertical: true)
+            Text(AppCopy.signInBody.copy.text)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             SignInWithAppleButton(.signIn, onRequest: configure, onCompletion: handle)
                 .signInWithAppleButtonStyle(.black)
                 .frame(height: 44)
@@ -41,10 +52,9 @@ struct SignInView: View {
                 Text(errorMessage)
                     .font(.footnote)
                     .foregroundStyle(.red)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer()
         }
-        .padding()
     }
 
     private func configure(_ request: ASAuthorizationAppleIDRequest) {
