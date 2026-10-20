@@ -194,7 +194,8 @@ private struct EmptyStateCard: View {
                 textColumn
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if state.isDismissible {
-                    closeButton
+                    CardCloseButton(action: onDismiss)
+                        .accessibilitySortPriority(1)
                 }
             }
             if let action = state.action {
@@ -215,7 +216,8 @@ private struct EmptyStateCard: View {
                 symbolView
                 Spacer(minLength: 0)
                 if state.isDismissible {
-                    closeButton
+                    CardCloseButton(action: onDismiss)
+                        .accessibilitySortPriority(1)
                 }
             }
             textColumn
@@ -254,22 +256,6 @@ private struct EmptyStateCard: View {
         }
     }
 
-    private var closeButton: some View {
-        Button(action: onDismiss) {
-            Image(systemName: "xmark.circle.fill")
-                .foregroundStyle(.secondary)
-                .frame(width: 44, height: 44)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        // Pull the 44pt target back into the card's padding so the glyph
-        // lines up with the first line, not 12pt lower.
-        .padding(.top, -12)
-        .padding(.trailing, -12)
-        .accessibilityLabel(AppCopy.dismissAction.copy.text)
-        .accessibilitySortPriority(1)
-    }
-
     @ViewBuilder
     private var symbol: some View {
         switch state {
@@ -282,6 +268,36 @@ private struct EmptyStateCard: View {
         case .noStreets:
             Image(systemName: "figure.walk").foregroundStyle(.secondary)
         }
+    }
+}
+
+/// The one close button for map bottom cards and tutorial tips: an
+/// `xmark.circle.fill` in `.secondary` with at least a 44pt target.
+///
+/// Below accessibility sizes the target is pulled 12pt back into the card's
+/// 16pt padding so the glyph lines up with the first line of text. From
+/// `.accessibility1` up the glyph outgrows the 44pt frame, so the pull would
+/// push it past the card edge (and TipView clips there); it sits in place.
+struct CardCloseButton: View {
+    let action: () -> Void
+
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var inset: CGFloat {
+        MapBottomCard.usesStackedLayout(for: dynamicTypeSize) ? 0 : -12
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.top, inset)
+        .padding(.trailing, inset)
+        .accessibilityLabel(AppCopy.dismissAction.copy.text)
     }
 }
 

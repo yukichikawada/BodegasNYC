@@ -326,20 +326,17 @@ private struct TrackingErrorBanner: View {
 /// fixed center-screen pin (see `MapScreenView`'s `.overlay`); "Use This
 /// Location" reads whatever coordinate is currently under that pin.
 ///
-/// "Near Me" (design DD2) jumps the map to the user's block through the
-/// same `locateMe()` path as the toolbar (When-In-Use prompt on first tap).
-/// Always present in placement mode, not only on the tutorial path. From
-/// `.xLarge` Dynamic Type up the bar wraps to two rows, with Use This
-/// Location full width underneath, so nothing truncates at `.xxxLarge`.
-///
-/// The tutorial's placement tip (#22) is a popover on Use This Location; a
-/// `safeAreaInset` button, not a toolbar item, so eng review R1 allows it.
+/// "Near Me" (DD2) uses the toolbar's `locateMe()` path; always present.
+/// From `.xLarge` up the bar wraps to two rows. The placement tip (#22) is a
+/// popover on Use This Location (not a toolbar item, so R1 allows it).
 private struct PlacementBottomBar: View {
     let onUseThisLocation: () -> Void
     let onCancel: () -> Void
     let onNearMe: () -> Void
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var isPlacementTipPresented = true
 
     private var isStacked: Bool { dynamicTypeSize >= .xLarge }
 
@@ -347,9 +344,7 @@ private struct PlacementBottomBar: View {
         VStack(spacing: 12) {
             HStack {
                 nearMeButton
-                if isStacked {
-                    Spacer()
-                }
+                if isStacked { Spacer() }
                 Button("Cancel", action: onCancel)
                 if !isStacked {
                     Spacer()
@@ -377,7 +372,17 @@ private struct PlacementBottomBar: View {
                 .frame(maxWidth: isStacked ? .infinity : nil)
         }
         .buttonStyle(.borderedProminent)
-        .popoverTip(PlacementTip(), arrowEdge: .bottom)
+        .popoverTip(PlacementTip(), isPresented: $isPlacementTipPresented, arrowEdge: .bottom)
+        // A popover tip keeps the appearance it was presented with; re-present
+        // it after a light/dark switch.
+        .onChange(of: colorScheme) {
+            guard isPlacementTipPresented else { return }
+            isPlacementTipPresented = false
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                isPlacementTipPresented = true
+            }
+        }
     }
 }
 

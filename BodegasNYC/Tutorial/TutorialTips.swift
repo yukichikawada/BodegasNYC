@@ -102,13 +102,17 @@ nonisolated struct AddBodegaTip: Tip {
     }
 }
 
-/// "Put the marker on the door." Popover on "Use This Location".
+/// "Put the marker on the door." Popover on "Use This Location". A popover
+/// floats above the whole window, onboarding overlay included, so it also
+/// waits for onboarding to be gone (Show Intro Again while placing, or the
+/// overlay still animating out on the first-run add path).
 nonisolated struct PlacementTip: Tip {
     var title: Text { Text(AppCopy.tutorialPlacementTipTitle.copy.text) }
     var message: Text? { Text(AppCopy.tutorialPlacementTipBody.copy.text) }
 
     var rules: [Rule] {
         #Rule(TutorialTips.$hasAddedFirstBodega) { $0 == false }
+        #Rule(TutorialTips.$isOnboardingVisible) { $0 == false }
     }
 }
 
@@ -148,20 +152,9 @@ struct BodegaTipStyle: TipViewStyle {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                Button {
+                CardCloseButton {
                     configuration.tip.invalidate(reason: .tipClosed)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.secondary)
-                        .frame(width: 44, height: 44)
-                        .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                // Same as the map card's close: pull the 44pt target back
-                // so the glyph lines up with the title.
-                .padding(.top, -12)
-                .padding(.trailing, -12)
-                .accessibilityLabel(AppCopy.dismissAction.copy.text)
             }
             ForEach(configuration.actions) { action in
                 Button(action: action.handler) {
