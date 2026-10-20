@@ -102,6 +102,47 @@ struct BodegaListViewModelTests {
         }
     }
 
+    /// protects: the load-failed state's Retry actually reloads.
+    /// fails_when: retry leaves `.failed` in place or never fetches again.
+    /// no_claim: the button wiring in `BodegaListView`.
+    @Test func retryAfterAFailedLoadRefetchesAndLoadsTheRows() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))
+        let body = "[\(Self.bodegaJSON(name: "El Sol")),\(Self.bodegaJSON(name: "La Luna"))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+        guard case .failed = viewModel.loadState else {
+            Issue.record("expected .failed, got \(viewModel.loadState)")
+            return
+        }
+
+        viewModel.retry()
+        #expect(viewModel.loadState == .loading)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        #expect(viewModel.bodegas.map(\.name) == ["El Sol", "La Luna"])
+    }
+
+    @Test func retryIsANoOpOnceLoaded() async throws {
+        MockURLProtocol.reset()
+        let requestCount = Captured(0)
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8)) { _ in
+            requestCount.set(requestCount.get() + 1)
+        }
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.retry()
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        #expect(requestCount.get() == 1)
+    }
+
     @Test func settingAFilterNarrowsFilteredBodegasWithoutRefetching() async throws {
         MockURLProtocol.reset()
         let requestCount = Captured(0)

@@ -28,6 +28,11 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     private(set) var isTrackingEnabled = false
     private(set) var polylines: [[Coordinate]] = []
     private(set) var lastTrackingError: String?
+    /// The map's "No streets yet." card was closed. Deliberately not
+    /// persisted: it lives here rather than on `MapScreenView` so it
+    /// survives the Map/List tab switch that rebuilds that view, and resets
+    /// on relaunch (spec #24, eng review).
+    var isEmptyBannerDismissed = false
 
     private let locationPermissionClient: LocationPermissionClient
     /// Held explicitly (not just its `.mainContext`) so the container's
@@ -191,27 +196,39 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         Task { @MainActor in
-            for location in locations {
-                guard location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 50,
-                      abs(location.timestamp.timeIntervalSinceNow) <= 30
-                else { continue }
-                modelContext.insert(
-                    WalkedPoint(
-                        latitude: location.coordinate.latitude,
-                        longitude: location.coordinate.longitude,
-                        recordedAt: location.timestamp
-                    )
-                )
-            }
-            // Explicit, immediate save rather than relying on autosave
-            // timing — the process can be suspended moments after a
-            // background delivery.
-            do {
-                try modelContext.save()
-            } catch {
-                lastTrackingError = error.localizedDescription
-            }
+            recordLocations(locations)
         }
+    }
+
+    /// The main-actor body of `didUpdateLocations`, split out so tests can
+    /// drive it synchronously instead of racing the delegate's `Task`.
+    /// Persists every fix accurate and fresh enough to trust, then refreshes
+    /// `polylines` (eng review R8) so the overlay — and the "No streets
+    /// yet." card's "This fills in on its own" — update while walking
+    /// rather than only the next time the map appears.
+    func recordLocations(_ locations: [CLLocation]) {
+        for location in locations {
+            guard location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 50,
+                  abs(location.timestamp.timeIntervalSinceNow) <= 30
+            else { continue }
+            modelContext.insert(
+                WalkedPoint(
+                    latitude: location.coordinate.latitude,
+                    longitude: location.coordinate.longitude,
+                    recordedAt: location.timestamp
+                )
+            )
+        }
+        // Explicit, immediate save rather than relying on autosave
+        // timing — the process can be suspended moments after a
+        // background delivery.
+        do {
+            try modelContext.save()
+        } catch {
+            lastTrackingError = error.localizedDescription
+            return
+        }
+        loadPolylinesIfNeeded()
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {

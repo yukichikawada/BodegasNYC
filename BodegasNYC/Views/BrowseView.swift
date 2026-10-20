@@ -238,10 +238,15 @@ struct BrowseView: View {
                 streetsWalkedViewModel: streetsWalkedViewModel,
                 isPlacingBodega: $isPlacingBodega,
                 onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
-                onSelectBodega: { path.append($0) }
+                onSelectBodega: { path.append($0) },
+                onClearFilters: { filter = filter.clearingAmenities() }
             )
         case .list:
-            BodegaListView(viewModel: listViewModel, filter: $filter)
+            BodegaListView(viewModel: listViewModel, filter: $filter) {
+                // Same as the toolbar's "Drop a Pin on Map".
+                activeTab = .map
+                isPlacingBodega = true
+            }
         }
     }
 

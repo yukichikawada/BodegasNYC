@@ -62,6 +62,17 @@ revisiting). Location, `is_hidden`, and `created_by` are not editable. The detai
 and list all update in place without a refetch. No backend changes. Covered by unit tests; not
 yet live-verified in Simulator.
 
+**Personality-Driven Empty States** (#24) — every empty state a new user can hit now speaks in
+the app's voice (dry New Yorker, no emoji, no exclamation points), with all copy in one
+`AppCopy` enum gated by `AppCopyVoiceTests` (eight mechanical voice rules). List: nothing
+loaded (breathing cat + Add a Bodega, which jumps to Map placement mode), filters hide all
+(Clear Filters drops toggles, keeps the search), search hides all, and load failed (Retry). Map:
+one `MapBottomCard` slot with a pure precedence function shows nothing-nearby, nothing-at-all,
+filtered-to-nothing, and no-streets-yet (closable until relaunch); the streets overlay now
+refreshes live while walking. Detail: section-owned no-reviews (cat line when the bodega has a
+cat) and no-photos states. Pins use new `pin`/`catPin` asset colors. No backend changes.
+Covered by unit tests; live screenshots via QA on the branch simulator.
+
 ## Remaining MVP feature work
 
 | Feature | Category | One-liner | Effort | Needs Your Sign-Off? | Notes / Dependencies |
@@ -70,7 +81,6 @@ yet live-verified in Simulator.
 | Onboarding Flow | Portfolio/Design | Custom onboarding that establishes tone immediately — not a generic permissions carousel. | M | **Yes** — needs your product voice/tone direction. | PRD §4.3/§8. |
 | First-Run Tutorial | Portfolio/Design | Guided "add your first bodega" flow that teaches by doing, not static screens. | M | **Yes** — same, needs voice/tone direction and interaction design. | PRD §4.3/§8. |
 | Custom Map↔List↔Detail Transitions | Portfolio/Design | Deliberate transitions between the three core views — map should never feel like it "goes away." | L | **Yes** — PRD §7 itself calls out that map-heavy screens deserve a focused `/plan` session once actually being built. | PRD §4.3/§8. Easy to underestimate — likely the largest single item here. |
-| Personality-Driven Empty States | Portfolio/Design | Empty states with personality at every point a new user could hit one (no bodegas nearby, no reviews/photos yet, no streets walked yet). | S | **Yes** — needs your copy/voice. | PRD §4.3/§8. Cheapest of the design-pass items — good candidate to bundle with whichever feature naturally produces the empty state. |
 | Delight Moment | Portfolio/Design | At least one genuine delight moment tied to a meaningful action — leading candidate is right after a user's first bodega gets added. | S–M | **Yes** — needs your creative direction on what the moment actually is. | PRD §4.3/§8. |
 
 ---

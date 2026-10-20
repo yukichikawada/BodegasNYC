@@ -39,6 +39,30 @@ final class BodegaMapViewModel {
         }
     }
 
+    /// True only when a fetch has landed and returned no bodegas at all,
+    /// before any filtering — the map's "nothing here" banners
+    /// (`MapBottomCard`). False during the initial load, after a failure,
+    /// and when a filter is what hides everything (that is
+    /// `isFilteredEmpty`). Stays true while a later refetch (a `.nearby`
+    /// pan, a mode change) is in flight — see `hasSettledData` — so the
+    /// card doesn't slide out and back in on every pan. Computed so it can
+    /// never drift from `loadState`/`loadedBodegas`.
+    var isLoadedEmpty: Bool {
+        hasSettledData && loadedBodegas.isEmpty
+    }
+
+    /// True when bodegas did load but the active filter matches none of
+    /// them (design DD7). Decided by filtering alone, not by
+    /// `displayItems`, so clustering or the visible region can't change it.
+    /// Like `isLoadedEmpty`, it holds through a refetch after a completed
+    /// load instead of flickering off while the fetch is in flight.
+    var isFilteredEmpty: Bool {
+        hasSettledData
+            && !loadedBodegas.isEmpty
+            && filter.isActive
+            && !loadedBodegas.contains(where: filter.matches)
+    }
+
     private let bodegaService: BodegaService
     private var loadedBodegas: [Bodega] = []
     private var lastRegion: MKCoordinateRegion?
@@ -204,6 +228,15 @@ final class BodegaMapViewModel {
         if let lastRegion {
             recluster(region: lastRegion)
         }
+    }
+
+    /// Whether `loadedBodegas` holds a real result to judge emptiness by:
+    /// after a successful load, and during any refetch that follows one.
+    /// `loadedBodegas` is only replaced when a fetch succeeds, so while a
+    /// refetch is in flight it still holds the last result. False during
+    /// the first load and after a failure.
+    private var hasSettledData: Bool {
+        loadState == .loaded || (loadState == .loading && hasLoadedOnce)
     }
 
     /// True while the fetch in flight would be the first dataset this view

@@ -88,7 +88,11 @@ struct BodegaDetailView: View {
                 ) { photo in
                     presentFlagSheet(for: .photo(photo.id))
                 }
-                ReviewsSection(reviews: viewModel.reviews, currentUserID: sessionStore.currentUserID) { review in
+                ReviewsSection(
+                    reviews: viewModel.reviews,
+                    hasCat: viewModel.bodega.hasCat,
+                    currentUserID: sessionStore.currentUserID
+                ) { review in
                     presentFlagSheet(for: .review(review.id))
                 }
                 HStack(spacing: 12) {
@@ -243,21 +247,40 @@ private struct RatingSummaryView: View {
     let averageRating: Double?
     let reviewCount: Int
 
+    /// Renders nothing without a rating (design DD9): the reviews section
+    /// owns the empty state, so "No reviews yet." isn't said twice.
     var body: some View {
-        HStack(spacing: 6) {
-            if let averageRating {
+        if let averageRating {
+            HStack(spacing: 6) {
                 Image(systemName: "star.fill").foregroundStyle(.yellow)
                 Text(String(format: "%.1f", averageRating))
                     .font(.headline)
                 Text("(\(reviewCount) review\(reviewCount == 1 ? "" : "s"))")
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-            } else {
-                Text("No reviews yet")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// A detail section's empty state (design DD9): quiet title and body,
+/// leading, no symbol, inside the section's own stack under its header and
+/// actions.
+private struct SectionEmptyState: View {
+    let title: AppCopy
+    let message: AppCopy
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.copy.text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            Text(message.copy.text)
+                .font(.footnote)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 }
 
@@ -281,7 +304,7 @@ private struct PhotoGallerySection: View {
                 .buttonStyle(.bordered)
             }
             if photos.isEmpty {
-                Text("No photos yet").font(.subheadline).foregroundStyle(.secondary)
+                SectionEmptyState(title: .emptyNoPhotosTitle, message: .emptyNoPhotosBody)
             } else {
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
@@ -306,6 +329,7 @@ private struct PhotoGallerySection: View {
 
 private struct ReviewsSection: View {
     let reviews: [Review]
+    let hasCat: Bool
     let currentUserID: UUID?
     let onFlag: (Review) -> Void
 
@@ -313,7 +337,8 @@ private struct ReviewsSection: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Reviews").font(.headline)
             if reviews.isEmpty {
-                Text("No reviews yet").font(.subheadline).foregroundStyle(.secondary)
+                let empty = AppCopy.noReviews(hasCat: hasCat)
+                SectionEmptyState(title: empty.title, message: empty.body)
             } else {
                 ForEach(reviews) { review in
                     // No flag option on your own review — edit it instead

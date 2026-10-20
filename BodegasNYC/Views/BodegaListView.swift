@@ -14,11 +14,16 @@ import SwiftUI
 ///
 /// `filter` is `BrowseView`'s shared filter state, bound here only so
 /// `.searchable` can edit its search text and the no-matches state can
-/// clear it — `BrowseView` pushes the result back into `viewModel.filter`,
-/// and this view renders `viewModel.filteredBodegas`.
+/// clear its toggles — `BrowseView` pushes the result back into
+/// `viewModel.filter`, and this view renders `viewModel.filteredBodegas`.
+///
+/// Empty-state copy comes from `AppCopy` (#24). `onAddBodega` is the
+/// nothing-loaded state's "Add a Bodega": `BrowseView` switches to the Map
+/// tab in placement mode.
 struct BodegaListView: View {
     let viewModel: BodegaListViewModel
     @Binding var filter: BodegaFilter
+    let onAddBodega: () -> Void
 
     var body: some View {
         content
@@ -42,11 +47,18 @@ struct BodegaListView: View {
         case .idle, .loading:
             ProgressView()
         case .loaded where viewModel.bodegas.isEmpty:
-            ContentUnavailableView(
-                "No bodegas yet",
-                systemImage: "cart",
-                description: Text("Be the first to add one.")
-            )
+            ContentUnavailableView {
+                Label {
+                    Text(AppCopy.emptyNoBodegasTitle.copy.text)
+                } icon: {
+                    EmptyStateCatSymbol()
+                }
+            } description: {
+                Text(AppCopy.emptyNoBodegasBody.copy.text)
+            } actions: {
+                Button(AppCopy.addBodegaAction.copy.text, action: onAddBodega)
+                    .buttonStyle(.bordered)
+            }
         case .loaded where viewModel.filteredBodegas.isEmpty:
             noMatches
         case .loaded:
@@ -56,31 +68,45 @@ struct BodegaListView: View {
                 }
             }
             .listStyle(.plain)
-        case .failed(let message):
-            ContentUnavailableView(
-                "Couldn't load bodegas",
-                systemImage: "exclamationmark.triangle",
-                description: Text(message)
-            )
+        case .failed:
+            // The raw error isn't shown (design DD5); Retry re-runs the
+            // initial load.
+            ContentUnavailableView {
+                Label(AppCopy.emptyLoadFailedTitle.copy.text, systemImage: "exclamationmark.triangle")
+            } description: {
+                Text(AppCopy.emptyLoadFailedBody.copy.text)
+            } actions: {
+                Button(AppCopy.retryAction.copy.text) { viewModel.retry() }
+                    .buttonStyle(.bordered)
+            }
         }
     }
 
-    /// Distinct from "No bodegas yet": there *are* bodegas, the filter just
-    /// hides all of them. A search-only filter gets the system's standard
-    /// search empty state (the search field's own clear button is the
-    /// obvious way out); once any data-point toggle is involved, that clear
-    /// button alone wouldn't help, so this offers Clear Filters instead.
+    /// Distinct from the nothing-loaded state: there *are* bodegas, the
+    /// filter just hides all of them. A search-only filter gets the search
+    /// state (the search field's own clear button is the obvious way out);
+    /// once any data-point toggle is involved, even alongside a search,
+    /// that clear button alone wouldn't help, so this offers Clear Filters,
+    /// which drops the toggles and keeps the search (design DD6).
     @ViewBuilder
     private var noMatches: some View {
         if filter.requiredAmenities.isEmpty {
-            ContentUnavailableView.search(text: filter.trimmedSearchText)
+            ContentUnavailableView {
+                Label(
+                    AppCopy.noSearchMatchesTitle(filter.trimmedSearchText).text,
+                    systemImage: "magnifyingglass"
+                )
+            } description: {
+                Text(AppCopy.emptyNoSearchMatchesBody.copy.text)
+            }
         } else {
             ContentUnavailableView {
-                Label("No bodegas match", systemImage: "line.3.horizontal.decrease.circle")
+                Label(AppCopy.emptyNoFilterMatchesTitle.copy.text, systemImage: "line.3.horizontal.decrease.circle")
             } description: {
-                Text("Try turning off some filters.")
+                Text(AppCopy.emptyNoFilterMatchesBody.copy.text)
             } actions: {
-                Button("Clear Filters") { filter = .none }
+                Button(AppCopy.clearFiltersAction.copy.text) { filter = filter.clearingAmenities() }
+                    .buttonStyle(.bordered)
             }
         }
     }
