@@ -127,6 +127,21 @@ struct OnboardingView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: Layout
+
+    /// Fixed top inset used when the 25% rule would push the content off a
+    /// short or crowded screen.
+    nonisolated static let compactTopInset: CGFloat = 16
+
+    /// Page content's top inset. DD1's 25% of the available height in the
+    /// regular case; a small fixed inset at accessibility Dynamic Type
+    /// sizes (the pinned buttons wrap and eat half the screen) and in
+    /// compact height (landscape), where 25% would leave the symbol and
+    /// title cut off at rest.
+    nonisolated static func topInset(height: CGFloat, isAccessibilitySize: Bool, isCompactHeight: Bool) -> CGFloat {
+        isAccessibilitySize || isCompactHeight ? compactTopInset : height * 0.25
+    }
+
     // MARK: Motion (design DD14)
 
     /// The overlay's enter/exit transition: slide down and fade, or a plain
@@ -154,6 +169,9 @@ private struct OnboardingPage<Extra: View>: View {
     let message: AppCopy
     @ViewBuilder let extra: () -> Extra
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
     var body: some View {
         GeometryReader { proxy in
             ScrollView {
@@ -174,7 +192,14 @@ private struct OnboardingPage<Extra: View>: View {
                 }
                 .frame(maxWidth: OnboardingLayout.maxContentWidth, alignment: .leading)
                 .padding(.horizontal, 24)
-                .padding(.top, proxy.size.height * 0.25)
+                .padding(
+                    .top,
+                    OnboardingView.topInset(
+                        height: proxy.size.height,
+                        isAccessibilitySize: dynamicTypeSize.isAccessibilitySize,
+                        isCompactHeight: verticalSizeClass == .compact
+                    )
+                )
                 .padding(.bottom, 24)
                 .frame(maxWidth: .infinity)
             }
