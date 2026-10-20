@@ -152,8 +152,10 @@ Contrast: 5.4:1 on white, 9.6:1 on black.
 corner at night; the map tiles already switch, so the chrome follows the system appearance.
 
 **Rules:**
-- Deli Green signals "tappable": buttons, links, toggles-on, selected tab, Near Me. It is never
-  used for a status ("open now", success) and never on a pin.
+- Deli Green signals "tappable": buttons, links, toggles-on, the selected tab, and text actions.
+  Icon buttons on Liquid Glass (toolbar, Near Me) take the label color, which is the system
+  behavior; do not force the tint on them. The user-location dot stays system blue
+  (`.tint(.blue)` on the Map): it is status, not a control.
 - Red appears in two forms that never share a surface at the same size: filled 28pt pin circles
   on the map, and plain text for form errors and destructive actions in sheets.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
@@ -318,3 +320,4 @@ the card; the card supplies the material.
 | 2026-10-20 | D6 onboarding keeps DD1's opaque system background | The memorable thing is the data on the map; a saturated opener sets an expectation the quiet app does not keep |
 | 2026-10-20 | catPin stays systemOrange with a white glyph; stars stay yellow | Glyph already encodes cat vs non-cat; color is redundant encoding |
 | 2026-10-20 | iOS 26: Liquid Glass for controls, material for floating content, opaque pages | HIG layering; text over a busy map needs a material surface |
+| 2026-10-20 | #66: root .tint(.accentColor) so toggles follow the tint; Map .tint(.blue) keeps the location dot blue | iOS switches ignore AccentColor; the location dot is status and the tint never encodes status |

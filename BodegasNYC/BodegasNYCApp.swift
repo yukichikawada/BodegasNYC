@@ -31,6 +31,9 @@ struct BodegasNYCApp: App {
     var body: some Scene {
         WindowGroup {
             RootView()
+                // iOS switches ignore the AccentColor asset; setting the
+                // tint once here makes toggles-on Deli Green (DESIGN.md D4).
+                .tint(.accentColor)
         }
     }
 }
