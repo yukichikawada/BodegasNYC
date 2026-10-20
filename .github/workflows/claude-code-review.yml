@@ -15,6 +15,7 @@
 # commenting while the job still goes green (#61). So after the action runs, a step checks
 # that the PR carries a comment from the Claude app; if not, the review runs once more, and
 # if it is still missing the job fails, so a green check always means a review was posted.
+# PRs that change this workflow file are exempt: the action refuses to run on them by design.
 name: Claude Code Review
 on:
   pull_request:
@@ -46,6 +47,15 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
         run: |
+          # The action refuses to run on a PR that changes this workflow file ("must have
+          # identical content to the default branch"), so such PRs can never carry a review
+          # comment; treat them as skipped rather than retrying or failing.
+          if gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename' \
+              | grep -qx '.github/workflows/claude-code-review.yml'; then
+            echo "::notice::PR #$PR changes this workflow, so the Claude review action skips itself; nothing to verify."
+            echo "found=skipped" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           found=$(gh api "repos/$REPO/issues/$PR/comments" --paginate \
             --jq '[.[] | select(.user.login | test("^claude(\\[bot\\])?$"))] | length')
           echo "found=$found" >> "$GITHUB_OUTPUT"
