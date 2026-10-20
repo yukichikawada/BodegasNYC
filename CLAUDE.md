@@ -91,6 +91,11 @@ scripts/sim-for-branch.sh delete               # when the PR is merged or abando
 Pass the UDID as the simulator id to MobileBuildMCP or `-destination "platform=iOS Simulator,id=$UDID"`.
 Never run the app on the test script's pinned "iPhone 17 Pro" device.
 
+Machine-wide build cap: `~/.claude/CLAUDE.md` caps concurrent `xcodebuild` runs at two across every
+session and project on this Mac (wait for a slot before `run-tests.sh` or any MobileBuildMCP build or
+test call; the script's lockfile serializes only this project's runs) and keeps a simulator booted
+only while its branch is building, installing or doing QA.
+
 `.mobilebuildmcp/config.yaml` enables MobileBuildMCP's `ui-automation` workflow (snapshot_ui,
 tap, type_text, swipe, long_press) so QA agents can drive the app, not just screenshot it. The
 server reads it at startup; after changing it, reconnect the MCP server (`/mcp`) or restart the
