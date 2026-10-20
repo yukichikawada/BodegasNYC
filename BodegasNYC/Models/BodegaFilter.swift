@@ -75,13 +75,26 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
         requiredAmenities.count + (trimmedSearchText.isEmpty ? 0 : 1)
     }
 
-    /// What the empty states' Clear Filters action applies (design DD6):
-    /// drops every amenity toggle but keeps the search text, so clearing
-    /// filters never also throws away what the user typed.
+    /// What the list's no-matches Clear Filters action applies (design
+    /// DD6): drops every amenity toggle but keeps the search text, so
+    /// clearing filters never also throws away what the user typed (the
+    /// list's search field is right there). The map card uses
+    /// `clearingForMapCard(in:)` instead.
     func clearingAmenities() -> BodegaFilter {
         var copy = self
         copy.requiredAmenities = []
         return copy
+    }
+
+    /// What the map's no-matches card's Clear Filters applies (#57),
+    /// decided by outcome against the loaded `bodegas`: DD6's
+    /// `clearingAmenities()` when that brings back at least one pin, and
+    /// otherwise `.none`. The map has no search field, so a search that
+    /// on its own matches nothing would leave the card stuck after an
+    /// amenities-only clear; one tap must always bring pins back.
+    func clearingForMapCard(in bodegas: [Bodega]) -> BodegaFilter {
+        let amenitiesCleared = clearingAmenities()
+        return bodegas.contains(where: amenitiesCleared.matches) ? amenitiesCleared : .none
     }
 
     func requires(_ amenity: Amenity) -> Bool {

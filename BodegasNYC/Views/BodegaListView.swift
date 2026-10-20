@@ -32,6 +32,11 @@ struct BodegaListView: View {
             // otherwise a search that matches nothing would remove the very
             // field needed to edit it.
             .searchable(text: $filter.searchText, prompt: "Name or address")
+            // Bodega names are proper nouns and slang: no auto-capitalised
+            // first letter (the empty state echoes the query verbatim) and
+            // no autocorrect fighting the spelling (#60).
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
             // iOS 26's default search presentation hides the navigation bar
             // while the field is focused, taking `BrowseView`'s Filters
             // button, Map/List picker, and Account/Add buttons with it
