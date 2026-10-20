@@ -153,10 +153,11 @@ corner at night; the map tiles already switch, so the chrome follows the system 
 
 **Rules:**
 - Deli Green signals "tappable": buttons, links, toggles-on, the selected tab, text actions,
-  and the icon buttons on the Liquid Glass toolbar (filter, account, add, Near Me, walked). The
-  tint is set once at the app root (`RootView().tint(.accentColor)`) so toggles follow it; do
-  not re-tint individual controls. The user-location dot stays system blue (`.tint(.blue)` on
-  the Map): it is status, not a control.
+  and the icon buttons on the Liquid Glass toolbar (filter, account, add, Locate Me, walked). It
+  is never used for a status ("open now", success, loading spinners) and never on a pin. The
+  `AccentColor` asset carries it; toggles need an explicit `.tint(.accentColor)` on their
+  `Section` because iOS switches ignore the asset. The user-location dot stays system blue
+  (`.tint(.blue)` on the Map): it is status, not a control.
 - Red appears in two forms that never share a surface at the same size: filled 28pt pin circles
   on the map, and plain text for form errors and destructive actions in sheets.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
@@ -177,7 +178,8 @@ plumbing and read as a web app. There is no font to load.
 **Display register (D5, 2026-10-20):** weight `.heavy`, width `.condensed` (`Font.Width`), on
 exactly three surfaces: onboarding page titles (`.largeTitle`), the first-add card title
 (`.headline`), and the bodega name in the detail header (`.title`). In SwiftUI:
-`.font(.system(.largeTitle, weight: .heavy).width(.condensed))`. This amends DD1's
+`.font(.display(.largeTitle))`. The register lives only in `Font.display(_:)`
+(`BodegasNYC/Views/Font+Display.swift`); never write the width chain inline. This amends DD1's
 `.largeTitle.bold()`. Condensed, not compressed: compressed heavy degrades at accessibility
 sizes. The register never appears in body text, list rows, the map card body, or labels.
 
@@ -305,8 +307,8 @@ the card; the card supplies the material.
 
 ## Follow-ups
 
-- #66: implement D4 and D5 in code: set the `AccentColor` asset to #0A7A43 / #34C77B; apply the
-  display register on the three surfaces.
+- #66 (done 2026-10-20): `AccentColor` asset set to #0A7A43 / #34C77B; `Font.display` applied
+  on the three surfaces; toggle sections tinted.
 - Ideas from the independent proposals, filed as issues, not adopted here: #67 pin name plates at
   block zoom (reads the block like the street; conflicts with DD3's label rule and MapKit's
   stacking, see #59), and #68 distances in blocks in the voice ("Closest is 2 blocks").
@@ -321,4 +323,4 @@ the card; the card supplies the material.
 | 2026-10-20 | D6 onboarding keeps DD1's opaque system background | The memorable thing is the data on the map; a saturated opener sets an expectation the quiet app does not keep |
 | 2026-10-20 | catPin stays systemOrange with a white glyph; stars stay yellow | Glyph already encodes cat vs non-cat; color is redundant encoding |
 | 2026-10-20 | iOS 26: Liquid Glass for controls, material for floating content, opaque pages | HIG layering; text over a busy map needs a material surface |
-| 2026-10-20 | #66: root .tint(.accentColor) so toggles follow the tint; Map .tint(.blue) keeps the location dot blue | iOS switches ignore AccentColor; the location dot is status and the tint never encodes status |
+| 2026-10-20 | #66: `.tint(.accentColor)` on the toggle sections (not the root) so switches follow the tint without tinting spinners; Map `.tint(.blue)` keeps the location dot blue | iOS switches ignore AccentColor; the tint never encodes status, and a root tint would color every ProgressView |

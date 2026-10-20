@@ -23,6 +23,8 @@ struct BodegaFilterSheet: View {
                         }
                     }
                 }
+                // iOS switches ignore the AccentColor asset (DESIGN.md Colors).
+                .tint(.accentColor)
                 if !filter.trimmedSearchText.isEmpty {
                     Section("Search") {
                         LabeledContent("Name or address contains", value: filter.trimmedSearchText)
