@@ -152,10 +152,11 @@ Contrast: 5.4:1 on white, 9.6:1 on black.
 corner at night; the map tiles already switch, so the chrome follows the system appearance.
 
 **Rules:**
-- Deli Green signals "tappable": buttons, links, toggles-on, the selected tab, and text actions.
-  Icon buttons on Liquid Glass (toolbar, Near Me) take the label color, which is the system
-  behavior; do not force the tint on them. The user-location dot stays system blue
-  (`.tint(.blue)` on the Map): it is status, not a control.
+- Deli Green signals "tappable": buttons, links, toggles-on, the selected tab, text actions,
+  and the icon buttons on the Liquid Glass toolbar (filter, account, add, Near Me, walked). The
+  tint is set once at the app root (`RootView().tint(.accentColor)`) so toggles follow it; do
+  not re-tint individual controls. The user-location dot stays system blue (`.tint(.blue)` on
+  the Map): it is status, not a control.
 - Red appears in two forms that never share a surface at the same size: filled 28pt pin circles
   on the map, and plain text for form errors and destructive actions in sheets.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
