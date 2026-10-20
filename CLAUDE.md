@@ -8,6 +8,26 @@ By default it only runs `BodegasNYCTests` (fast, seconds, no simulator clone). P
 
 The script pins the test destination to a specific simulator UDID (avoids ambiguous-destination clone spam from having 5 runtimes installed), skips SPM package-plugin trust validation (`-skipPackagePluginValidation`, needed for SwiftLintPlugins to run headlessly), sweeps up any stray "Clone N of ..." simulators before and after the run, hard-caps the run via `timeout` (default 180s / 3min; override with `TEST_TIMEOUT_SECONDS` or a trailing argument), and serializes concurrent invocations from other worktrees via a lockfile.
 
+## Housekeeping
+
+Builder and QA worktrees under `.claude/worktrees` are not removed automatically once they have
+commits, and the owner merges PRs outside Claude's sessions, so finished worktrees (some left
+locked) accumulate. At the start of any orchestration session, and again after the owner reports
+a batch of PRs merged, run:
+
+```sh
+scripts/cleanup-worktrees.sh          # dry run: lists what would be removed and what is kept, and why
+scripts/cleanup-worktrees.sh --apply  # unlocks + removes them, deletes their local branches and simulators
+```
+
+Only worktrees whose branch has a merged or closed PR (per `gh pr list`) are removed; a worktree
+with an open PR, no PR, or uncommitted tracked changes is kept and listed. Untracked `build/`
+output does not count as uncommitted work. Squash merges mean commit ancestry proves nothing, so
+PR state is the source of truth. The script also deletes `worktree-agent-*` scratch branches that
+point at commits already on `main` and runs `scripts/sim-for-branch.sh delete` for each removed
+branch. It never deletes remote branches. Do not wire `--apply` into a SessionStart hook; the
+dry run is the right thing to automate, the removal stays behind an explicit command.
+
 ## Orchestration and model routing
 
 Work is tracked as GitHub issues (`gh issue list`). There is no Notion planning pipeline; ignore
