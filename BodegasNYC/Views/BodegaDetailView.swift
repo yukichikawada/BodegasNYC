@@ -145,7 +145,7 @@ struct BodegaDetailView: View {
                 viewModel.bodegaWasUpdated(updated)
                 onBodegaUpdated(updated)
                 self.editBodegaViewModel = nil
-            }
+            } onOpenExisting: { _ in }
         }
         .task(id: pickedPhotoItem) { await loadPickedPhoto() }
         .sheet(item: $addPhotoViewModel) { addPhotoViewModel in

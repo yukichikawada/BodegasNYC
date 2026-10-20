@@ -52,6 +52,8 @@ struct BrowseView: View {
     @State private var signOutErrorMessage: String?
     @State var isPlacingBodega = false
     @State private var addBodegaViewModel: AddBodegaViewModel?
+    @State private var existingToOpen: Bodega? // a duplicate-prompt match (#20)
+    @State var detailOpenedFromAddFlow: Bodega.ID? // see `zoomsFromPin(to:)`
     @State private var isResolvingCurrentLocation = false
     /// The single source of truth for filter/search across both tabs —
     /// pushed into both view models via `.onChange` below, so switching
@@ -172,7 +174,7 @@ struct BrowseView: View {
                         mapViewModel.bodegaWasUpdated(updatedBodega)
                         listViewModel.bodegaWasUpdated(updatedBodega)
                     }
-                    .pinToDetailTransition(sourceID: bodega.id, in: detailTransition, fromMap: activeTab == .map)
+                    .pinToDetailTransition(sourceID: bodega.id, in: detailTransition, fromMap: zoomsFromPin(to: bodega))
                     .task { await addTipState.donateDidOpenBodegaDetail() }
                 }
                 .sheet(isPresented: $showingSignIn) {
@@ -188,9 +190,11 @@ struct BrowseView: View {
                     listScrollID = nil
                 }
                 // The add sheet and everything after a successful add (#25).
-                .addBodegaFlow($addBodegaViewModel, sessionStore: sessionStore, completion: addCompletion) {
+                .addBodegaFlow($addBodegaViewModel, sessionStore: sessionStore, completion: addCompletion,
+                               existingToOpen: $existingToOpen, openExisting: openExisting) {
                     activeTab = .map
                 }
+                .onChange(of: path.isEmpty) { if path.isEmpty { detailOpenedFromAddFlow = nil } }
                 .onChange(of: showingOnboarding) { _, isShowing in
                     syncTipParameters()
                     guard !isShowing else { return }

@@ -10,6 +10,14 @@
 
 **Context:** CLAUDE.md "Running tests": xcodebuild clones the destination simulator for `BodegasNYCUITests` and can hang launching onto the fresh clone with no internal timeout, so `--ui` runs usually hit the 3-minute cap and get killed. Start at the clone step in `scripts/run-tests.sh` (a pre-booted, pinned destination and `-parallel-testing-enabled NO` are the first things to try), then add one `XCUITest` that taps a pin and asserts the detail title. Surfaced by the 2026-10-19 eng review of the voice and first-run spec (decision R3/D5, TODO D12).
 
+**Cases to add once the target runs** (#20 duplicate check, eng review D9; each is covered today only by live QA on a branch simulator):
+
+- Submit with a bodega within 50 m → the "Is this one of these?" sheet → tap a match → the add sheet closes and that bodega's detail is pushed.
+- Submit with a match → "No, It's New" → inserted, the pin drops.
+- Submit with a match → swipe the sheet down → the form is intact; Submit again → the sheet again.
+- Signed out, Submit with a match → "No, It's New" → the half sheet is gone, then the sign-in sheet presents.
+- Cancel while the check is running (stalled RPC) → no row is inserted.
+
 **Effort:** M
 **Priority:** P3
 **Depends on:** None

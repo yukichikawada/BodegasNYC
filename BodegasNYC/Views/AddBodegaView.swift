@@ -15,9 +15,29 @@ struct AddBodegaView: View {
     @Bindable var viewModel: AddBodegaViewModel
     let sessionStore: SessionStore
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     let onSubmitted: (Bodega) -> Void
+    /// A match in the duplicate prompt was tapped (#20): the parent closes
+    /// this sheet, dropping the draft, and opens that bodega. Edit Bodega
+    /// never shows the prompt and passes `{ _ in }`.
+    let onOpenExisting: (Bodega) -> Void
+    /// True from the moment the duplicate prompt is entered until its sheet
+    /// has finished dismissing. Holds the sign-in sheet back while the half
+    /// sheet animates away after a signed-out "No, It's New": SwiftUI drops
+    /// a presentation started during another's dismissal.
+    @State private var isDuplicateSheetUp = false
+    /// The duplicate sheet opens at `.large` at accessibility text sizes so
+    /// the first match is on screen (design DS2); set on each presentation.
+    @State private var duplicateDetent: PresentationDetent = .medium
+    /// The matches on screen, kept past the prompt state so the sheet does
+    /// not empty out while it animates away.
+    @State private var shownMatches: [Bodega] = []
 
     private var isEditing: Bool { viewModel.isEditing }
+
+    private var isShowingDuplicates: Bool {
+        if case .possibleDuplicates = viewModel.submissionState { true } else { false }
+    }
 
     var body: some View {
         NavigationStack {
@@ -71,7 +91,18 @@ struct AddBodegaView: View {
             .overlay { if viewModel.submissionState == .submitting { ProgressView() } }
             .interactiveDismissDisabled(viewModel.submissionState == .submitting)
             .onChange(of: viewModel.submissionState) { _, newValue in
-                if case .submitted(let bodega) = newValue { onSubmitted(bodega) }
+                switch newValue {
+                case .submitted(let bodega):
+                    onSubmitted(bodega)
+                case .possibleDuplicates(let matches):
+                    // Always a real transition: the prompt is only ever
+                    // entered from `.submitting`.
+                    shownMatches = matches
+                    duplicateDetent = dynamicTypeSize.isAccessibilitySize ? .large : .medium
+                    isDuplicateSheetUp = true
+                default:
+                    break
+                }
             }
             // Driven directly off `submissionState` rather than an
             // `.onChange`-triggered `@State` flag: `.onChange` only fires
@@ -82,9 +113,12 @@ struct AddBodegaView: View {
             // `dismissSignInPrompt()` resets state to `.idle` on dismissal
             // (swipe-down or a successful sign-in's programmatic dismiss)
             // so the next Submit tap starts from a clean transition.
+            // Held back while the duplicate sheet is still on screen or
+            // animating away (see `isDuplicateSheetUp`); its `onDismiss`
+            // clears the flag and this binding then presents.
             .sheet(
                 isPresented: Binding(
-                    get: { viewModel.submissionState == .signInRequired },
+                    get: { viewModel.submissionState == .signInRequired && !isDuplicateSheetUp },
                     set: { isPresented in
                         if !isPresented { viewModel.dismissSignInPrompt() }
                     }
@@ -95,7 +129,31 @@ struct AddBodegaView: View {
                     .presentationDetents([.medium])
                     .presentationBackground(.regularMaterial)
             }
+            // The duplicate prompt (#20), driven off `submissionState` like
+            // the sign-in sheet above. Swipe-down resets to `.idle`.
+            .sheet(
+                isPresented: Binding(
+                    get: { isShowingDuplicates },
+                    set: { isPresented in
+                        if !isPresented { viewModel.dismissDuplicatePrompt() }
+                    }
+                ),
+                onDismiss: { isDuplicateSheetUp = false },
+                content: {
+                    DuplicateBodegaSheet(
+                        matches: shownMatches,
+                        onPick: { onOpenExisting($0) },
+                        onConfirmNew: { viewModel.confirmNew() }
+                    )
+                    .presentationDetents([.medium, .large], selection: $duplicateDetent)
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(.regularMaterial)
+                }
+            )
         }
+        // Cancel, or a match opened: a check still running must not go on
+        // to insert the dropped draft (#20 eng R4).
+        .onDisappear { viewModel.cancelSubmit() }
     }
 }
 
