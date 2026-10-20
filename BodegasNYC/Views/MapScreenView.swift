@@ -137,6 +137,10 @@ struct MapScreenView: View {
             // and a fix arrives — no separate gating needed here.
             UserAnnotation()
         }
+        // The location dot is status, not a control, so it stays system
+        // blue rather than taking the app tint (DESIGN.md Colors). Applied
+        // to the Map alone, before the overlays, so they keep the tint.
+        .tint(.blue)
         .onMapCameraChange(frequency: .onEnd) { context in
             lastVisibleRegion = context.region
             viewModel.regionDidSettle(context.region)

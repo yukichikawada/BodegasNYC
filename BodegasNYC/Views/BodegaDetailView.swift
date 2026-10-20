@@ -231,7 +231,7 @@ struct BodegaDetailView: View {
     private var header: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(viewModel.bodega.name)
-                .font(.title2.bold())
+                .font(.display(.title))
             if let address = viewModel.bodega.address {
                 Text(address)
                     .font(.subheadline)

@@ -54,7 +54,7 @@ struct FirstAddCard: View {
     private var textColumn: some View {
         VStack(alignment: .leading, spacing: 4) {
             Text(AppCopy.delightFirstAddTitle.copy.text)
-                .font(.headline)
+                .font(.display(.headline))
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilitySortPriority(3)

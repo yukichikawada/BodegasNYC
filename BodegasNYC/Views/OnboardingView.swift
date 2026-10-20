@@ -184,7 +184,7 @@ private struct OnboardingPage<Extra: View>: View {
                         .foregroundStyle(Color.catPin)
                         .accessibilityHidden(true)
                     Text(title.copy.text)
-                        .font(.largeTitle.bold())
+                        .font(.display(.largeTitle))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityAddTraits(.isHeader)
                     Text(message.copy.text)

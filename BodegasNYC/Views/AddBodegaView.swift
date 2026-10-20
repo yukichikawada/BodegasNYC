@@ -39,11 +39,16 @@ struct AddBodegaView: View {
                     Toggle(isOn: $viewModel.sellsBeer) { Label("Beer", systemImage: "mug") }
                     Toggle(isOn: $viewModel.sellsLotto) { Label("Lotto", systemImage: "ticket") }
                 }
+                // iOS switches ignore the AccentColor asset. Tinted per
+                // section, not on the Form, so the submit ProgressView
+                // overlay stays gray (DESIGN.md Colors: tint is never status).
+                .tint(.accentColor)
                 Section("Hours") {
                     ForEach($viewModel.dayEntries) { $entry in
                         DayHoursRow(entry: $entry)
                     }
                 }
+                .tint(.accentColor)
                 if case .failed(let message) = viewModel.submissionState {
                     Section { Text(message).foregroundStyle(.red).font(.footnote) }
                 }
