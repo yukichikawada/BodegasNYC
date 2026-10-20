@@ -146,26 +146,7 @@ struct BrowseView: View {
                     ToolbarItem(placement: .topBarLeading) {
                         filterButton
                     }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        accountMenu
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            Button("Drop a Pin on Map", systemImage: "mappin.and.ellipse") {
-                                // Manual placement: pan-under-a-fixed-pin
-                                // over whatever the map already shows (see
-                                // `PlacementBottomBar`'s doc comment, in
-                                // PlacementBottomBar.swift) — no GPS fetch here. That's the
-                                // separate "Use Current Location" item below.
-                                requestPlacement()
-                            }
-                            Button("Use Current Location", systemImage: "location.fill") {
-                                Task { await useCurrentLocationShortcut() }
-                            }
-                        } label: {
-                            Label("Add Bodega", systemImage: "plus")
-                        }
-                    }
+                    // Account and Add: see `trailingToolbar`.
                 }
                 .navigationDestination(for: Bodega.self) { bodega in
                     // `path` is deliberately left holding the pre-edit
@@ -257,6 +238,32 @@ struct BrowseView: View {
                 } message: {
                     Text(signOutErrorMessage ?? "")
                 }
+        }
+    }
+
+    /// Account and Add. Declared by `content` after `MapScreenView`, so the
+    /// map-only Locate Me and Streets Walked come before them: innermost in
+    /// the trailing group, and Account and Add keep their place when the
+    /// List tab drops those two (#23).
+    @ToolbarContentBuilder
+    var trailingToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            accountMenu
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Button("Drop a Pin on Map", systemImage: "mappin.and.ellipse") {
+                    // Manual placement: pan-under-a-fixed-pin over whatever
+                    // the map already shows (see `PlacementBottomBar`) — no
+                    // GPS fetch here. That's "Use Current Location" below.
+                    requestPlacement()
+                }
+                Button("Use Current Location", systemImage: "location.fill") {
+                    Task { await useCurrentLocationShortcut() }
+                }
+            } label: {
+                Label("Add Bodega", systemImage: "plus")
+            }
         }
     }
 

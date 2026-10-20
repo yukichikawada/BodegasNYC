@@ -31,6 +31,12 @@ extension BrowseView {
             .allowsHitTesting(activeTab == .map)
             .accessibilityHidden(activeTab == .list)
 
+            // Hosts Account and Add after the map's own toolbar items, so
+            // those sit innermost (toolbar items merge in view order).
+            Color.clear
+                .frame(width: 0, height: 0)
+                .toolbar { trailingToolbar }
+
             if activeTab == .list {
                 BodegaListView(
                     viewModel: listViewModel,
