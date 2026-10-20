@@ -26,6 +26,13 @@ struct BrowseView: View {
             case .list: "List"
             }
         }
+
+        var systemImage: String {
+            switch self {
+            case .map: "map"
+            case .list: "list.bullet"
+            }
+        }
     }
 
     @State private var activeTab: Tab = .map
@@ -44,6 +51,12 @@ struct BrowseView: View {
     /// Map↔List never loses or desyncs it.
     @State private var filter: BodegaFilter = .none
     @State private var showingFilters = false
+    /// On iOS 26 the trailing toolbar buttons grow with Dynamic Type and
+    /// squeeze the principal slot: at `.xLarge` the segmented Map/List
+    /// control truncates and from `.xxLarge` up the toolbar drops it
+    /// entirely, even icon-only (#44). `modePicker` switches to a compact
+    /// `Menu` from `.xLarge` up so the List tab stays reachable.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private let bodegaService: BodegaService
     private let reviewService: ReviewService
@@ -73,18 +86,39 @@ struct BrowseView: View {
         self.streetsWalkedViewModel = streetsWalkedViewModel
     }
 
+    /// The Map/List switch in the toolbar's principal slot. A text
+    /// segmented control at default sizes; from `.xLarge` up it becomes a
+    /// single-button `Menu` wrapping the same `Picker` (see the
+    /// `dynamicTypeSize` doc comment for why).
+    @ViewBuilder
+    private var modePicker: some View {
+        let picker = Picker("Browse Mode", selection: $activeTab) {
+            ForEach(Tab.allCases) { tab in
+                Label(tab.label, systemImage: tab.systemImage).tag(tab)
+            }
+        }
+        if dynamicTypeSize >= .xLarge {
+            Menu {
+                picker
+            } label: {
+                Label(activeTab.label, systemImage: activeTab.systemImage)
+            }
+            .accessibilityLabel("Browse Mode")
+            .accessibilityValue(activeTab.label)
+        } else {
+            picker
+                .pickerStyle(.segmented)
+                .labelStyle(.titleOnly)
+                .frame(maxWidth: 200)
+        }
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             content
                 .toolbar {
                     ToolbarItem(placement: .principal) {
-                        Picker("Browse Mode", selection: $activeTab) {
-                            ForEach(Tab.allCases) { tab in
-                                Text(tab.label).tag(tab)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .frame(maxWidth: 200)
+                        modePicker
                     }
                     ToolbarItem(placement: .topBarLeading) {
                         filterButton
