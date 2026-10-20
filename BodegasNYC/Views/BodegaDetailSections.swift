@@ -55,7 +55,12 @@ struct HoursSection: View {
             Text("Hours").font(.headline)
             ForEach(orderedDays, id: \.label) { day in
                 HStack {
-                    Text(day.label).frame(width: 40, alignment: .leading)
+                    // Never truncate/wrap the day at large Dynamic Type sizes;
+                    // kept in step with `DayHoursRow` in AddBodegaView.
+                    Text(day.label)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: 40, alignment: .leading)
                     Text(describe(day.dayHours))
                         .foregroundStyle(.secondary)
                 }

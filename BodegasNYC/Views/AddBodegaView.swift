@@ -99,7 +99,11 @@ private struct DayHoursRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle(isOn: isOpen) {
                 HStack {
-                    Text(entry.label).frame(width: 40, alignment: .leading)
+                    // Never truncate/wrap the day at large Dynamic Type sizes.
+                    Text(entry.label)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: 40, alignment: .leading)
                     // Open rows already show their time fields below; only
                     // the collapsed (closed) state needs spelling out.
                     if entry.isClosed {
