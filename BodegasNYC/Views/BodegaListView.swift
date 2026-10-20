@@ -27,6 +27,12 @@ struct BodegaListView: View {
             // otherwise a search that matches nothing would remove the very
             // field needed to edit it.
             .searchable(text: $filter.searchText, prompt: "Name or address")
+            // iOS 26's default search presentation hides the navigation bar
+            // while the field is focused, taking `BrowseView`'s Filters
+            // button, Map/List picker, and Account/Add buttons with it
+            // (issue #37). Keep the toolbar on screen so a search in
+            // progress can still switch tabs or open Filters.
+            .searchPresentationToolbarBehavior(.avoidHidingContent)
             .task { viewModel.loadInitialIfNeeded() }
     }
 
