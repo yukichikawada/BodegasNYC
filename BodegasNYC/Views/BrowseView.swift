@@ -151,8 +151,8 @@ struct BrowseView: View {
                             Button("Drop a Pin on Map", systemImage: "mappin.and.ellipse") {
                                 // Manual placement: pan-under-a-fixed-pin
                                 // over whatever the map already shows (see
-                                // `MapScreenView`'s `PlacementBottomBar` doc
-                                // comment) — no GPS fetch here. That's the
+                                // `PlacementBottomBar`'s doc comment, in
+                                // PlacementBottomBar.swift) — no GPS fetch here. That's the
                                 // separate "Use Current Location" item below.
                                 activeTab = .map
                                 isPlacingBodega = true

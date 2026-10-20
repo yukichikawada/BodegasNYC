@@ -26,7 +26,8 @@ extension AddCompletionCoordinator {
         )
     }
 
-    /// Centers the map on the new pin at street zoom (span 0.004), animated
+    /// Centers the map on the given point (the coordinator passes the pin's
+    /// `cameraCenter(for:)`) at street zoom (span 0.004), animated
     /// over 0.6 s; the drop waits for it to settle.
     static func cameraMove(_ cameraPosition: Binding<MapCameraPosition>) -> (Coordinate) -> Void {
         { coordinate in

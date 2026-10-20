@@ -61,19 +61,28 @@ final class AddCompletionCoordinator {
     static let cardAutoDismiss: Duration = .seconds(8)
     /// The span the camera flies to for a new pin (street zoom).
     static let cameraSpan = 0.004
-    /// How far the settled camera center may be from the new pin and still
-    /// count as "settled on it": a quarter of the target span. The bottom
-    /// card floats over the map rather than insetting it (#58), so the
-    /// reported center is the pin's; the tolerance stays screen-relative
-    /// rather than tight to absorb MapKit's rounding. A settle from an
-    /// earlier, unrelated camera change is still rejected; the fallback
-    /// covers it.
+    /// How far the settled camera center may be from `cameraCenter(for:)`
+    /// and still count as "settled on the pin": a quarter of the target
+    /// span. Screen-relative rather than tight, since MapKit rounds the
+    /// settled center and the top chrome makes the visible area's centre
+    /// differ from the full view's. A settle from an earlier, unrelated
+    /// camera change is still rejected; the fallback covers it.
     static let settleTolerance = cameraSpan / 4
+
+    /// Where the camera centres for a new pin: a sixth of the span south of
+    /// it, so the pin sits about a third of the way down the map. The bottom
+    /// card floats over the map without insetting it (#58), and at large
+    /// text sizes it covers much of the lower half, so a centred pin could
+    /// land under it.
+    static func cameraCenter(for pin: Coordinate) -> Coordinate {
+        Coordinate(latitude: pin.latitude - cameraSpan / 6, longitude: pin.longitude)
+    }
 
     private(set) var dropState: DropState = .none
     private(set) var firstAddCard: Bodega?
     private(set) var hapticTrigger = 0
 
+    /// Centres the map on the coordinate it's given (`cameraCenter(for:)`).
     /// Assigned once the owning view's state exists (`BrowseView` binds it
     /// to its camera position on appear), hence a `var`.
     @ObservationIgnored var moveCamera: (Coordinate) -> Void
@@ -143,7 +152,7 @@ final class AddCompletionCoordinator {
         current = bodega
         currentIsFirstAdd = isFirstAdd
         dropState = .pending(bodega.id)
-        moveCamera(bodega.coordinate)
+        moveCamera(Self.cameraCenter(for: bodega.coordinate))
 
         let clock = clock
         task = Task { [weak self] in
@@ -160,12 +169,13 @@ final class AddCompletionCoordinator {
 
     /// The map's camera finished moving (`onMapCameraChange(frequency:
     /// .onEnd)`). Starts the drop if a pin is waiting and the camera came to
-    /// rest on it; pass `nil` to skip the position check.
+    /// rest on its `cameraCenter(for:)`; pass `nil` to skip the position check.
     func cameraDidSettle(center: Coordinate? = nil) {
         guard case .pending(let id) = dropState, let bodega = current, bodega.id == id else { return }
         if let center {
-            let latOff = abs(center.latitude - bodega.coordinate.latitude)
-            let lonOff = abs(center.longitude - bodega.coordinate.longitude)
+            let target = Self.cameraCenter(for: bodega.coordinate)
+            let latOff = abs(center.latitude - target.latitude)
+            let lonOff = abs(center.longitude - target.longitude)
             guard latOff <= Self.settleTolerance, lonOff <= Self.settleTolerance else { return }
         }
         beginDrop(of: id)

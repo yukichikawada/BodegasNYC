@@ -20,6 +20,10 @@ struct MapScreenView: View {
         span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
     )
     private static let minimumZoomSpan = 0.002
+    /// Extra bottom padding that keeps the card 8pt above the map's
+    /// attribution row (Apple Maps logo + Legal, ~16pt measured, fixed at
+    /// every text size) rather than on top of it (#58).
+    private static let attributionClearance: CGFloat = 24
 
     private let viewModel: BodegaMapViewModel
     @Binding private var cameraPosition: MapCameraPosition
@@ -169,8 +173,9 @@ struct MapScreenView: View {
             }
         }
         // An overlay, not a safe-area inset, so the map doesn't shift when a
-        // card comes or goes (#58); it still sits on the bottom safe area
-        // (DD13), and VoiceOver still reads it after the map's content (DD15).
+        // card comes or goes (#58). Lifted clear of the Apple Maps logo and
+        // Legal link, which must stay visible; VoiceOver still reads it after
+        // the map's content (DD15).
         .overlay(alignment: .bottom) {
             VStack(spacing: 0) {
                 if let content = bottomCardContent {
@@ -185,22 +190,27 @@ struct MapScreenView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
             }
+            .padding(.bottom, Self.attributionClearance)
             .animation(.easeInOut(duration: AddCompletionCoordinator.cardTransitionSeconds), value: bottomCardContent)
             // An overlay is otherwise read before the map's content.
             .accessibilitySortPriority(-1)
         }
         // Placement is a mode: its bar insets the map, centring the crosshair.
         .safeAreaInset(edge: .bottom) {
-            if isPlacingBodega {
-                PlacementBottomBar(
-                    onUseThisLocation: {
-                        onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
-                        isPlacingBodega = false
-                    },
-                    onCancel: { isPlacingBodega = false },
-                    onNearMe: { Task { await locateMe() } }
-                )
+            VStack(spacing: 0) {
+                if isPlacingBodega {
+                    PlacementBottomBar(
+                        onUseThisLocation: {
+                            onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
+                            isPlacingBodega = false
+                        },
+                        onCancel: { isPlacingBodega = false },
+                        onNearMe: { Task { await locateMe() } }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
+            .animation(.easeInOut(duration: AddCompletionCoordinator.cardTransitionSeconds), value: isPlacingBodega)
         }
         .task {
             viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
