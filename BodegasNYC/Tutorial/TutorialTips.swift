@@ -168,9 +168,12 @@ struct BodegaTipStyle: TipViewStyle {
         if inline {
             content
         } else {
+            // Capped (as DD16 caps the pin label) so the placement popover
+            // always fits above Use This Location at accessibility sizes.
             content
                 .padding(16)
                 .background(.regularMaterial)
+                .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
     }
 }

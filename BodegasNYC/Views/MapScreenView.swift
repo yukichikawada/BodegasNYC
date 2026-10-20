@@ -342,22 +342,22 @@ private struct PlacementBottomBar: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            HStack {
-                nearMeButton
-                if isStacked { Spacer() }
-                Button("Cancel", action: onCancel)
-                if !isStacked {
-                    Spacer()
-                    useThisLocationButton
-                }
-            }
             if isStacked {
+                // One row only while neither label has to wrap (AX sizes).
+                ViewThatFits(in: .horizontal) {
+                    HStack { nearMeButton.fixedSize(); Spacer(); cancelButton.fixedSize() }
+                    VStack(spacing: 12) { nearMeButton; cancelButton }
+                }
                 useThisLocationButton
+            } else {
+                HStack { nearMeButton; cancelButton; Spacer(); useThisLocationButton }
             }
         }
         .padding()
         .background(.regularMaterial)
     }
+
+    private var cancelButton: some View { Button("Cancel", action: onCancel) }
 
     private var nearMeButton: some View {
         Button(action: onNearMe) {
