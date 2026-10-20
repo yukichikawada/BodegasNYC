@@ -319,6 +319,86 @@ struct BodegaMapViewModelTests {
         #expect(viewModel.isFilteredEmpty == false)
     }
 
+    // QA bug 2: a refetch after a completed load must not flip the flags
+    // off mid-flight (the card used to slide out and back on every pan).
+
+    @Test func isLoadedEmptyHoldsThroughARefetchAfterAnEmptyLoad() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.isLoadedEmpty == true)
+
+        // Browse-mode change starts a refetch.
+        viewModel.browseModeDidChange(.nearby, currentRegion: Self.sampleRegion)
+        #expect(viewModel.loadState == .loading)
+        #expect(viewModel.isLoadedEmpty == true)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.isLoadedEmpty == true)
+
+        // A .nearby region change starts another.
+        viewModel.regionDidSettle(Self.sampleRegion)
+        #expect(viewModel.loadState == .loading)
+        #expect(viewModel.isLoadedEmpty == true)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.isLoadedEmpty == true)
+    }
+
+    @Test func emptyFlagsAreFalseDuringTheInitialLoad() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+
+        #expect(viewModel.loadState == .loading)
+        #expect(viewModel.isLoadedEmpty == false)
+        #expect(viewModel.isFilteredEmpty == false)
+        await viewModel.waitForPendingFetchForTesting()
+    }
+
+    @Test func isFilteredEmptyHoldsThroughARefetchWhenTheFilterHidesAll() async throws {
+        MockURLProtocol.reset()
+        let body = "[\(Self.bodegaJSON(name: "Plain Deli"))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        #expect(viewModel.isFilteredEmpty == true)
+
+        viewModel.browseModeDidChange(.nearby, currentRegion: Self.sampleRegion)
+        #expect(viewModel.loadState == .loading)
+        #expect(viewModel.isFilteredEmpty == true)
+        #expect(viewModel.isLoadedEmpty == false)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.isFilteredEmpty == true)
+    }
+
+    @Test func emptyFlagsAreFalseAfterARefetchFails() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(viewModel.isLoadedEmpty == true)
+
+        viewModel.browseModeDidChange(.nearby, currentRegion: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        guard case .failed = viewModel.loadState else {
+            Issue.record("expected .failed, got \(viewModel.loadState)")
+            return
+        }
+        #expect(viewModel.isLoadedEmpty == false)
+    }
+
     @Test func addingABodegaToAnEmptyMapEndsLoadedEmpty() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(body: Data("[]".utf8))

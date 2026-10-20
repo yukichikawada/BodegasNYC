@@ -14,6 +14,7 @@
 //  right live values (QA checks that on the simulator).
 //
 
+import SwiftUI
 import Testing
 
 @testable import BodegasNYC
@@ -89,6 +90,18 @@ struct MapBottomCardTests {
     func loadedWithVisiblePinsHasNoBodegaBanner(_ mode: BrowseMode) {
         let state = Card.bodegaEmptyState(browseMode: mode, isLoadedEmpty: false, isFilteredEmpty: false)
         #expect(state == nil)
+    }
+
+    // MARK: usesStackedLayout (QA bug 1: AX sizes overflowed the grid)
+
+    @Test(arguments: [DynamicTypeSize.xSmall, .large, .xxxLarge])
+    func standardSizesUseTheGrid(_ size: DynamicTypeSize) {
+        #expect(!Card.usesStackedLayout(for: size))
+    }
+
+    @Test(arguments: [DynamicTypeSize.accessibility1, .accessibility3, .accessibility5])
+    func accessibilitySizesStack(_ size: DynamicTypeSize) {
+        #expect(Card.usesStackedLayout(for: size))
     }
 
     // MARK: showsStreetsBanner

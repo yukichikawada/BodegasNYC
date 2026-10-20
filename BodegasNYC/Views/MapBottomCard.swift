@@ -79,6 +79,13 @@ struct MapBottomCard: View {
         isTrackingEnabled && !hasPolylines && !isDismissed
     }
 
+    /// From `.accessibility1` up the card stacks vertically (symbol above
+    /// the text) instead of using the side-by-side grid, which can't fit
+    /// accessibility-size text in one column (DD16).
+    nonisolated static func usesStackedLayout(for dynamicTypeSize: DynamicTypeSize) -> Bool {
+        dynamicTypeSize >= .accessibility1
+    }
+
     let content: Content
     /// The empty state's action: Add a Bodega or Clear Filters.
     let onAction: () -> Void
@@ -136,50 +143,18 @@ private struct EmptyStateCard: View {
     let onAction: () -> Void
     let onDismiss: () -> Void
 
-    private static let symbolColumnWidth: CGFloat = 28
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// 28pt at the default size, growing with the `.title2` symbol so the
+    /// glyph never overflows its column at large sizes.
+    @ScaledMetric(relativeTo: .title2) private var symbolColumnWidth: CGFloat = 28
     private static let columnSpacing: CGFloat = 12
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: Self.columnSpacing) {
-                symbol
-                    .font(.title2)
-                    .frame(width: Self.symbolColumnWidth)
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(state.title.copy.text)
-                        .font(.headline)
-                        .accessibilityAddTraits(.isHeader)
-                        .accessibilitySortPriority(4)
-                    Text(state.body.copy.text)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(4)
-                        .minimumScaleFactor(0.85)
-                        .accessibilitySortPriority(3)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if state.isDismissible {
-                    Button(action: onDismiss) {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    // Pull the 44pt target back into the card's padding so
-                    // the glyph lines up with the title, not 12pt lower.
-                    .padding(.top, -12)
-                    .padding(.trailing, -12)
-                    .accessibilityLabel(AppCopy.dismissAction.copy.text)
-                    .accessibilitySortPriority(1)
-                }
-            }
-            if let action = state.action {
-                Button(action.copy.text, action: onAction)
-                    .buttonStyle(.bordered)
-                    .padding(.leading, Self.symbolColumnWidth + Self.columnSpacing)
-                    .accessibilitySortPriority(2)
+        Group {
+            if MapBottomCard.usesStackedLayout(for: dynamicTypeSize) {
+                stackedLayout
+            } else {
+                gridLayout
             }
         }
         .padding(16)
@@ -189,6 +164,92 @@ private struct EmptyStateCard: View {
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 16)
         .padding(.bottom, 8)
+    }
+
+    /// The DD13 grid: symbol column, text column, trailing close, action
+    /// row under the text.
+    private var gridLayout: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: Self.columnSpacing) {
+                symbolView
+                    .frame(width: symbolColumnWidth)
+                textColumn
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                if state.isDismissible {
+                    closeButton
+                }
+            }
+            if let action = state.action {
+                Button(action.copy.text, action: onAction)
+                    .buttonStyle(.bordered)
+                    .padding(.leading, symbolColumnWidth + Self.columnSpacing)
+                    .accessibilitySortPriority(2)
+            }
+        }
+    }
+
+    /// Accessibility sizes (DD16, same treatment as the first-add card):
+    /// symbol above the text with the close top-trailing, then a
+    /// full-width action, so nothing truncates or overflows the card.
+    private var stackedLayout: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top) {
+                symbolView
+                Spacer(minLength: 0)
+                if state.isDismissible {
+                    closeButton
+                }
+            }
+            textColumn
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let action = state.action {
+                Button(action: onAction) {
+                    Text(action.copy.text)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .accessibilitySortPriority(2)
+            }
+        }
+    }
+
+    private var symbolView: some View {
+        symbol
+            .font(.title2)
+            .accessibilityHidden(true)
+    }
+
+    private var textColumn: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(state.title.copy.text)
+                .font(.headline)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+                .accessibilitySortPriority(4)
+            Text(state.body.copy.text)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .lineLimit(4)
+                .minimumScaleFactor(0.85)
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilitySortPriority(3)
+        }
+    }
+
+    private var closeButton: some View {
+        Button(action: onDismiss) {
+            Image(systemName: "xmark.circle.fill")
+                .foregroundStyle(.secondary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        // Pull the 44pt target back into the card's padding so the glyph
+        // lines up with the first line, not 12pt lower.
+        .padding(.top, -12)
+        .padding(.trailing, -12)
+        .accessibilityLabel(AppCopy.dismissAction.copy.text)
+        .accessibilitySortPriority(1)
     }
 
     @ViewBuilder
