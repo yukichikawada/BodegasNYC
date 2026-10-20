@@ -84,12 +84,34 @@ struct AddBodegaView: View {
     }
 }
 
+/// One weekday's hours. The toggle is titled with the day ("Mon"..."Sun",
+/// same labels and width as `HoursSection` on the detail screen) and its
+/// on state means *open*; the stored `isClosed` is just its inverse.
+/// Shared by Add and Edit Bodega (both are this same `AddBodegaView`).
 private struct DayHoursRow: View {
     @Binding var entry: AddBodegaViewModel.DayEntry
 
+    private var isOpen: Binding<Bool> {
+        Binding(get: { !entry.isClosed }, set: { entry.isClosed = !$0 })
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Toggle("Closed", isOn: $entry.isClosed)
+            Toggle(isOn: isOpen) {
+                HStack {
+                    // Never truncate/wrap the day at large Dynamic Type sizes.
+                    Text(entry.label)
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                        .frame(minWidth: 40, alignment: .leading)
+                    // Open rows already show their time fields below; only
+                    // the collapsed (closed) state needs spelling out.
+                    if entry.isClosed {
+                        Text("Closed").foregroundStyle(.secondary)
+                    }
+                }
+            }
+            .accessibilityLabel("\(entry.label) open")
             if !entry.isClosed {
                 HStack {
                     TextField("Open", text: $entry.open)
