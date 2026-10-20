@@ -11,9 +11,9 @@ The script pins the test destination to a specific simulator UDID (avoids ambigu
 ## Housekeeping
 
 Builder and QA worktrees under `.claude/worktrees` are not removed automatically once they have
-commits, and the owner merges PRs outside Claude's sessions, so finished worktrees (some left
-locked) accumulate. At the start of any orchestration session, and again after the owner reports
-a batch of PRs merged, run:
+commits, and nothing removes them when their PR merges, so finished worktrees (some left locked)
+accumulate. At the start of any orchestration session, and again after merging a batch of PRs,
+run:
 
 ```sh
 scripts/cleanup-worktrees.sh          # dry run: lists what would be removed and what is kept, and why
@@ -61,14 +61,21 @@ When Claude Code orchestrates work with subagents:
   `scripts/run-tests.sh`, builds the app, and reports findings; it does not land fixes.
 - Every feature lands as a PR that references its issue (`Closes #N`), with the "Summary / Bugs
   found / Test plan" body shape used by past PRs. The orchestrator opens the PR once QA is clean
-  and tests pass; **the owner merges** (squash). Claude does not merge PRs.
+  and tests pass, waits for the automated Claude review in CI to finish, addresses its findings
+  (or says in the PR why one is dismissed), then **squash-merges it** with
+  `gh pr merge --squash --delete-branch` and runs `scripts/cleanup-worktrees.sh --apply`. The
+  owner does not gate merges and should not be made a bottleneck; the only things that wait on
+  them are `needs-decision` issues and anything one-way (schema migrations against the hosted
+  database, deleting data, anything that cannot be reverted with a follow-up PR).
 - `.github/workflows/claude-code-review.yml` runs an automated Claude review on every PR as a
   second set of eyes. When reviewing in CI (Linux runner, no Xcode): read the diff against the
   conventions in this file and `docs/PRD.md`; do not try to run `xcodebuild`, the test script, or
   a simulator.
 - Items that touch the same view (e.g. all three bodega-detail actions) are built as a stack:
   each later branch is based on the previous one and its PR targets that branch, so GitHub
-  retargets to `main` as earlier PRs merge. Independent items branch from `main` in parallel.
+  retargets to `main` as earlier PRs merge. Merge a stack bottom-up, one PR at a time, and let
+  GitHub retarget the next PR before merging it. Independent items branch from `main` in
+  parallel.
 
 ## Simulators for live runs
 
