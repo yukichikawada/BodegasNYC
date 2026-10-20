@@ -26,6 +26,13 @@ extension BrowseView {
                 addCompletion: addCompletion,
                 showsToolbar: activeTab == .map
             )
+            // The List tab's search bar adds a bottom container inset, and
+            // MapKit re-centres on any inset change, so the map ignores the
+            // container's bottom inset and keeps the window's own (home
+            // indicator clearance for the Apple logo and Legal link) on both
+            // tabs. The map never moves under the page.
+            .safeAreaPadding(.bottom, deviceBottomInset)
+            .ignoresSafeArea(.container, edges: .bottom)
             // Covered by the list: no taps, and VoiceOver never reaches a
             // pin, cluster or card under the page.
             .allowsHitTesting(activeTab == .map)
@@ -50,6 +57,19 @@ extension BrowseView {
             }
         }
         .animation(.easeInOut(duration: listTransitionSeconds), value: activeTab)
+        // Re-read on rotation (any size change); the window inset never
+        // includes toolbars or the keyboard.
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in
+            deviceBottomInset = Self.windowBottomInset
+        }
+        .task { deviceBottomInset = Self.windowBottomInset }
+    }
+
+    private static var windowBottomInset: CGFloat {
+        let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+        return scenes.first { $0.activationState == .foregroundActive }?.keyWindow?.safeAreaInsets.bottom
+            ?? scenes.first?.keyWindow?.safeAreaInsets.bottom
+            ?? 0
     }
 
     /// The Map/List picker's selection. Choosing Map resigns the search
@@ -61,6 +81,12 @@ extension BrowseView {
             set: { newTab in
                 if newTab == .map { isSearchFocused = false }
                 activeTab = newTab
+                // VoiceOver (design review 18A): back on the map, start from
+                // the top of the screen (the toolbar). The list moves focus
+                // to its first row itself.
+                if newTab == .map {
+                    UIAccessibility.post(notification: .screenChanged, argument: nil)
+                }
             }
         )
     }

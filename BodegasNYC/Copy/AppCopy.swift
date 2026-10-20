@@ -166,7 +166,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .signInBody:
             CopyString(kind: .body, text: "Looking never needs an account. Adding, reviewing, and photos do.")
         case .nearMeAction: CopyString(kind: .label, text: "Near Me")
-        case .placementCardTitle: CopyString(kind: .title, text: "Walk the figure onto the bodega.")
+        case .placementCardTitle: CopyString(kind: .title, text: "Line the marker up with the door.")
         case .delightFirstAddTitle: CopyString(kind: .title, text: "One down.")
         case .delightFirstAddBody: CopyString(kind: .body, text: "The map knows something it didn't a minute ago.")
         case .delightFirstAddBodyCat:

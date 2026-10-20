@@ -44,6 +44,9 @@ struct BrowseView: View {
     /// same query lands on the same row (#23).
     @State var listScrollID: Bodega.ID?
     @FocusState var isSearchFocused: Bool
+    /// The window's own bottom inset (home indicator), which the covered map
+    /// keeps on both tabs instead of the List tab's search-bar inset (#23).
+    @State var deviceBottomInset: CGFloat = 0
     @State private var showingSignIn = false
     @State private var showingSignOutConfirmation = false
     @State private var signOutErrorMessage: String?
@@ -178,6 +181,8 @@ struct BrowseView: View {
                 .onChange(of: filter) { _, newFilter in
                     mapViewModel.filter = newFilter
                     listViewModel.filter = newFilter
+                    // A different query has a different top row.
+                    listScrollID = nil
                 }
                 // The add sheet and everything after a successful add (#25).
                 .addBodegaFlow($addBodegaViewModel, sessionStore: sessionStore, completion: addCompletion) {

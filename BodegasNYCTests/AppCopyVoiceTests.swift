@@ -115,7 +115,7 @@ struct AppCopyVoiceTests {
     @Test func placementCardTitleIsAShortSentence() {
         let title = AppCopy.placementCardTitle.copy
         #expect(title.kind == .title)
-        #expect(title.text == "Walk the figure onto the bodega.")
+        #expect(title.text == "Line the marker up with the door.")
         #expect(VoiceRule.allCases.allSatisfy { $0.passes(title) })
     }
 

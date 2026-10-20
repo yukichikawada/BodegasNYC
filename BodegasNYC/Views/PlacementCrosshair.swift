@@ -50,6 +50,9 @@ struct PlacementCrosshair: View {
                             )
                         )
                         .transition(BrowseMotion.Crosshair.transition(reduceMotion: reduceMotion))
+                        // On the image itself: hiding the container alone
+                        // left it in the tree (QA, #23).
+                        .accessibilityHidden(true)
                 }
             }
             .animation(
@@ -58,6 +61,7 @@ struct PlacementCrosshair: View {
             )
         }
         .allowsHitTesting(false)
+        .accessibilityElement(children: .ignore)
         .accessibilityHidden(true)
     }
 }

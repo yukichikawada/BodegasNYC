@@ -8,7 +8,7 @@ import TipKit
 /// rather than insetting it, so entering placement never moves a pin.
 ///
 /// Visual contract (DESIGN.md Components, "Placement card"): the DD13 card
-/// chrome (`MapBottomCardChrome`) plus the small card shadow, a `.headline`
+/// chrome (`MapBottomCardChrome`, small card shadow included), a `.headline`
 /// title in voice, and an action row of Near Me and Cancel (`.bordered`) and
 /// Use This Location (`.borderedProminent`). A task panel: the material
 /// groups the task and its buttons keep native control styling, the one
@@ -50,7 +50,7 @@ struct PlacementBottomBar: View {
             actions
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .modifier(MapBottomCardChrome(isShadowed: true))
+        .modifier(MapBottomCardChrome())
         .task {
             // Cancelled when the card leaves first: then the tip never shows.
             guard (try? await Task.sleep(for: .seconds(BrowseMotion.BottomSlot.placementTipDelaySeconds))) != nil

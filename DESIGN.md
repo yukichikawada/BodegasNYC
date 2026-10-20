@@ -232,7 +232,8 @@ capsule is a control or a pin label, never a tag.
 ## Components
 
 **Map bottom card** (`MapBottomCard`, DD13): 16pt inset, `.regularMaterial` in a 16pt rounded
-rectangle, 16pt padding, 8pt above the safe area, max 480pt. Grid: 28pt symbol column
+rectangle with the small card shadow (radius 2, y 1, under the shape), 16pt padding, 8pt above
+the safe area, max 480pt. Grid: 28pt symbol column
 (`.title2`; `.catPin` for cat, `.secondary` otherwise), title `.headline`, body `.subheadline`
 secondary (`.lineLimit(4)`, `.minimumScaleFactor(0.85)`), trailing `xmark.circle.fill` close with
 a 44pt target, `.bordered` action row below the text. Stacks vertically at `.accessibility1` and
@@ -250,7 +251,7 @@ when selected or dropping. Drop: spring 0.5s bounce 0.35 with success haptic; Re
 **Placement card** (`PlacementBottomBar`, #23): the bottom slot's top-precedence occupant, in the
 card family. Chrome `{components.card}`: `.regularMaterial` in a `{rounded.lg}` 16pt rounded
 rectangle, `{spacing.lg}` 16pt padding and side inset, `maxWidth` 480pt, `{spacing.sm}` 8pt above
-the slot's 24pt attribution clearance, shadow radius 2 y 1 under the shape. Text column: a title
+the slot's 24pt attribution clearance, the card shadow. Text column: a title
 `.headline` in voice (`AppCopy.placementCardTitle`), no body, no symbol column. Action row below:
 Near Me and Cancel `{components.button-secondary}`, Use This Location
 `{components.button-primary}`, on one row only while all three fit without wrapping (on a
@@ -358,3 +359,4 @@ the card; the card supplies the material.
 | 2026-10-20 | #23 T2: the List tab is an opaque page that slides up over an always-mounted map (0.3s, move only; 0.25s fade under Reduce Motion or Prefer Cross-Fade); a page, not a sheet | PRD §8: the map never goes away; the camera and tiles are identical on return, and an opaque page never ghosts the map |
 | 2026-10-20 | #23 T3: the placement bar becomes a floating card in the bottom slot (card chrome, title in voice, Cancel bordered), the crosshair centred in the uncovered band | A safe-area inset moved every pin on entry and exit; a strip cannot clear the attribution row; the card family already owns the slot |
 | 2026-10-20 | #23 design review: pin hold 0.25s, no tap haptic, slot and crosshair fade under Reduce Motion, list leaves before placement arrives, the one material-under-controls exception for the placement card | Design review 2A to 18A, owner accepted all; the placement card is a task panel, so its buttons stay native controls on material |
+| 2026-10-20 | #23: every bottom-slot card (map card, first-add card, placement card) carries the radius 2 / y 1 shadow from `MapBottomCardChrome` | Elevation already specified it; the #58 cards shipped without it |

@@ -34,13 +34,12 @@ struct MapScreenView: View {
     @State private var selectedItemID: MapDisplayItem.ID?
     @State private var lastVisibleRegion: MKCoordinateRegion?
     @State private var showingClearConfirmation = false
-    /// A camera settle that happened while the List tab covered the map,
-    /// replayed when the Map tab returns (no refetch from the List tab).
+    /// A settle held back under the List tab, and the last one delivered:
+    /// the held one is replayed on return only if the camera really moved.
     @State private var pendingSettledRegion: MKCoordinateRegion?
-    /// The placement card's measured height, slot chrome included, and the
-    /// crosshair's measured centre in global coordinates (#23 T3): the one
-    /// space both the drawn crosshair and `MapProxy.convert` agree on, so the
-    /// submitted coordinate is the one under the figure.
+    @State private var deliveredRegion: MKCoordinateRegion?
+    /// Placement card height (slot chrome included) and the crosshair's
+    /// global centre, the space `MapProxy.convert` reads (#23 T3).
     @State private var placementCardHeight: CGFloat = 0
     @State private var crosshairPoint: CGPoint?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -56,9 +55,7 @@ struct MapScreenView: View {
     private let showsAddTip: Bool
     /// Pin drop phases, the first-add card, the settle signal (#25).
     private let addCompletion: AddCompletionCoordinator?
-    /// True on the Map tab. False while the List tab covers the map: the
-    /// Locate Me and Streets Walked items leave the toolbar and camera
-    /// settles are held back.
+    /// False under the List tab: no Locate Me / Streets Walked, settles held.
     private let showsToolbar: Bool
 
     init(
@@ -155,7 +152,16 @@ struct MapScreenView: View {
         .onChange(of: showsToolbar) { _, isMapTab in
             guard isMapTab, let region = pendingSettledRegion else { return }
             pendingSettledRegion = nil
+            guard !region.isSameCamera(as: deliveredRegion) else { return }
+            deliveredRegion = region
             viewModel.regionDidSettle(region)
+        }
+        .onChange(of: isPlacingBodega) { _, isPlacing in
+            guard !isPlacing else { return }
+            // Measure afresh next time; VoiceOver restarts at the toolbar.
+            placementCardHeight = 0
+            crosshairPoint = nil
+            UIAccessibility.post(notification: .screenChanged, argument: nil)
         }
         .task {
             viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
@@ -228,6 +234,7 @@ struct MapScreenView: View {
                 pendingSettledRegion = context.region
                 return
             }
+            deliveredRegion = context.region
             viewModel.regionDidSettle(context.region)
             addCompletion?.cameraDidSettle(center: Coordinate(context.region.center))
         }
@@ -319,9 +326,8 @@ struct MapScreenView: View {
 // In an extension (same file, so the private state stays private) to keep the
 // struct body within SwiftLint's type length.
 extension MapScreenView {
-    /// The bottom slot: the placement card or a `MapBottomCard`, one at a
-    /// time, entering from the bottom edge with opacity (opacity only under
-    /// Reduce Motion), 24pt clear of the attribution row.
+    /// The bottom slot: placement card or `MapBottomCard`, one at a time,
+    /// 24pt clear of the attribution row.
     private func bottomSlotLayer(_ proxy: MapProxy) -> some View {
         VStack(spacing: 0) {
             switch bottomSlot {
@@ -357,9 +363,8 @@ extension MapScreenView {
         BrowseMotion.BottomSlot.style(reduceMotion: reduceMotion).transition
     }
 
-    /// Submits the coordinate under the crosshair, converted from its
-    /// measured screen point; the visible region's centre only if the
-    /// crosshair was never measured.
+    /// Submits the coordinate under the crosshair's measured point (the
+    /// visible centre only if it was never measured).
     private func confirmPlacement(_ proxy: MapProxy) {
         let underCrosshair = crosshairPoint.flatMap { proxy.convert($0, from: .global) }
         onConfirmPlacement(underCrosshair ?? lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)

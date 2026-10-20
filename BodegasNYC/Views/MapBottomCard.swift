@@ -153,31 +153,22 @@ struct MapBottomCardChrome: ViewModifier {
     /// Clips the content to the card's shape, so something entering from
     /// outside (the first-add cat) is cut at the card's edge (DD11).
     var clips = false
-    /// The small card shadow (DESIGN.md Elevation, radius 2 y 1) under the
-    /// material shape only, so the text casts none. Only the placement card
-    /// (#23) asks for it; the #58 cards are left as they shipped.
-    var isShadowed = false
 
     func body(content: Content) -> some View {
-        clipped(materialBacked(content.padding(16)))
+        clipped(content.padding(16))
+            // The material and the small card shadow (DESIGN.md Elevation,
+            // radius 2 y 1) sit behind the content, so the text casts none
+            // and a clipped card still keeps its shadow.
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.regularMaterial)
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            }
             .accessibilityElement(children: .contain)
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity)
             .padding(.horizontal, 16)
             .padding(.bottom, 8)
-    }
-
-    @ViewBuilder
-    private func materialBacked(_ card: some View) -> some View {
-        if isShadowed {
-            card.background {
-                RoundedRectangle(cornerRadius: 16)
-                    .fill(.regularMaterial)
-                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
-            }
-        } else {
-            card.background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        }
     }
 
     @ViewBuilder

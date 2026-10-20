@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The list screen: a flat, `.all`-only list of bodegas (see
 /// `BodegaListViewModel`'s doc comment for why there's no nearby-mode
@@ -34,6 +35,15 @@ struct BodegaListView: View {
     @Binding var scrollID: Bodega.ID?
     var searchFocus: FocusState<Bool>.Binding
     let onAddBodega: () -> Void
+
+    /// `List` ignores `.scrollPosition(id:)`, so the top row is tracked by
+    /// hand (#23): the top edge of each row on screen, kept in a plain
+    /// reference so scrolling never re-renders the page, read when a scroll
+    /// comes to rest.
+    @State private var rowTops = RowTops()
+    /// Set once the stored row has been scrolled back to.
+    @State private var hasRestoredScroll = false
+    @AccessibilityFocusState private var focusedRowID: Bodega.ID?
 
     var body: some View {
         content
@@ -80,13 +90,34 @@ struct BodegaListView: View {
         case .loaded where viewModel.filteredBodegas.isEmpty:
             noMatches
         case .loaded:
-            List(viewModel.filteredBodegas) { bodega in
-                NavigationLink(value: bodega) {
-                    BodegaRow(bodega: bodega)
+            ScrollViewReader { proxy in
+                List(viewModel.filteredBodegas) { bodega in
+                    NavigationLink(value: bodega) {
+                        BodegaRow(bodega: bodega)
+                    }
+                    .id(bodega.id)
+                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
+                        rowTops.tops[bodega.id] = $0
+                    }
+                    // Off screen (or jumped past by a scrollTo): never the top.
+                    .onDisappear { rowTops.tops[bodega.id] = nil }
+                    .accessibilityFocused($focusedRowID, equals: bodega.id)
+                }
+                .listStyle(.plain)
+                // Where content stops hiding under the navigation bar: the
+                // List's own top (its rows scroll on up behind the bar).
+                .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
+                    rowTops.visibleTop = $0
+                }
+
+                .task { await restoreScroll(proxy) }
+                // Each time a scroll comes to rest, remember the first row
+                // whose top is in view.
+                .onScrollPhaseChange { _, phase in
+                    guard phase == .idle, hasRestoredScroll else { return }
+                    scrollID = rowTops.topRow(in: viewModel.filteredBodegas)
                 }
             }
-            .listStyle(.plain)
-            .scrollPosition(id: $scrollID, anchor: .top)
         case .failed:
             // The raw error isn't shown (design DD5); Retry re-runs the
             // initial load.
@@ -99,6 +130,32 @@ struct BodegaListView: View {
                     .buttonStyle(.bordered)
             }
         }
+    }
+
+    /// Back to the row that was at the top when the page last left (same
+    /// query; `BrowseView` clears it when the filter changes), then VoiceOver
+    /// focus on that row (design review 18A).
+    private func restoreScroll(_ proxy: ScrollViewProxy) async {
+        let stored = scrollID.flatMap { id in viewModel.filteredBodegas.first { $0.id == id }?.id }
+        if let stored {
+            // Once now, so the page slides in close to the row, and again
+            // once the slide has settled: until the List has applied its bar
+            // insets, the first scroll lands the row behind the bar.
+            await Task.yield()
+            scrollWithoutAnimation(proxy, to: stored)
+            try? await Task.sleep(for: .seconds(BrowseMotion.ListTransition.slideSeconds + 0.05))
+            scrollWithoutAnimation(proxy, to: stored)
+        }
+        hasRestoredScroll = true
+        if UIAccessibility.isVoiceOverRunning {
+            focusedRowID = stored ?? viewModel.filteredBodegas.first?.id
+        }
+    }
+
+    private func scrollWithoutAnimation(_ proxy: ScrollViewProxy, to id: Bodega.ID) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) { proxy.scrollTo(id, anchor: .top) }
     }
 
     /// Distinct from the nothing-loaded state: there *are* bodegas, the
@@ -144,5 +201,16 @@ private struct BodegaRow: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+/// Row top edges in global coordinates and the list's visible top edge. A
+/// class on purpose: updating it while scrolling must not re-render.
+private final class RowTops {
+    var tops: [Bodega.ID: CGFloat] = [:]
+    var visibleTop: CGFloat = 0
+
+    func topRow(in bodegas: [Bodega]) -> Bodega.ID? {
+        bodegas.first { (tops[$0.id] ?? -.infinity) >= visibleTop - 1 }?.id
     }
 }
