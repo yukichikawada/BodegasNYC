@@ -155,11 +155,15 @@ struct MapBottomCardChrome: ViewModifier {
     var clips = false
 
     func body(content: Content) -> some View {
-        clipped(
-            content
-                .padding(16)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-        )
+        clipped(content.padding(16))
+            // The material and the small card shadow (DESIGN.md Elevation,
+            // radius 2 y 1) sit behind the content, so the text casts none
+            // and a clipped card still keeps its shadow.
+            .background {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(.regularMaterial)
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            }
             .accessibilityElement(children: .contain)
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity)

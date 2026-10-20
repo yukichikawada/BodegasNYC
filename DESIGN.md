@@ -124,7 +124,7 @@ a New Yorker." Every decision below serves that: the data and the words carry th
 
 **Mode per surface:**
 - Persuade: onboarding (3 pages). Quiet ground, heavy condensed title, orange symbol spine.
-- Operate: map, list, filters, add flow, placement bar. System controls in the tint; glass for
+- Operate: map, list, filters, add flow, placement card. System controls in the tint; glass for
   controls, material for the one content card.
 - Read: bodega detail, reviews, photos. Opaque page, system sections, display register on the name.
 - Experience: the first add. The only authored choreography in the app.
@@ -208,9 +208,9 @@ the page dots.
 `maxWidth: 560pt`, top-aligned at 25% of the height.
 
 **Density:** medium on the map (one floating object at a time in the bottom slot; precedence
-placement bar > first-add card > empty state > add tip > streets banner), comfortable on
+placement card > first-add card > empty state > add tip > streets banner), comfortable on
 onboarding and detail. The map is never replaced by a results screen; list and detail sit over
-it (#23 transitions will formalize how).
+it. The List tab slides over the live map; detail zooms out of its pin.
 
 **Touch:** 44pt minimum for every target, including the pin's hit area and the card's close.
 
@@ -232,12 +232,13 @@ capsule is a control or a pin label, never a tag.
 ## Components
 
 **Map bottom card** (`MapBottomCard`, DD13): 16pt inset, `.regularMaterial` in a 16pt rounded
-rectangle, 16pt padding, 8pt above the safe area, max 480pt. Grid: 28pt symbol column
+rectangle with the small card shadow (radius 2, y 1, under the shape), 16pt padding, 8pt above
+the safe area, max 480pt. Grid: 28pt symbol column
 (`.title2`; `.catPin` for cat, `.secondary` otherwise), title `.headline`, body `.subheadline`
 secondary (`.lineLimit(4)`, `.minimumScaleFactor(0.85)`), trailing `xmark.circle.fill` close with
 a 44pt target, `.bordered` action row below the text. Stacks vertically at `.accessibility1` and
 up. Reading order title, body, action, close. Every content change moves from the bottom edge
-with opacity over 0.25s ease-in-out. States: emptyState (noBodegas cat/catPin with bounded
+with opacity over 0.25s ease-in-out (opacity only under Reduce Motion, #23). States: emptyState (noBodegas cat/catPin with bounded
 breathe; noneNearby `mappin.slash`; noFilterMatches `line.3.horizontal.decrease.circle`;
 loadFailed `exclamationmark.triangle`), firstAdd, addTip, streets banner, tracking error.
 
@@ -246,6 +247,23 @@ stroke, shadow 2/1, 44pt hit area, anchored at center. Selected: 3pt stroke, sha
 1.15, drawn last. Label (`.caption2`, material capsule, 18 characters, above the circle) only
 when selected or dropping. Drop: spring 0.5s bounce 0.35 with success haptic; Reduce Motion:
 0.2s fade in place. VoiceOver: name, "Has a cat", button trait.
+
+**Placement card** (`PlacementBottomBar`, #23): the bottom slot's top-precedence occupant, in the
+card family. Chrome `{components.card}`: `.regularMaterial` in a `{rounded.lg}` 16pt rounded
+rectangle, `{spacing.lg}` 16pt padding and side inset, `maxWidth` 480pt, `{spacing.sm}` 8pt above
+the slot's 24pt attribution clearance, the card shadow. Text column: a title
+`.headline` in voice (`AppCopy.placementCardTitle`), no body, no symbol column. Action row below:
+Near Me and Cancel `{components.button-secondary}`, Use This Location
+`{components.button-primary}`, on one row only while all three fit without wrapping (on a
+402pt-wide iPhone they do not, so it stacks there too); stacked: Near Me and Cancel on one row
+while they fit, Use This Location full width below; always stacked from `.xLarge` up. In
+landscape at accessibility sizes the title keeps to one line (scale factor down to 0.5) so the
+crosshair still fits above the card. It is a task panel: the material groups the task
+and its buttons keep native control styling. This is the one material-under-controls exception
+to the Colors rule. The placement tip is a popover on Use This Location, arrow at the bottom,
+presented 0.3s after the card appears and dismissed before the card leaves. The crosshair
+(`figure.wave`, red, fixed 34pt, `.largeTitle`'s default; a symbol, so it does not scale) is centred in the band the card leaves uncovered and is
+hidden from VoiceOver; the card's title is the instruction.
 
 **Cluster badge:** same family as the pin, `systemGray` fill, white count, same stroke and shadow.
 
@@ -302,10 +320,22 @@ the card; the card supplies the material.
   cat enters from +24pt with a spring and bounces once; the card auto-dismisses after 8s (never
   under VoiceOver). `AddCompletionCoordinator` owns the clock.
 - **Reduce Motion:** pin fades in at rest (0.2s), cat appears in place, no breathe, onboarding
-  exit opacity only, camera pan stays.
-- **Transitions (#23, pending):** map stays on screen through map, list and detail; list and
-  detail slide over it; the pin holds position before detail opens. Specify in #23's spec and
-  record the timings here when they land.
+  exit opacity only, camera pan stays. Bottom slot fades in place (map card and placement card,
+  0.25s), held pin keeps its stroke and label without the scale, crosshair fades in (0.2s), list
+  fades (0.25s; also under Prefer Cross-Fade Transitions).
+- **Transitions (#23):** the map stays mounted through map, list and detail; it is never rebuilt
+  on a tab switch. Values live in `BrowseMotion`.
+  - List: the page slides up from the bottom over the live map, 0.3s ease-in-out, move only (no
+    opacity: the page is opaque, so the map never ghosts through it); 0.25s fade under Reduce
+    Motion or Prefer Cross-Fade Transitions. The list is a page, not a sheet: it leaves by the
+    Map/List control, no drag to dismiss. Locate Me and Streets Walked leave the toolbar on the
+    List tab without animation.
+  - Placement: the crosshair lands with the pin's spring (0.5s, bounce 0.35, from 0.6 scale) and
+    the card enters through the bottom slot (move with opacity, 0.25s ease-in-out); the tip
+    appears at +0.3s. Leaving: tip dismissed, card leaves through the slot, crosshair fades 0.15s.
+    From the List tab the page leaves first (its own duration), then placement starts.
+  - Pin to detail: pin hold 0.25s, system zoom, release measured in PR 2.
+  - No haptic on pin tap; the first add keeps the app's one haptic.
 
 ## Follow-ups
 
@@ -326,3 +356,7 @@ the card; the card supplies the material.
 | 2026-10-20 | catPin stays systemOrange with a white glyph; stars stay yellow | Glyph already encodes cat vs non-cat; color is redundant encoding |
 | 2026-10-20 | iOS 26: Liquid Glass for controls, material for floating content, opaque pages | HIG layering; text over a busy map needs a material surface |
 | 2026-10-20 | #66: `.tint(.accentColor)` on the toggle sections, no root tint; glass toolbar buttons keep the label color; Map `.tint(.blue)` keeps the location dot blue | iOS switches ignore AccentColor; a root tint colored every ProgressView, and label-colored glass buttons are the iOS 26 default and keep the chrome quiet |
+| 2026-10-20 | #23 T2: the List tab is an opaque page that slides up over an always-mounted map (0.3s, move only; 0.25s fade under Reduce Motion or Prefer Cross-Fade); a page, not a sheet | PRD §8: the map never goes away; the camera and tiles are identical on return, and an opaque page never ghosts the map |
+| 2026-10-20 | #23 T3: the placement bar becomes a floating card in the bottom slot (card chrome, title in voice, Cancel bordered), the crosshair centred in the uncovered band | A safe-area inset moved every pin on entry and exit; a strip cannot clear the attribution row; the card family already owns the slot |
+| 2026-10-20 | #23 design review: pin hold 0.25s, no tap haptic, slot and crosshair fade under Reduce Motion, list leaves before placement arrives, the one material-under-controls exception for the placement card | Design review 2A to 18A, owner accepted all; the placement card is a task panel, so its buttons stay native controls on material |
+| 2026-10-20 | #23: every bottom-slot card (map card, first-add card, placement card) carries the radius 2 / y 1 shadow from `MapBottomCardChrome` | Elevation already specified it; the #58 cards shipped without it |

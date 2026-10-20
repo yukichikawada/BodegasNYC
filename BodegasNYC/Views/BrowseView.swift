@@ -10,12 +10,11 @@ import TipKit
 /// Also owns `mapViewModel`/`listViewModel`/`cameraPosition` — constructing
 /// them here, once, and handing them down as `let`/`Binding` rather than
 /// letting each child view build its own is what makes switching tabs not
-/// re-trigger a fetch or reset the map's pan/zoom: a `switch`/`if` branch
-/// that swaps out a child view's concrete type tears down and rebuilds any
-/// `@State` that child owns itself, which would otherwise silently discard
-/// already-loaded data on every tab switch.
+/// re-trigger a fetch: the list page is inserted and removed on every tab
+/// switch, which would otherwise discard its already-loaded data. The map
+/// itself is always mounted under the list (#23, `BrowseView+Content.swift`).
 struct BrowseView: View {
-    private enum Tab: String, CaseIterable, Identifiable {
+    enum Tab: String, CaseIterable, Identifiable {
         case map
         case list
 
@@ -36,21 +35,28 @@ struct BrowseView: View {
         }
     }
 
-    @State private var activeTab: Tab = .map
-    @State private var path: [Bodega] = []
-    @State private var cameraPosition: MapCameraPosition = .region(MapScreenView.newYorkCityDefault)
-    @State private var mapViewModel: BodegaMapViewModel
-    @State private var listViewModel: BodegaListViewModel
+    @State var activeTab: Tab = .map
+    @State var path: [Bodega] = []
+    @State var cameraPosition: MapCameraPosition = .region(MapScreenView.newYorkCityDefault)
+    @State var mapViewModel: BodegaMapViewModel
+    @State var listViewModel: BodegaListViewModel
+    /// The list's top row, kept here so a Map → List round trip with the
+    /// same query lands on the same row (#23).
+    @State var listScrollID: Bodega.ID?
+    @FocusState var isSearchFocused: Bool
+    /// The window's own bottom inset (home indicator), which the covered map
+    /// keeps on both tabs instead of the List tab's search-bar inset (#23).
+    @State var deviceBottomInset: CGFloat = 0
     @State private var showingSignIn = false
     @State private var showingSignOutConfirmation = false
     @State private var signOutErrorMessage: String?
-    @State private var isPlacingBodega = false
+    @State var isPlacingBodega = false
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var isResolvingCurrentLocation = false
     /// The single source of truth for filter/search across both tabs —
     /// pushed into both view models via `.onChange` below, so switching
     /// Map↔List never loses or desyncs it.
-    @State private var filter: BodegaFilter = .none
+    @State var filter: BodegaFilter = .none
     @State private var showingFilters = false
     /// On iOS 26 the trailing toolbar buttons grow with Dynamic Type and
     /// squeeze the principal slot: at `.xLarge` the segmented Map/List
@@ -64,20 +70,20 @@ struct BrowseView: View {
     private let photoService: PhotoService
     private let flagService: FlagService
     private let sessionStore: SessionStore
-    private let locationPermissionClient: LocationPermissionClient
-    private let streetsWalkedViewModel: StreetsWalkedViewModel?
+    let locationPermissionClient: LocationPermissionClient
+    let streetsWalkedViewModel: StreetsWalkedViewModel?
     /// Passed in by `RootView`, which owns it (and the onboarding overlay)
     /// rather than putting it on `AppEnvironment`; see `RootView`.
     private let firstRunState: FirstRunState
     /// `RootView`'s overlay flag: the Account menu's "Show Intro Again"
     /// sets it, and it going false is this view's cue to land on the map.
     @Binding private var showingOnboarding: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     /// The tutorial's Add tip: TipKit's display verdict and whether a
     /// detail has been opened (#22).
     @State private var addTipState = AddTipState()
     /// Everything after a successful add (#25); camera bound on appear.
-    @State private var addCompletion: AddCompletionCoordinator
+    @State var addCompletion: AddCompletionCoordinator
 
     init(
         bodegaService: BodegaService,
@@ -112,7 +118,7 @@ struct BrowseView: View {
     /// `dynamicTypeSize` doc comment for why).
     @ViewBuilder
     private var modePicker: some View {
-        let picker = Picker("Browse Mode", selection: $activeTab) {
+        let picker = Picker("Browse Mode", selection: tabSelection) {
             ForEach(Tab.allCases) { tab in
                 Label(tab.label, systemImage: tab.systemImage).tag(tab)
             }
@@ -143,27 +149,7 @@ struct BrowseView: View {
                     ToolbarItem(placement: .topBarLeading) {
                         filterButton
                     }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        accountMenu
-                    }
-                    ToolbarItem(placement: .topBarTrailing) {
-                        Menu {
-                            Button("Drop a Pin on Map", systemImage: "mappin.and.ellipse") {
-                                // Manual placement: pan-under-a-fixed-pin
-                                // over whatever the map already shows (see
-                                // `PlacementBottomBar`'s doc comment, in
-                                // PlacementBottomBar.swift) — no GPS fetch here. That's the
-                                // separate "Use Current Location" item below.
-                                activeTab = .map
-                                isPlacingBodega = true
-                            }
-                            Button("Use Current Location", systemImage: "location.fill") {
-                                Task { await useCurrentLocationShortcut() }
-                            }
-                        } label: {
-                            Label("Add Bodega", systemImage: "plus")
-                        }
-                    }
+                    // Account and Add: see `trailingToolbar`.
                 }
                 .navigationDestination(for: Bodega.self) { bodega in
                     // `path` is deliberately left holding the pre-edit
@@ -195,6 +181,8 @@ struct BrowseView: View {
                 .onChange(of: filter) { _, newFilter in
                     mapViewModel.filter = newFilter
                     listViewModel.filter = newFilter
+                    // A different query has a different top row.
+                    listScrollID = nil
                 }
                 // The add sheet and everything after a successful add (#25).
                 .addBodegaFlow($addBodegaViewModel, sessionStore: sessionStore, completion: addCompletion) {
@@ -213,6 +201,9 @@ struct BrowseView: View {
                         landAfterOnboarding()
                     }
                     syncTipParameters()
+                    // Preloaded so the List tab's first slide carries rows,
+                    // not a spinner (#23).
+                    listViewModel.loadInitialIfNeeded()
                 }
                 .addCompletion(addCompletion, camera: $cameraPosition, hasLeftMap: !path.isEmpty || activeTab == .list)
                 .onChange(of: isPlacingBodega) { syncTipParameters() }
@@ -255,27 +246,28 @@ struct BrowseView: View {
         }
     }
 
-    @ViewBuilder
-    private var content: some View {
-        switch activeTab {
-        case .map:
-            MapScreenView(
-                viewModel: mapViewModel,
-                cameraPosition: $cameraPosition,
-                locationPermissionClient: locationPermissionClient,
-                streetsWalkedViewModel: streetsWalkedViewModel,
-                isPlacingBodega: $isPlacingBodega,
-                onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
-                onSelectBodega: { path.append($0) },
-                onClearFilters: { filter = mapViewModel.clearedFilterForMapCard(from: filter) },
-                showsAddTip: showsAddTip,
-                addCompletion: addCompletion
-            )
-        case .list:
-            BodegaListView(viewModel: listViewModel, filter: $filter) {
-                // Same as the toolbar's "Drop a Pin on Map".
-                activeTab = .map
-                isPlacingBodega = true
+    /// Account and Add. Declared by `content` after `MapScreenView`, so the
+    /// map-only Locate Me and Streets Walked come before them: innermost in
+    /// the trailing group, and Account and Add keep their place when the
+    /// List tab drops those two (#23).
+    @ToolbarContentBuilder
+    var trailingToolbar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            accountMenu
+        }
+        ToolbarItem(placement: .topBarTrailing) {
+            Menu {
+                Button("Drop a Pin on Map", systemImage: "mappin.and.ellipse") {
+                    // Manual placement: pan-under-a-fixed-pin over whatever
+                    // the map already shows (see `PlacementBottomBar`) — no
+                    // GPS fetch here. That's "Use Current Location" below.
+                    requestPlacement()
+                }
+                Button("Use Current Location", systemImage: "location.fill") {
+                    Task { await useCurrentLocationShortcut() }
+                }
+            } label: {
+                Label("Add Bodega", systemImage: "plus")
             }
         }
     }
@@ -312,12 +304,11 @@ struct BrowseView: View {
         if let coordinate = await locationPermissionClient.requestCurrentLocation() {
             presentAddBodegaSheet(coordinate: coordinate)
         } else {
-            activeTab = .map
-            isPlacingBodega = true
+            requestPlacement()
         }
     }
 
-    private func presentAddBodegaSheet(coordinate: CLLocationCoordinate2D) {
+    func presentAddBodegaSheet(coordinate: CLLocationCoordinate2D) {
         isPlacingBodega = false
         addBodegaViewModel = AddBodegaViewModel(
             coordinate: Coordinate(coordinate),
@@ -377,9 +368,10 @@ extension BrowseView {
 extension BrowseView {
     /// The Add tip takes the map's bottom slot only when the pure gating
     /// agrees (no first add yet, onboarding gone, not placing, a detail
-    /// opened) and TipKit itself would render it. `MapScreenView` only
-    /// exists on the Map tab, so the List tab never shows it.
-    private var showsAddTip: Bool {
+    /// opened) and TipKit itself would render it. On the List tab the map
+    /// (and its slot) is covered and VoiceOver-hidden, so the tip is never
+    /// seen there.
+    var showsAddTip: Bool {
         TutorialTips.shouldOfferAddTip(
             hasAddedFirstBodega: firstRunState.hasAddedFirstBodega,
             isOnboardingVisible: showingOnboarding,
