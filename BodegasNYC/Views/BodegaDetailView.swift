@@ -307,7 +307,7 @@ private struct PhotoGallerySection: View {
         VStack(alignment: .leading, spacing: 6) {
             DetailButtonRow {
                 Text("Photos").font(.headline)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+            } buttons: {
                 PhotosPicker(selection: $pickedItem, matching: .images) {
                     Label("Add a Photo", systemImage: "photo.badge.plus")
                 }

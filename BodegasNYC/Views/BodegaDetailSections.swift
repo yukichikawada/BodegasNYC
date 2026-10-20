@@ -8,31 +8,33 @@ import SwiftUI
 struct DataPointsSection: View {
     let bodega: Bodega
 
+    /// The caption is the same `AppCopy` label onboarding uses for the
+    /// amenity, so the two screens never drift ("Hot Food" in both).
     private struct DataPoint {
-        let label: String
+        let label: AppCopy
         let systemImage: String
         let isPresent: Bool
     }
 
     private var points: [DataPoint] {
         [
-            DataPoint(label: "Cat", systemImage: "cat", isPresent: bodega.hasCat),
-            DataPoint(label: "Hot food", systemImage: "flame", isPresent: bodega.servesHotFood),
-            DataPoint(label: "Cigarettes", systemImage: "smoke", isPresent: bodega.sellsCigarettes),
-            DataPoint(label: "Beer", systemImage: "mug", isPresent: bodega.sellsBeer),
-            DataPoint(label: "Lotto", systemImage: "ticket", isPresent: bodega.sellsLotto)
+            DataPoint(label: .onboardingCatLabel, systemImage: "cat", isPresent: bodega.hasCat),
+            DataPoint(label: .onboardingHotFoodLabel, systemImage: "flame", isPresent: bodega.servesHotFood),
+            DataPoint(label: .onboardingCigarettesLabel, systemImage: "smoke", isPresent: bodega.sellsCigarettes),
+            DataPoint(label: .onboardingBeerLabel, systemImage: "mug", isPresent: bodega.sellsBeer),
+            DataPoint(label: .onboardingLottoLabel, systemImage: "ticket", isPresent: bodega.sellsLotto)
         ]
     }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     /// Five icon-over-caption columns while they fit at their ideal widths;
-    /// otherwise, and always from `.accessibility1` up (DD16, the same
+    /// otherwise, and always at the accessibility sizes (DD16, the same
     /// threshold as the map card), one leading icon-and-caption row per
     /// point, so no caption is squeezed into broken lines ("Ho/t/foo/d")
     /// and nothing pushes the column past the page inset (#70).
     var body: some View {
-        if MapBottomCard.usesStackedLayout(for: dynamicTypeSize) {
+        if dynamicTypeSize.isAccessibilitySize {
             stacked
         } else {
             ViewThatFits(in: .horizontal) {
@@ -67,32 +69,80 @@ struct DataPointsSection: View {
         }
     }
 
+    /// Presence is visual only (opacity), so the symbol is hidden from
+    /// VoiceOver and the caption carries a Yes/No value instead; before
+    /// this every amenity read as present.
     private func icon(for point: DataPoint) -> some View {
         Image(systemName: point.systemImage)
             .foregroundStyle(point.isPresent ? .primary : .secondary)
             .opacity(point.isPresent ? 1 : 0.3)
+            .accessibilityHidden(true)
     }
 
     private func caption(for point: DataPoint) -> some View {
-        Text(point.label)
+        Text(point.label.copy.text)
             .font(.caption2)
             .foregroundStyle(.secondary)
+            .accessibilityValue(
+                (point.isPresent ? AppCopy.dataPointPresentValue : AppCopy.dataPointAbsentValue).copy.text
+            )
     }
 }
 
-/// The detail screen's button rows (the photos header, the review/flag
-/// row): side by side normally, a leading `VStack` with 12pt grouping from
-/// `.accessibility1` up (DD16), so accessibility-size labels wrap inside
-/// the 16pt page inset instead of widening the content column (#70).
-struct DetailButtonRow<Content: View>: View {
+/// The detail screen's button rows: the review/flag pair, and the photos
+/// header, where a title leads and its action trails. Side by side while
+/// everything fits at its ideal width, otherwise (and always at the
+/// accessibility sizes, DD16) a leading `VStack` with 12pt grouping, so a
+/// label never wraps mid-phrase inside its button and nothing widens the
+/// content column past the 16pt page inset (#70).
+///
+/// Side by side, the buttons keep their ideal width (`fixedSize`): an
+/// `HStack` proposes an equal split to its children, which wraps a button
+/// that would have fit, and `ViewThatFits` had already judged the row by
+/// ideal widths. Stacked, they may wrap.
+struct DetailButtonRow<Title: View, Buttons: View>: View {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @ViewBuilder let content: Content
+    private let title: Title?
+    private let buttons: Buttons
+
+    init(@ViewBuilder buttons: () -> Buttons) where Title == EmptyView {
+        title = nil
+        self.buttons = buttons()
+    }
+
+    init(@ViewBuilder title: () -> Title, @ViewBuilder buttons: () -> Buttons) {
+        self.title = title()
+        self.buttons = buttons()
+    }
 
     var body: some View {
-        let layout = MapBottomCard.usesStackedLayout(for: dynamicTypeSize)
-            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12))
-            : AnyLayout(HStackLayout(spacing: 12))
-        layout { content }
+        if dynamicTypeSize.isAccessibilitySize {
+            stacked
+        } else {
+            ViewThatFits(in: .horizontal) {
+                sideBySide
+                stacked
+            }
+        }
+    }
+
+    private var sideBySide: some View {
+        HStack(spacing: 12) {
+            if let title {
+                title.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack(spacing: 12) { buttons }
+                .fixedSize(horizontal: true, vertical: false)
+        }
+    }
+
+    private var stacked: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let title {
+                title
+            }
+            buttons
+        }
     }
 }
 
