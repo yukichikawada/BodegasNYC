@@ -12,6 +12,14 @@ import SwiftUI
 /// switches instead of being torn down and rebuilt (and refetched) every
 /// time this view remounts.
 ///
+/// The List tab is a page over the live map (#23 T2): `BrowseView` keeps
+/// `MapScreenView` mounted underneath and inserts this view above it, so the
+/// root is full-size and opaque in every state (the loading `ProgressView`
+/// and `ContentUnavailableView`s included; DESIGN.md: pages are opaque).
+/// `scrollID` and `searchFocus` are `BrowseView`'s, so a Map → List round
+/// trip returns to the same row and choosing Map can resign the search field
+/// before the page leaves.
+///
 /// `filter` is `BrowseView`'s shared filter state, bound here only so
 /// `.searchable` can edit its search text and the no-matches state can
 /// clear its toggles — `BrowseView` pushes the result back into
@@ -23,15 +31,20 @@ import SwiftUI
 struct BodegaListView: View {
     let viewModel: BodegaListViewModel
     @Binding var filter: BodegaFilter
+    @Binding var scrollID: Bodega.ID?
+    var searchFocus: FocusState<Bool>.Binding
     let onAddBodega: () -> Void
 
     var body: some View {
         content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(Color(.systemBackground))
             // On the outer view rather than the `List` case alone, so the
             // search field stays put across the empty/no-matches states —
             // otherwise a search that matches nothing would remove the very
             // field needed to edit it.
             .searchable(text: $filter.searchText, prompt: "Name or address")
+            .searchFocused(searchFocus)
             // Bodega names are proper nouns and slang: no auto-capitalised
             // first letter (the empty state echoes the query verbatim) and
             // no autocorrect fighting the spelling (#60).
@@ -73,6 +86,7 @@ struct BodegaListView: View {
                 }
             }
             .listStyle(.plain)
+            .scrollPosition(id: $scrollID, anchor: .top)
         case .failed:
             // The raw error isn't shown (design DD5); Retry re-runs the
             // initial load.

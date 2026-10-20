@@ -10,10 +10,11 @@ import UIKit
 /// this view decoupled from `NavigationPath`/the container's routing.
 ///
 /// `viewModel`/`cameraPosition` are received already-built rather than
-/// constructed here, unlike a plain single-screen view — `BrowseView` keeps
-/// both alive across Map↔List tab switches (SwiftUI tears down and rebuilds
-/// `@State` owned by a view that gets swapped out of the rendered tree),
-/// so this view must not own them itself.
+/// constructed here, unlike a plain single-screen view: `BrowseView` owns
+/// them alongside the list's. This view itself stays mounted on both tabs
+/// (#23): the List tab is a page laid over it, so `showsToolbar` is false
+/// there, which hides the map-only toolbar items and stops camera settles
+/// from refetching or reclustering under the page.
 struct MapScreenView: View {
     static let newYorkCityDefault = MKCoordinateRegion(
         center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
@@ -33,6 +34,16 @@ struct MapScreenView: View {
     @State private var selectedItemID: MapDisplayItem.ID?
     @State private var lastVisibleRegion: MKCoordinateRegion?
     @State private var showingClearConfirmation = false
+    /// A camera settle that happened while the List tab covered the map,
+    /// replayed when the Map tab returns (no refetch from the List tab).
+    @State private var pendingSettledRegion: MKCoordinateRegion?
+    /// The placement card's measured height, slot chrome included, and the
+    /// crosshair's measured centre in global coordinates (#23 T3): the one
+    /// space both the drawn crosshair and `MapProxy.convert` agree on, so the
+    /// submitted coordinate is the one under the figure.
+    @State private var placementCardHeight: CGFloat = 0
+    @State private var crosshairPoint: CGPoint?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let locationPermissionClient: LocationPermissionClient
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
     @Binding private var isPlacingBodega: Bool
@@ -45,6 +56,10 @@ struct MapScreenView: View {
     private let showsAddTip: Bool
     /// Pin drop phases, the first-add card, the settle signal (#25).
     private let addCompletion: AddCompletionCoordinator?
+    /// True on the Map tab. False while the List tab covers the map: the
+    /// Locate Me and Streets Walked items leave the toolbar and camera
+    /// settles are held back.
+    private let showsToolbar: Bool
 
     init(
         viewModel: BodegaMapViewModel,
@@ -56,7 +71,8 @@ struct MapScreenView: View {
         onSelectBodega: @escaping (Bodega) -> Void,
         onClearFilters: @escaping () -> Void,
         showsAddTip: Bool = false,
-        addCompletion: AddCompletionCoordinator? = nil
+        addCompletion: AddCompletionCoordinator? = nil,
+        showsToolbar: Bool = true
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -68,9 +84,16 @@ struct MapScreenView: View {
         self.onClearFilters = onClearFilters
         self.showsAddTip = showsAddTip
         self.addCompletion = addCompletion
+        self.showsToolbar = showsToolbar
     }
 
-    /// What the bottom slot shows when the placement bar isn't up — see
+    /// The bottom slot's one occupant: the placement card while placing,
+    /// else the card `MapBottomCard.select` picks, else nothing.
+    private var bottomSlot: BrowseMotion.BottomSlot {
+        BrowseMotion.BottomSlot.select(isPlacing: isPlacingBodega, card: bottomCardContent)
+    }
+
+    /// What the bottom slot shows when the placement card isn't up — see
     /// `MapBottomCard.select` for the precedence.
     private var bottomCardContent: MapBottomCard.Content? {
         MapBottomCard.select(
@@ -101,6 +124,63 @@ struct MapScreenView: View {
     }
 
     var body: some View {
+        MapReader { proxy in
+            // Back to front (spec layer order): map, bottom slot, crosshair
+            // (never covered by the card), tracking-error banner.
+            map
+                // An overlay, not a safe-area inset, so the map doesn't shift
+                // when a card or the placement card comes or goes (#58, #23).
+                // Lifted clear of the Apple Maps logo and Legal link, which
+                // must stay visible; VoiceOver still reads it after the map's
+                // content (DD15).
+                .overlay(alignment: .bottom) { bottomSlotLayer(proxy) }
+                .overlay {
+                    PlacementCrosshair(
+                        isPlacing: isPlacingBodega,
+                        cardHeight: placementCardHeight,
+                        clearance: Self.attributionClearance,
+                        point: $crosshairPoint
+                    )
+                }
+                .overlay(alignment: .top) {
+                    if let error = streetsWalkedViewModel?.lastTrackingError {
+                        TrackingErrorBanner(message: error) {
+                            streetsWalkedViewModel?.dismissTrackingError()
+                        }
+                    }
+                }
+        }
+        // The List tab's search keyboard must never resize the covered map.
+        .ignoresSafeArea(.keyboard)
+        .onChange(of: showsToolbar) { _, isMapTab in
+            guard isMapTab, let region = pendingSettledRegion else { return }
+            pendingSettledRegion = nil
+            viewModel.regionDidSettle(region)
+        }
+        .task {
+            viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
+            streetsWalkedViewModel?.loadPolylinesIfNeeded()
+        }
+        .toolbar {
+            // Map-only items, innermost in the trailing group so Account and
+            // Add keep their place when the List tab drops these (#23).
+            if showsToolbar {
+                mapToolbarItems
+            }
+        }
+        .confirmationDialog(
+            "Delete all walked-street history? This can't be undone.",
+            isPresented: $showingClearConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button("Delete All", role: .destructive) {
+                Task { await clearStreetsWalkedHistory() }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    private var map: some View {
         Map(position: $cameraPosition, selection: $selectedItemID) {
             ForEach(orderedDisplayItems) { item in
                 switch item {
@@ -143,6 +223,11 @@ struct MapScreenView: View {
         .tint(.blue)
         .onMapCameraChange(frequency: .onEnd) { context in
             lastVisibleRegion = context.region
+            // Under the List tab nothing may refetch or recluster.
+            guard showsToolbar else {
+                pendingSettledRegion = context.region
+                return
+            }
             viewModel.regionDidSettle(context.region)
             addCompletion?.cameraDidSettle(center: Coordinate(context.region.center))
         }
@@ -158,102 +243,6 @@ struct MapScreenView: View {
             case .cluster(let cluster): zoom(into: cluster)
             case nil: break
             }
-        }
-        .overlay(alignment: .top) {
-            if let error = streetsWalkedViewModel?.lastTrackingError {
-                TrackingErrorBanner(message: error) {
-                    streetsWalkedViewModel?.dismissTrackingError()
-                }
-            }
-        }
-        .overlay {
-            if isPlacingBodega {
-                // `figure.wave` has no directional "point" the way `mappin`
-                // does, so it's centered directly on the screen-center
-                // coordinate `lastVisibleRegion.center` resolves to — no
-                // offset needed.
-                Image(systemName: "figure.wave")
-                    .font(.largeTitle)
-                    .foregroundStyle(.red)
-                    .allowsHitTesting(false)
-            }
-        }
-        // An overlay, not a safe-area inset, so the map doesn't shift when a
-        // card comes or goes (#58). Lifted clear of the Apple Maps logo and
-        // Legal link, which must stay visible; VoiceOver still reads it after
-        // the map's content (DD15).
-        .overlay(alignment: .bottom) {
-            VStack(spacing: 0) {
-                if let content = bottomCardContent {
-                    // `.id` makes a change of content a remove + insert, so
-                    // every swap in the slot runs the same transition.
-                    MapBottomCard(
-                        content: content,
-                        onAction: { performBottomCardAction(for: content) },
-                        onDismiss: { streetsWalkedViewModel?.isEmptyBannerDismissed = true }
-                    )
-                    .id(content)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .padding(.bottom, Self.attributionClearance)
-            .animation(.easeInOut(duration: AddCompletionCoordinator.cardTransitionSeconds), value: bottomCardContent)
-            // An overlay is otherwise read before the map's content.
-            .accessibilitySortPriority(-1)
-        }
-        // Placement is a mode: its bar insets the map, centring the crosshair.
-        .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                if isPlacingBodega {
-                    PlacementBottomBar(
-                        onUseThisLocation: {
-                            onConfirmPlacement(lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
-                            isPlacingBodega = false
-                        },
-                        onCancel: { isPlacingBodega = false },
-                        onNearMe: { Task { await locateMe() } }
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                }
-            }
-            .animation(.easeInOut(duration: AddCompletionCoordinator.cardTransitionSeconds), value: isPlacingBodega)
-        }
-        .task {
-            viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
-            streetsWalkedViewModel?.loadPolylinesIfNeeded()
-        }
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await locateMe() }
-                } label: {
-                    Label("Locate Me", systemImage: "location")
-                }
-            }
-            if let streetsWalkedViewModel {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button(streetsWalkedViewModel.isTrackingEnabled ? "Turn Off" : "Turn On") {
-                            Task { await toggleStreetsWalked() }
-                        }
-                        Button("Clear History…", role: .destructive) {
-                            showingClearConfirmation = true
-                        }
-                    } label: {
-                        Label("Streets Walked", systemImage: "figure.walk")
-                    }
-                }
-            }
-        }
-        .confirmationDialog(
-            "Delete all walked-street history? This can't be undone.",
-            isPresented: $showingClearConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete All", role: .destructive) {
-                Task { await clearStreetsWalkedHistory() }
-            }
-            Button("Cancel", role: .cancel) {}
         }
     }
 
@@ -325,34 +314,80 @@ struct MapScreenView: View {
     }
 }
 
-/// Non-modal: `didUpdateLocations`'s save-failure path can re-set
-/// `lastTrackingError` on every subsequent location update if the
-/// underlying condition doesn't resolve, so a `.alert` would re-interrupt
-/// the user repeatedly. This communicates "tracking is currently degraded"
-/// as ongoing state instead, dismissible without blocking map interaction.
-private struct TrackingErrorBanner: View {
-    let message: String
-    let onDismiss: () -> Void
+// MARK: - Bottom slot, placement and map toolbar (#23)
 
-    var body: some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.yellow)
-            Text(message)
-                .font(.footnote)
-                .lineLimit(3)
-            Spacer(minLength: 0)
-            Button {
-                onDismiss()
-            } label: {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
+// In an extension (same file, so the private state stays private) to keep the
+// struct body within SwiftLint's type length.
+extension MapScreenView {
+    /// The bottom slot: the placement card or a `MapBottomCard`, one at a
+    /// time, entering from the bottom edge with opacity (opacity only under
+    /// Reduce Motion), 24pt clear of the attribution row.
+    private func bottomSlotLayer(_ proxy: MapProxy) -> some View {
+        VStack(spacing: 0) {
+            switch bottomSlot {
+            case .placing:
+                PlacementBottomBar(
+                    onUseThisLocation: { confirmPlacement(proxy) },
+                    onCancel: { isPlacingBodega = false },
+                    onNearMe: { Task { await locateMe() } }
+                )
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { placementCardHeight = $0 }
+                .transition(slotTransition)
+            case .card(let content):
+                // `.id` makes a change of content a remove + insert, so
+                // every swap in the slot runs the same transition.
+                MapBottomCard(
+                    content: content,
+                    onAction: { performBottomCardAction(for: content) },
+                    onDismiss: { streetsWalkedViewModel?.isEmptyBannerDismissed = true }
+                )
+                .id(content)
+                .transition(slotTransition)
+            case .empty:
+                EmptyView()
             }
-            .accessibilityLabel("Dismiss")
         }
-        .padding(12)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-        .padding(.horizontal)
-        .padding(.top, 8)
+        .padding(.bottom, Self.attributionClearance)
+        .animation(.easeInOut(duration: BrowseMotion.BottomSlot.transitionSeconds), value: bottomSlot)
+        // An overlay is otherwise read before the map's content.
+        .accessibilitySortPriority(-1)
+    }
+
+    private var slotTransition: AnyTransition {
+        BrowseMotion.BottomSlot.style(reduceMotion: reduceMotion).transition
+    }
+
+    /// Submits the coordinate under the crosshair, converted from its
+    /// measured screen point; the visible region's centre only if the
+    /// crosshair was never measured.
+    private func confirmPlacement(_ proxy: MapProxy) {
+        let underCrosshair = crosshairPoint.flatMap { proxy.convert($0, from: .global) }
+        onConfirmPlacement(underCrosshair ?? lastVisibleRegion?.center ?? Self.newYorkCityDefault.center)
+        isPlacingBodega = false
+    }
+
+    @ToolbarContentBuilder
+    private var mapToolbarItems: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                Task { await locateMe() }
+            } label: {
+                Label("Locate Me", systemImage: "location")
+            }
+        }
+        if let streetsWalkedViewModel {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(streetsWalkedViewModel.isTrackingEnabled ? "Turn Off" : "Turn On") {
+                        Task { await toggleStreetsWalked() }
+                    }
+                    Button("Clear History…", role: .destructive) {
+                        showingClearConfirmation = true
+                    }
+                } label: {
+                    Label("Streets Walked", systemImage: "figure.walk")
+                }
+            }
+        }
     }
 }

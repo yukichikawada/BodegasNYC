@@ -112,6 +112,13 @@ struct AppCopyVoiceTests {
         #expect(plain.title.copy.text == "No reviews yet.")
     }
 
+    @Test func placementCardTitleIsAShortSentence() {
+        let title = AppCopy.placementCardTitle.copy
+        #expect(title.kind == .title)
+        #expect(title.text == "Walk the figure onto the bodega.")
+        #expect(VoiceRule.allCases.allSatisfy { $0.passes(title) })
+    }
+
     // MARK: Planted violations: each must fail exactly the rule it targets.
 
     @Test func plantedExclamationFailsRuleOne() {

@@ -86,6 +86,12 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case signInBody
     case nearMeAction
 
+    // MARK: Placement card (#23)
+
+    /// The placement card's title: the instruction the crosshair stands for
+    /// (the crosshair itself is hidden from VoiceOver).
+    case placementCardTitle
+
     // MARK: Delight (#25)
 
     case delightFirstAddTitle
@@ -160,6 +166,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .signInBody:
             CopyString(kind: .body, text: "Looking never needs an account. Adding, reviewing, and photos do.")
         case .nearMeAction: CopyString(kind: .label, text: "Near Me")
+        case .placementCardTitle: CopyString(kind: .title, text: "Walk the figure onto the bodega.")
         case .delightFirstAddTitle: CopyString(kind: .title, text: "One down.")
         case .delightFirstAddBody: CopyString(kind: .body, text: "The map knows something it didn't a minute ago.")
         case .delightFirstAddBodyCat:
