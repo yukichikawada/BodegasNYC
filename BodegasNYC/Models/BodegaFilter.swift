@@ -84,6 +84,16 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
         return copy
     }
 
+    /// What the map's no-matches card's Clear Filters applies (#57). The
+    /// map has no search field, so when no amenity toggle is on the search
+    /// text is the only thing hiding every pin, and keeping it (DD6) would
+    /// leave the button doing nothing: clear everything instead. With any
+    /// toggle on, DD6 holds and the search is kept. The list's Clear
+    /// Filters keeps using `clearingAmenities()`, since its field is visible.
+    func clearingForMapCard() -> BodegaFilter {
+        requiredAmenities.isEmpty ? .none : clearingAmenities()
+    }
+
     func requires(_ amenity: Amenity) -> Bool {
         requiredAmenities.contains(amenity)
     }
