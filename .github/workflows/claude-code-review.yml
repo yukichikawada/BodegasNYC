@@ -5,11 +5,12 @@
 #
 # Setup (one-time, by the repo owner):
 #   1. Install the Claude GitHub App on this repo: https://github.com/apps/claude
-#   2. Add the ANTHROPIC_API_KEY repository secret (Settings → Secrets and
-#      variables → Actions). To use a Claude subscription instead, run
-#      `claude setup-token` locally, store the result as CLAUDE_CODE_OAUTH_TOKEN,
-#      and swap the `anthropic_api_key` line below for
-#      `claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}`.
+#   2. Run `claude setup-token` locally and store the result as the
+#      CLAUDE_CODE_OAUTH_TOKEN repository secret (Settings → Secrets and
+#      variables → Actions). This bills the owner's Claude subscription, the
+#      same setup the ClaudHeer repo uses. To bill API credit instead, store an
+#      ANTHROPIC_API_KEY secret and swap the `claude_code_oauth_token` line
+#      below for `anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}`.
 # Draft PRs, closed PRs, and PRs that already carry a Claude comment are skipped.
 name: Claude Code Review
 on:
@@ -29,7 +30,7 @@ jobs:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           plugin_marketplaces: "https://github.com/anthropics/claude-code.git"
           plugins: "code-review@claude-code-plugins"
           prompt: "/code-review:code-review --comment ${{ github.repository }}/pull/${{ github.event.pull_request.number }}"

@@ -137,5 +137,3 @@ Every judgment call made in this draft without your explicit sign-off, collected
 **Related:** [`MVP_BACKLOG.md`](./MVP_BACKLOG.md) — tracked backlog for remaining in-scope MVP
 work. [`REACH_GOALS.md`](./REACH_GOALS.md) — structured backlog for future, out-of-scope feature
 planning.
-
-<!-- CI review probe: safe to delete -->
