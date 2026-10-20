@@ -98,7 +98,7 @@ struct BodegaDetailView: View {
                 ) { review in
                     presentFlagSheet(for: .review(review.id))
                 }
-                HStack(spacing: 12) {
+                DetailButtonRow {
                     reviewActionButton
                     Button("Flag an Issue", systemImage: "flag") {
                         presentFlagSheet(for: .bodega(viewModel.bodega.id))
@@ -250,7 +250,8 @@ struct BodegaDetailView: View {
     }
 }
 
-// `DataPointsSection` and `HoursSection` live in `BodegaDetailSections.swift`.
+// `DataPointsSection`, `HoursSection`, `ReviewRow` and `DetailButtonRow` live in
+// `BodegaDetailSections.swift`.
 
 private struct RatingSummaryView: View {
     let averageRating: Double?
@@ -304,9 +305,9 @@ private struct PhotoGallerySection: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack {
+            DetailButtonRow {
                 Text("Photos").font(.headline)
-                Spacer()
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 PhotosPicker(selection: $pickedItem, matching: .images) {
                     Label("Add a Photo", systemImage: "photo.badge.plus")
                 }
@@ -361,28 +362,6 @@ private struct ReviewsSection: View {
                             }
                     }
                 }
-            }
-        }
-    }
-}
-
-private struct ReviewRow: View {
-    let review: Review
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 2) {
-                ForEach(0..<5, id: \.self) { index in
-                    Image(systemName: index < review.rating ? "star.fill" : "star")
-                        .foregroundStyle(.yellow)
-                        .font(.caption)
-                }
-                Text(review.createdAt, style: .date)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if let body = review.body {
-                Text(body).font(.body)
             }
         }
     }
