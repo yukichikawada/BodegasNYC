@@ -49,6 +49,11 @@ final class BodegaMapViewModel {
     /// already-in-flight response can't still land after a subsequent
     /// fetch's response does.
     private var currentFetchGeneration = 0
+    /// Whether any fetch has succeeded yet. Until one has, local changes
+    /// are buffered in `pendingLocalChanges` rather than superseding the
+    /// in-flight fetch — see `isFirstFetchInFlight`.
+    private var hasLoadedOnce = false
+    private var pendingLocalChanges = PendingBodegaChanges()
 
     private static let nearbyRadiusRange: ClosedRange<Double> = 200...5000
 
@@ -106,6 +111,9 @@ final class BodegaMapViewModel {
         // moved off `.idle` by the time that second call's guard runs —
         // before the Task has had any chance to start executing.
         loadState = .loading
+        // This fetch starts after every change buffered so far, so its
+        // result already reflects them.
+        pendingLocalChanges = PendingBodegaChanges()
 
         fetchTask = Task { [bodegaService] in
             do {
@@ -121,13 +129,16 @@ final class BodegaMapViewModel {
                 }
 
                 guard generation == currentFetchGeneration else { return }
-                loadedBodegas = bodegas
+                loadedBodegas = pendingLocalChanges.applied(to: bodegas)
+                pendingLocalChanges = PendingBodegaChanges()
+                hasLoadedOnce = true
                 loadState = .loaded
                 if let lastRegion {
                     recluster(region: lastRegion)
                 }
             } catch {
                 guard generation == currentFetchGeneration else { return }
+                pendingLocalChanges = PendingBodegaChanges()
                 loadState = .failed(error.localizedDescription)
             }
         }
@@ -151,9 +162,16 @@ final class BodegaMapViewModel {
     /// placement mode can leave a `.nearby` refetch in flight (panning
     /// re-triggers one on every settle), and without this, that fetch's
     /// response landing after this prepend would silently overwrite
-    /// `loadedBodegas`, discarding the just-added pin.
+    /// `loadedBodegas`, discarding the just-added pin. The exception is the
+    /// *first* fetch: with nothing loaded yet, dropping it would leave only
+    /// this pin, so the row is buffered and merged into that fetch's result
+    /// when it lands instead (issue #35).
     func bodegaWasAdded(_ bodega: Bodega) {
-        supersedeInFlightFetch()
+        if isFirstFetchInFlight {
+            pendingLocalChanges.recordAdded(bodega)
+        } else {
+            supersedeInFlightFetch()
+        }
         loadedBodegas.insert(bodega, at: 0)
         if let lastRegion {
             recluster(region: lastRegion)
@@ -170,14 +188,29 @@ final class BodegaMapViewModel {
     /// Bumps `currentFetchGeneration` like `bodegaWasAdded`, so a fetch
     /// already in flight from before the save can't land afterward and put
     /// the pre-edit row back. Only when the bodega was found, so an
-    /// unrelated in-flight fetch isn't discarded for nothing.
+    /// unrelated in-flight fetch isn't discarded for nothing. During the
+    /// first fetch the edit is buffered instead, so it wins over that
+    /// fetch's (possibly pre-edit) copy of the row when it lands.
     func bodegaWasUpdated(_ bodega: Bodega) {
-        guard let index = loadedBodegas.firstIndex(where: { $0.id == bodega.id }) else { return }
-        supersedeInFlightFetch()
+        let index = loadedBodegas.firstIndex(where: { $0.id == bodega.id })
+        if isFirstFetchInFlight {
+            pendingLocalChanges.recordUpdated(bodega)
+        } else {
+            guard index != nil else { return }
+            supersedeInFlightFetch()
+        }
+        guard let index else { return }
         loadedBodegas[index] = bodega
         if let lastRegion {
             recluster(region: lastRegion)
         }
+    }
+
+    /// True while the fetch in flight would be the first dataset this view
+    /// model holds, so there's nothing valid to fall back on if it were
+    /// dropped.
+    private var isFirstFetchInFlight: Bool {
+        loadState == .loading && !hasLoadedOnce
     }
 
     /// Bumps `currentFetchGeneration` so any in-flight fetch is dropped when
@@ -186,8 +219,8 @@ final class BodegaMapViewModel {
     /// the state would stay `.loading` forever. Setting `.loaded` here
     /// assumes we already hold a valid dataset. In practice the dropped
     /// fetch is a `.nearby` refetch after a pan, layered on data that is
-    /// already loaded. (`BodegaListViewModel.supersedeInFlightFetch()`
-    /// documents the one case where that assumption is weaker.)
+    /// already loaded. Never used during the first fetch, where that
+    /// assumption doesn't hold — see `PendingBodegaChanges`.
     private func supersedeInFlightFetch() {
         currentFetchGeneration += 1
         if loadState == .loading {
