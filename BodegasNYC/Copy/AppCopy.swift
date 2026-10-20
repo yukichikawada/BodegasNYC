@@ -50,6 +50,30 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case retryAction
     case dismissAction
 
+    // MARK: Onboarding (#21)
+
+    case onboardingPage1Title
+    case onboardingPage1Body
+    case onboardingPage2Title
+    case onboardingPage2Body
+    case onboardingCatLabel
+    case onboardingHotFoodLabel
+    case onboardingCigarettesLabel
+    case onboardingBeerLabel
+    case onboardingLottoLabel
+    case onboardingPage3Title
+    case onboardingPage3Body
+    case onboardingAddAction
+    case onboardingBrowseAction
+    case onboardingNext
+    case onboardingSkip
+    case onboardingReplayMenuItem
+
+    // MARK: Root loading (#21, design DD8)
+
+    case rootLoading
+    case rootLoadFailed
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -73,6 +97,34 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .clearFiltersAction: CopyString(kind: .label, text: "Clear Filters")
         case .retryAction: CopyString(kind: .label, text: "Retry")
         case .dismissAction: CopyString(kind: .label, text: "Dismiss")
+        case .onboardingPage1Title: CopyString(kind: .title, text: "Every bodega has something.")
+        case .onboardingPage1Body:
+            CopyString(
+                kind: .body,
+                text: "A cat. Hot food. Lotto. Cold beer at 3 a.m. The big maps don't know any of that. "
+                    + "This map only knows what people put in it."
+            )
+        case .onboardingPage2Title: CopyString(kind: .title, text: "Filter by what you need.")
+        case .onboardingPage2Body:
+            CopyString(
+                kind: .body,
+                text: "Cat, hot food, cigarettes, beer, lotto. Find the right one before the walk, not after."
+            )
+        case .onboardingCatLabel: CopyString(kind: .label, text: "Cat")
+        case .onboardingHotFoodLabel: CopyString(kind: .label, text: "Hot Food")
+        case .onboardingCigarettesLabel: CopyString(kind: .label, text: "Cigarettes")
+        case .onboardingBeerLabel: CopyString(kind: .label, text: "Beer")
+        case .onboardingLottoLabel: CopyString(kind: .label, text: "Lotto")
+        case .onboardingPage3Title: CopyString(kind: .title, text: "You know a spot.")
+        case .onboardingPage3Body:
+            CopyString(kind: .body, text: "Put the one on your corner on the map. A minute, maybe two.")
+        case .onboardingAddAction: CopyString(kind: .label, text: "Add a Bodega You Know")
+        case .onboardingBrowseAction: CopyString(kind: .label, text: "Just Look Around")
+        case .onboardingNext: CopyString(kind: .label, text: "Next")
+        case .onboardingSkip: CopyString(kind: .label, text: "Skip")
+        case .onboardingReplayMenuItem: CopyString(kind: .label, text: "Show Intro Again")
+        case .rootLoading: CopyString(kind: .body, text: "Getting the map.")
+        case .rootLoadFailed: CopyString(kind: .title, text: "Couldn't reach the map.")
         }
     }
 

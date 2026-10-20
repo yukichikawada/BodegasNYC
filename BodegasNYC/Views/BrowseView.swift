@@ -65,6 +65,13 @@ struct BrowseView: View {
     private let sessionStore: SessionStore
     private let locationPermissionClient: LocationPermissionClient
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
+    /// Passed in by `RootView`, which owns it (and the onboarding overlay)
+    /// rather than putting it on `AppEnvironment`; see `RootView`.
+    private let firstRunState: FirstRunState
+    /// `RootView`'s overlay flag: the Account menu's "Show Intro Again"
+    /// sets it, and it going false is this view's cue to land on the map.
+    @Binding private var showingOnboarding: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(
         bodegaService: BodegaService,
@@ -73,8 +80,12 @@ struct BrowseView: View {
         flagService: FlagService,
         sessionStore: SessionStore,
         locationPermissionClient: LocationPermissionClient,
-        streetsWalkedViewModel: StreetsWalkedViewModel?
+        streetsWalkedViewModel: StreetsWalkedViewModel?,
+        firstRunState: FirstRunState,
+        showingOnboarding: Binding<Bool>
     ) {
+        self.firstRunState = firstRunState
+        _showingOnboarding = showingOnboarding
         _mapViewModel = State(initialValue: BodegaMapViewModel(bodegaService: bodegaService))
         _listViewModel = State(initialValue: BodegaListViewModel(bodegaService: bodegaService))
         self.bodegaService = bodegaService
@@ -124,18 +135,7 @@ struct BrowseView: View {
                         filterButton
                     }
                     ToolbarItem(placement: .topBarTrailing) {
-                        Button {
-                            if sessionStore.isSignedIn {
-                                showingSignOutConfirmation = true
-                            } else {
-                                showingSignIn = true
-                            }
-                        } label: {
-                            Label(
-                                "Account",
-                                systemImage: sessionStore.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle"
-                            )
-                        }
+                        accountMenu
                     }
                     ToolbarItem(placement: .topBarTrailing) {
                         Menu {
@@ -190,7 +190,22 @@ struct BrowseView: View {
                     AddBodegaView(viewModel: viewModel, sessionStore: sessionStore) { insertedBodega in
                         mapViewModel.bodegaWasAdded(insertedBodega)
                         listViewModel.bodegaWasAdded(insertedBodega)
+                        // The single call site until #25's coordinator
+                        // takes it over and uses the return value.
+                        firstRunState.markFirstBodegaAdded()
                         addBodegaViewModel = nil
+                    }
+                }
+                .onChange(of: showingOnboarding) { _, isShowing in
+                    guard !isShowing else { return }
+                    landAfterOnboarding()
+                }
+                .onAppear {
+                    // The overlay can be gone before this view exists (the
+                    // environment was still loading, or failed and was
+                    // retried, when the user picked the add path).
+                    if firstRunState.pendingTutorialAdd {
+                        landAfterOnboarding()
                     }
                 }
                 .overlay {
@@ -294,5 +309,50 @@ struct BrowseView: View {
             bodegaService: bodegaService,
             sessionStore: sessionStore
         )
+    }
+}
+
+// MARK: - First run (#21)
+
+extension BrowseView {
+    /// Account toolbar item: a `Menu` (was a plain button) so it can also
+    /// hold "Show Intro Again" (#21). Same label and accessibility label as
+    /// before, so the #44 toolbar layout is unchanged.
+    private var accountMenu: some View {
+        Menu {
+            if sessionStore.isSignedIn {
+                Button("Sign Out…", role: .destructive) {
+                    showingSignOutConfirmation = true
+                }
+            } else {
+                Button("Sign In") {
+                    showingSignIn = true
+                }
+            }
+            Divider()
+            Button(AppCopy.onboardingReplayMenuItem.copy.text) {
+                withAnimation(OnboardingView.animation(reduceMotion: reduceMotion)) {
+                    showingOnboarding = true
+                }
+            }
+        } label: {
+            Label(
+                "Account",
+                systemImage: sessionStore.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle"
+            )
+        }
+    }
+
+    /// The single landing rule for every onboarding exit, first run or
+    /// replay: the Map tab, in placement mode only when the user chose "Add
+    /// a Bodega You Know" (the pending request is consumed here, once), and
+    /// out of any placement left over from before a replay otherwise.
+    /// `browseMode` and location are left alone. A no-op while the overlay
+    /// is still up; the `onChange` in `body` runs it when it closes.
+    private func landAfterOnboarding() {
+        guard !showingOnboarding else { return }
+        activeTab = .map
+        isPlacingBodega = firstRunState.pendingTutorialAdd
+        firstRunState.pendingTutorialAdd = false
     }
 }
