@@ -245,10 +245,10 @@ struct MapScreenView: View {
         }
         .onChange(of: selectedItemID) { _, newValue in
             guard let newValue else { return }
-            // Cleared at once, so every later tap (the same pin too) is a
-            // change; the held look comes from `pinMotion`, not MapKit.
+            // Cleared at once so every tap is a change. MapKit reports taps late:
+            // one landing after the List tab covers the map is ignored.
             selectedItemID = nil
-            guard !isPlacingBodega else { return }
+            guard !isPlacingBodega, showsToolbar else { return }
             if let cluster = pinMotion.tapped(newValue, among: viewModel.displayItems, onPush: onSelectBodega) {
                 zoom(into: cluster)
             }
