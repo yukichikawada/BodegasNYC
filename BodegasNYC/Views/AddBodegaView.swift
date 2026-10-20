@@ -100,6 +100,16 @@ struct AddBodegaView: View {
                     shownMatches = matches
                     duplicateDetent = dynamicTypeSize.isAccessibilitySize ? .large : .medium
                     isDuplicateSheetUp = true
+                case .signInRequired where isDuplicateSheetUp:
+                    // Normally the half sheet's `onDismiss` releases the
+                    // latch. If SwiftUI ever dropped that presentation,
+                    // `onDismiss` never fires, so release it anyway once a
+                    // dismissal animation would have ended; a second
+                    // release is a no-op.
+                    Task {
+                        try? await Task.sleep(for: .milliseconds(750))
+                        isDuplicateSheetUp = false
+                    }
                 default:
                     break
                 }
