@@ -13,12 +13,67 @@ struct RootView: View {
     }
 
     @State private var state: LoadState = .loading
+    /// Owned here, not on `AppEnvironment`: the environment is built in
+    /// `load()`, which re-runs on Retry (rebuilding this would drop
+    /// `pendingTutorialAdd`), and onboarding must be decided in the very
+    /// first frame, before any environment exists (eng review R2/R4).
+    /// Created once in `init`, never in `load()`.
+    @State private var firstRunState: FirstRunState
+    /// Seeded in `init` from `firstRunState.shouldShowOnboarding`, so a
+    /// first launch renders onboarding in the first frame with no
+    /// map-only frame before it (spec AC 8).
+    @State private var showingOnboarding: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    init(firstRunState: FirstRunState = FirstRunState()) {
+        _firstRunState = State(initialValue: firstRunState)
+        _showingOnboarding = State(initialValue: firstRunState.shouldShowOnboarding)
+    }
+
+    private var isLoading: Bool {
+        if case .loading = state { return true }
+        return false
+    }
+
+    /// The onboarding overlay sits above the whole load-state switch, so
+    /// nothing in the browse chrome (its toolbar lives inside
+    /// `BrowseView`'s `NavigationStack`) can draw over it. The stack below
+    /// is hidden from VoiceOver while it is up (design DD15).
     var body: some View {
+        ZStack {
+            content
+                .accessibilityHidden(showingOnboarding)
+            if showingOnboarding {
+                OnboardingView(isLoading: isLoading) { wantsToAdd in
+                    finishOnboarding(wantsToAdd: wantsToAdd)
+                }
+                .zIndex(1)
+                .transition(OnboardingView.transition(reduceMotion: reduceMotion))
+            }
+        }
+    }
+
+    /// Every onboarding exit, first run or replay. `BrowseView` reacts to
+    /// `showingOnboarding` going false (Map tab, pending tutorial add); if
+    /// it doesn't exist yet, it picks the pending add up when it appears.
+    private func finishOnboarding(wantsToAdd: Bool) {
+        firstRunState.completeOnboarding(wantsToAdd: wantsToAdd)
+        withAnimation(OnboardingView.animation(reduceMotion: reduceMotion)) {
+            showingOnboarding = false
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         switch state {
         case .loading:
-            ProgressView()
-                .task { await load() }
+            VStack(spacing: 12) {
+                ProgressView()
+                Text(AppCopy.rootLoading.copy.text)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+            }
+            .task { await load() }
         case .ready(let environment):
             BrowseView(
                 bodegaService: environment.bodegaService,
@@ -27,11 +82,13 @@ struct RootView: View {
                 flagService: environment.flagService,
                 sessionStore: environment.sessionStore,
                 locationPermissionClient: environment.locationPermissionClient,
-                streetsWalkedViewModel: environment.streetsWalkedViewModel
+                streetsWalkedViewModel: environment.streetsWalkedViewModel,
+                firstRunState: firstRunState,
+                showingOnboarding: $showingOnboarding
             )
         case .failed(let message):
             VStack(spacing: 12) {
-                Text("Couldn't connect")
+                Text(AppCopy.rootLoadFailed.copy.text)
                     .font(.headline)
                 Text(message)
                     .font(.subheadline)

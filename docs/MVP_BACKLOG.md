@@ -73,12 +73,21 @@ refreshes live while walking. Detail: section-owned no-reviews (cat line when th
 cat) and no-photos states. Pins use new `pin`/`catPin` asset colors. No backend changes.
 Covered by unit tests; live screenshots via QA on the branch simulator.
 
+**Onboarding Flow** (#21) — three screens in the app's voice (every bodega has something; filter
+by the five data points; you know a spot), shown once on first launch over everything, including
+the loading spinner, so no map frame renders first. Page 3 ends on the map either way: "Add a
+Bodega You Know" lands in placement mode, "Just Look Around" (or Skip) just lands. Never asks for
+location and never changes the browse mode. Replayable from the Account menu, now a `Menu` with
+"Show Intro Again". Flags live in a per-device `FirstRunState` (`UserDefaults`, never synced),
+which also records the first successful add for #25. The root spinner and its failure state gained
+copy ("Getting the map." / "Couldn't reach the map."). Reduce Motion swaps the exit slide for a
+fade. No backend changes. Covered by unit tests; live screenshots via QA on the branch simulator.
+
 ## Remaining MVP feature work
 
 | Feature | Category | One-liner | Effort | Needs Your Sign-Off? | Notes / Dependencies |
 |---|---|---|---|---|---|
 | Duplicate-Bodega Check on Submit | Add-a-Bodega | Basic proximity check when submitting a new bodega to catch obvious duplicates. | S–M | **Yes** — exact UX (merge vs. reject vs. flag-for-review) is explicitly left unspecified in PRD §4.1. | Depends on picking a UX before building — don't let this get built ahead of that decision. |
-| Onboarding Flow | Portfolio/Design | Custom onboarding that establishes tone immediately — not a generic permissions carousel. | M | **Yes** — needs your product voice/tone direction. | PRD §4.3/§8. |
 | First-Run Tutorial | Portfolio/Design | Guided "add your first bodega" flow that teaches by doing, not static screens. | M | **Yes** — same, needs voice/tone direction and interaction design. | PRD §4.3/§8. |
 | Custom Map↔List↔Detail Transitions | Portfolio/Design | Deliberate transitions between the three core views — map should never feel like it "goes away." | L | **Yes** — PRD §7 itself calls out that map-heavy screens deserve a focused `/plan` session once actually being built. | PRD §4.3/§8. Easy to underestimate — likely the largest single item here. |
 | Delight Moment | Portfolio/Design | At least one genuine delight moment tied to a meaningful action — leading candidate is right after a user's first bodega gets added. | S–M | **Yes** — needs your creative direction on what the moment actually is. | PRD §4.3/§8. |
