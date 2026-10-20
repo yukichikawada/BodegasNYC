@@ -25,7 +25,9 @@ struct RootView: View {
     @State private var showingOnboarding: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    init(firstRunState: FirstRunState = FirstRunState()) {
+    /// Defaults to `FirstRunState.shared` so every scene (iPad window)
+    /// shares one in-memory state; see `FirstRunState.shared`.
+    init(firstRunState: FirstRunState = .shared) {
         _firstRunState = State(initialValue: firstRunState)
         _showingOnboarding = State(initialValue: firstRunState.shouldShowOnboarding)
     }

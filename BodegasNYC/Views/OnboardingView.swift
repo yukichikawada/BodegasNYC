@@ -73,6 +73,9 @@ struct OnboardingView: View {
         }
         .padding(.horizontal, 16)
         .padding(.top, 16)
+        // Opaque like the bottom bar, so page content scrolling up at
+        // accessibility sizes or in landscape never shows through Skip.
+        .background(Color(.systemBackground))
     }
 
     private var bottomBar: some View {
@@ -214,21 +217,23 @@ extension OnboardingPage where Extra == EmptyView {
     }
 }
 
-/// Page 2's five data points, with the same symbols as `AddBodegaView`
-/// and `BodegaFilter.Amenity`.
+/// Page 2's five data points, in `BodegaFilter.Amenity` order with its
+/// symbols; only the short onboarding labels live here.
 private struct AmenityRows: View {
-    private static let rows: [(AppCopy, String)] = [
-        (.onboardingCatLabel, "cat"),
-        (.onboardingHotFoodLabel, "flame"),
-        (.onboardingCigarettesLabel, "smoke"),
-        (.onboardingBeerLabel, "mug"),
-        (.onboardingLottoLabel, "ticket")
-    ]
+    private static func label(for amenity: BodegaFilter.Amenity) -> AppCopy {
+        switch amenity {
+        case .hasCat: .onboardingCatLabel
+        case .servesHotFood: .onboardingHotFoodLabel
+        case .sellsCigarettes: .onboardingCigarettesLabel
+        case .sellsBeer: .onboardingBeerLabel
+        case .sellsLotto: .onboardingLottoLabel
+        }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            ForEach(Self.rows, id: \.0) { copy, systemImage in
-                Label(copy.copy.text, systemImage: systemImage)
+            ForEach(BodegaFilter.Amenity.allCases) { amenity in
+                Label(Self.label(for: amenity).copy.text, systemImage: amenity.systemImage)
                     .font(.title3)
             }
         }

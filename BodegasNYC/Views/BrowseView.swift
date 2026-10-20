@@ -197,17 +197,16 @@ struct BrowseView: View {
                     }
                 }
                 .onChange(of: showingOnboarding) { _, isShowing in
-                    // Every onboarding exit, first run or replay, lands on
-                    // the map. `browseMode` and location are left alone.
                     guard !isShowing else { return }
-                    activeTab = .map
-                    consumePendingTutorialAdd()
+                    landAfterOnboarding()
                 }
                 .onAppear {
                     // The overlay can be gone before this view exists (the
                     // environment was still loading, or failed and was
                     // retried, when the user picked the add path).
-                    consumePendingTutorialAdd()
+                    if firstRunState.pendingTutorialAdd {
+                        landAfterOnboarding()
+                    }
                 }
                 .overlay {
                     if isResolvingCurrentLocation {
@@ -344,13 +343,16 @@ extension BrowseView {
         }
     }
 
-    /// "Add a Bodega You Know" (onboarding page 3): enter placement mode on
-    /// the Map tab once, then clear the request. A no-op while the overlay
-    /// is still up; the `onChange` in `body` runs it again when it closes.
-    private func consumePendingTutorialAdd() {
-        guard !showingOnboarding, firstRunState.pendingTutorialAdd else { return }
-        firstRunState.pendingTutorialAdd = false
+    /// The single landing rule for every onboarding exit, first run or
+    /// replay: the Map tab, in placement mode only when the user chose "Add
+    /// a Bodega You Know" (the pending request is consumed here, once), and
+    /// out of any placement left over from before a replay otherwise.
+    /// `browseMode` and location are left alone. A no-op while the overlay
+    /// is still up; the `onChange` in `body` runs it when it closes.
+    private func landAfterOnboarding() {
+        guard !showingOnboarding else { return }
         activeTab = .map
-        isPlacingBodega = true
+        isPlacingBodega = firstRunState.pendingTutorialAdd
+        firstRunState.pendingTutorialAdd = false
     }
 }

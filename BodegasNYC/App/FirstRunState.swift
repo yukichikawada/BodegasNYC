@@ -15,6 +15,14 @@ import Observation
 @Observable
 @MainActor
 final class FirstRunState {
+    /// The app's one instance. The app supports multiple scenes (iPad
+    /// windows), and each scene builds its own `RootView`; separate
+    /// instances over the same `UserDefaults` would diverge in memory (one
+    /// window finishes onboarding while another still shows it, and
+    /// `pendingTutorialAdd` set in one is invisible to the other). Tests
+    /// and previews inject their own instance instead.
+    static let shared = FirstRunState()
+
     nonisolated static let hasCompletedOnboardingKey = "firstRun.hasCompletedOnboarding"
     nonisolated static let hasAddedFirstBodegaKey = "firstRun.hasAddedFirstBodega"
 
