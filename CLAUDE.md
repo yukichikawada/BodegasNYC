@@ -38,6 +38,17 @@ intent into a spec, then `/plan-eng-review` and `/plan-design-review` (accept th
 voices" second-model passes). Attach the resulting spec/report to the GitHub issue. Small,
 mechanical follow-ups to an already-reviewed spec don't need a fresh pass.
 
+**Batch the review questions.** The owner almost always accepts the recommended option in
+`/spec`, `/plan-eng-review`, and `/plan-design-review`, so do not walk them through decision
+briefs one at a time. Run the skill's analysis to completion first, collect every decision it
+would raise, and present them together: as few `AskUserQuestion` calls as possible (up to 4
+questions per call), recommended option first and marked `(Recommended)`, each with a one-line
+reason. A reply of "accept all" means take the recommended option for every item and continue
+without re-asking. Two exceptions still get asked on their own: anything gstack classifies as
+one-way (destructive ops, data-model or architecture forks) and any question whose answer
+changes which later questions exist. Where the skill fires a question mid-phase and the rest of
+the phase genuinely depends on it, batch what you can and say what is deferred.
+
 When Claude Code orchestrates work with subagents:
 
 - The orchestrator runs on the session's own model (Fable). It plans, briefs, reviews results,
