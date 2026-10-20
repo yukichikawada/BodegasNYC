@@ -37,6 +37,8 @@ struct MapScreenView: View {
     /// computes it (the four `shouldOfferAddTip` inputs plus TipKit's own
     /// verdict), so the slot never shows an empty card.
     private let showsAddTip: Bool
+    /// Pin drop phases, the first-add card, the settle signal (#25).
+    private let addCompletion: AddCompletionCoordinator?
 
     init(
         viewModel: BodegaMapViewModel,
@@ -47,7 +49,8 @@ struct MapScreenView: View {
         onConfirmPlacement: @escaping (CLLocationCoordinate2D) -> Void,
         onSelectBodega: @escaping (Bodega) -> Void,
         onClearFilters: @escaping () -> Void,
-        showsAddTip: Bool = false
+        showsAddTip: Bool = false,
+        addCompletion: AddCompletionCoordinator? = nil
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -58,14 +61,15 @@ struct MapScreenView: View {
         self.onSelectBodega = onSelectBodega
         self.onClearFilters = onClearFilters
         self.showsAddTip = showsAddTip
+        self.addCompletion = addCompletion
     }
 
     /// What the bottom slot shows when the placement bar isn't up — see
-    /// `MapBottomCard.select` for the precedence. #25 supplies `firstAdd`.
+    /// `MapBottomCard.select` for the precedence.
     private var bottomCardContent: MapBottomCard.Content? {
         MapBottomCard.select(
             isPlacing: isPlacingBodega,
-            firstAdd: nil,
+            firstAdd: addCompletion?.firstAddCard.map { MapBottomCard.FirstAdd(hasCat: $0.hasCat) },
             emptyState: MapBottomCard.bodegaEmptyState(
                 browseMode: viewModel.browseMode,
                 isLoadedEmpty: viewModel.isLoadedEmpty,
@@ -82,18 +86,29 @@ struct MapScreenView: View {
         )
     }
 
+    /// Selected and highlighted pins drawn last, above neighbours (DD3).
+    private var orderedDisplayItems: [MapDisplayItem] {
+        BodegaMapViewModel.drawOrdered(
+            viewModel.displayItems,
+            frontIDs: Set([selectedBodegaID, viewModel.highlightedBodegaID].compactMap { $0 })
+        )
+    }
+
     var body: some View {
         Map(position: $cameraPosition, selection: $selectedBodegaID) {
-            ForEach(viewModel.displayItems) { item in
+            ForEach(orderedDisplayItems) { item in
                 switch item {
                 case .pin(let bodega):
-                    Marker(
-                        bodega.name,
-                        systemImage: bodega.hasCat ? "cat" : "figure.wave",
-                        coordinate: bodega.coordinate.clLocationCoordinate
-                    )
+                    // One pin view for all (D10); the tag keeps tap-to-detail.
+                    Annotation(bodega.name, coordinate: bodega.coordinate.clLocationCoordinate, anchor: .center) {
+                        BodegaPinView(
+                            bodega: bodega,
+                            isSelected: selectedBodegaID == bodega.id,
+                            phase: addCompletion?.pinPhase(for: bodega.id) ?? .atRest
+                        )
+                    }
                     .tag(bodega.id)
-                    .tint(bodega.hasCat ? Color.catPin : Color.pin)
+                    .annotationTitles(.hidden)
                 case .cluster(let cluster):
                     Annotation(
                         "\(cluster.bodegaIDs.count) bodegas",
@@ -118,6 +133,7 @@ struct MapScreenView: View {
         .onMapCameraChange(frequency: .onEnd) { context in
             lastVisibleRegion = context.region
             viewModel.regionDidSettle(context.region)
+            addCompletion?.cameraDidSettle(center: Coordinate(context.region.center))
         }
         .onChange(of: selectedBodegaID) { _, newValue in
             guard !isPlacingBodega else { return }
@@ -217,7 +233,9 @@ struct MapScreenView: View {
             isPlacingBodega = true
         case .emptyState(.noFilterMatches):
             onClearFilters()
-        case .emptyState(.noStreets), .firstAdd:
+        case .firstAdd:
+            addCompletion?.dismissFirstAddCard()
+        case .emptyState(.noStreets):
             break
         }
     }
@@ -383,17 +401,5 @@ private struct PlacementBottomBar: View {
                 isPlacementTipPresented = true
             }
         }
-    }
-}
-
-private struct ClusterBadge: View {
-    let count: Int
-
-    var body: some View {
-        Text("\(count)")
-            .font(.caption.bold())
-            .padding(8)
-            .background(.blue, in: Circle())
-            .foregroundStyle(.white)
     }
 }

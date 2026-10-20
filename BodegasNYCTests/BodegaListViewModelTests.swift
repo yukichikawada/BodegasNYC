@@ -88,6 +88,26 @@ struct BodegaListViewModelTests {
         #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega", "El Sol"])
     }
 
+    /// Eng review R6 (#25): the add flow inserts immediately, so the row
+    /// may already be here from a fetch that landed first. One row,
+    /// updated in place, not a prepended duplicate. (The other order, an
+    /// insert followed by a fetch holding the row, is
+    /// `bodegaWasAddedDuringTheInitialFetchAppearsOnceWhenTheFetchAlsoReturnsIt`.)
+    @Test func aFetchContainingTheRowThenTheInsertKeepsOneRow() async throws {
+        MockURLProtocol.reset()
+        let addedID = UUID()
+        let body = "[\(Self.bodegaJSON(id: addedID, name: "Server Copy")),\(Self.bodegaJSON(name: "El Sol"))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded()
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.bodegaWasAdded(try makeTestBodega(id: addedID, name: "Nueva Bodega"))
+        viewModel.bodegaWasAdded(try makeTestBodega(id: addedID, name: "Nueva Bodega"))
+
+        #expect(viewModel.bodegas.map(\.name) == ["Nueva Bodega", "El Sol"])
+    }
+
     @Test func aFailedRequestDrivesLoadStateToFailed() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))

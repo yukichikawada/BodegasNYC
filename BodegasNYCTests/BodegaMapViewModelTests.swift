@@ -624,6 +624,156 @@ struct BodegaMapViewModelTests {
         #expect(Self.pins(in: viewModel.displayItems).map(\.name) == ["El Sol"])
     }
 
+    // MARK: Add completion (#25). protects: the just-added pin is one row,
+    // always its own pin, and the pin-view migration left displayItems alone.
+    // fails_when: an insert doubles a row a refetch already returned, or a
+    // filter/neighbour hides the highlighted pin, or the item list for a
+    // fixed fixture changes. no_claim: rendering.
+
+    /// R6: the insert runs first, then a `.nearby` refetch (the camera
+    /// settling on the pin) comes back already holding the saved row.
+    @Test func insertThenARefetchContainingTheRowKeepsOneRow() async throws {
+        MockURLProtocol.reset()
+        let addedID = UUID()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8))
+        let refetched = "[\(Self.bodegaJSON(id: addedID, name: "Nueva Bodega", latitude: 40.80, longitude: -73.90)),"
+            + "\(Self.bodegaJSON(name: "El Sol"))]"
+        MockURLProtocol.stub(body: Data(refetched.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.bodegaWasAdded(
+            try makeTestBodega(id: addedID, name: "Nueva Bodega", latitude: 40.80, longitude: -73.90)
+        )
+        viewModel.browseModeDidChange(.nearby, currentRegion: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        #expect(viewModel.loadState == .loaded)
+        let pins = Self.pins(in: viewModel.displayItems)
+        #expect(pins.filter { $0.id == addedID }.count == 1)
+        #expect(pins.count == 2)
+    }
+
+    /// R6, the other order: the refetch lands with the row first, then the
+    /// insert arrives. Still one row, updated in place.
+    @Test func aRefetchContainingTheRowThenTheInsertKeepsOneRow() async throws {
+        MockURLProtocol.reset()
+        let addedID = UUID()
+        let body = "[\(Self.bodegaJSON(id: addedID, name: "Server Copy", latitude: 40.80, longitude: -73.90)),"
+            + "\(Self.bodegaJSON(name: "El Sol"))]"
+        MockURLProtocol.stub(body: Data(body.utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        viewModel.bodegaWasAdded(
+            try makeTestBodega(id: addedID, name: "Nueva Bodega", latitude: 40.80, longitude: -73.90)
+        )
+
+        let pins = Self.pins(in: viewModel.displayItems)
+        #expect(pins.count == 2)
+        #expect(pins.filter { $0.id == addedID }.map(\.name) == ["Nueva Bodega"])
+    }
+
+    /// R7: a filter the new bodega doesn't match still shows its pin while
+    /// it is highlighted, and hides it again once the highlight clears.
+    @Test func theHighlightedPinIgnoresANonMatchingFilter() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "Cat Deli", hasCat: true))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        let added = try makeTestBodega(name: "No Cat Deli", latitude: 40.80, longitude: -73.90)
+
+        viewModel.bodegaWasAdded(added)
+        #expect(!Self.pins(in: viewModel.displayItems).map(\.id).contains(added.id))
+        viewModel.highlightedBodegaID = added.id
+
+        #expect(Self.pins(in: viewModel.displayItems).map(\.id).contains(added.id))
+        #expect(viewModel.displayItems.last == .pin(added))
+
+        viewModel.highlightedBodegaID = nil
+        #expect(!Self.pins(in: viewModel.displayItems).map(\.id).contains(added.id))
+    }
+
+    /// R7: at street zoom (span 0.004, ~37 m grid cells) a neighbour in the
+    /// same cell would absorb the new bodega into a cluster; highlighted,
+    /// it stays its own pin and the neighbour stands alone.
+    @Test func theHighlightedPinIsNeverClustered() async throws {
+        MockURLProtocol.reset()
+        let streetRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 40.73005, longitude: -73.99005),
+            span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
+        )
+        let neighbourID = UUID()
+        let neighbour = Self.bodegaJSON(id: neighbourID, name: "Neighbour", latitude: 40.73001, longitude: -73.99001)
+        MockURLProtocol.stub(body: Data("[\(neighbour)]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: streetRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        let added = try makeTestBodega(name: "Next Door", latitude: 40.73003, longitude: -73.99003)
+
+        viewModel.bodegaWasAdded(added)
+        // Without the highlight the two share a cell and cluster.
+        #expect(viewModel.displayItems.count == 1)
+        if case .cluster = viewModel.displayItems.first {} else {
+            Issue.record("expected a cluster, got \(viewModel.displayItems)")
+        }
+
+        viewModel.highlightedBodegaID = added.id
+
+        #expect(viewModel.displayItems.last == .pin(added))
+        #expect(Set(Self.pins(in: viewModel.displayItems).map(\.id)) == [neighbourID, added.id])
+    }
+
+    /// R3: the ids and kinds `displayItems` yields for a fixed fixture and
+    /// region, snapshotted when pins moved from `Marker` to `BodegaPinView`.
+    /// The migration changed only rendering; this list must not move.
+    @Test func displayItemsForAFixedFixtureAreUnchangedByThePinViewMigration() async throws {
+        MockURLProtocol.reset()
+        let ids = (1...5).map { UUID(uuidString: "00000000-0000-0000-0000-00000000000\($0)")! }
+        let rows = [
+            Self.bodegaJSON(id: ids[0], name: "A", latitude: 40.7291, longitude: -73.9965),
+            Self.bodegaJSON(id: ids[1], name: "B", latitude: 40.7292, longitude: -73.9966, hasCat: true),
+            Self.bodegaJSON(id: ids[2], name: "C", latitude: 40.7400, longitude: -73.9800),
+            Self.bodegaJSON(id: ids[3], name: "D", latitude: 40.7150, longitude: -74.0100),
+            Self.bodegaJSON(id: ids[4], name: "E", latitude: 40.7151, longitude: -74.0099, hasCat: true)
+        ]
+        MockURLProtocol.stub(body: Data("[\(rows.joined(separator: ","))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: Self.sampleRegion)
+        await viewModel.waitForPendingFetchForTesting()
+
+        let snapshot = viewModel.displayItems.map { item -> String in
+            switch item {
+            case .pin(let bodega): "pin:\(bodega.id.uuidString)"
+            case .cluster(let cluster): "cluster:\(cluster.id):\(cluster.bodegaIDs.map(\.uuidString))"
+            }
+        }
+        #expect(snapshot == Self.fixtureSnapshot)
+    }
+
+    /// Grid keys at span 0.05 / 12: D and E share cell (9771, -17763); A
+    /// (9774), B (9775) and C (9777) each have their own. Sorted by key.
+    private static let fixtureSnapshot = [
+        "cluster:cluster-9771_-17763:[\"00000000-0000-0000-0000-000000000004\", \"00000000-0000-0000-0000-000000000005\"]",
+        "pin:00000000-0000-0000-0000-000000000001",
+        "pin:00000000-0000-0000-0000-000000000002",
+        "pin:00000000-0000-0000-0000-000000000003"
+    ]
+
+    @Test func drawOrderPutsTheGivenPinsLast() throws {
+        let first = try makeTestBodega(name: "First")
+        let second = try makeTestBodega(name: "Second")
+        let cluster = MapDisplayItem.cluster(.init(id: "c", coordinate: first.coordinate, bodegaIDs: []))
+        let items: [MapDisplayItem] = [.pin(first), cluster, .pin(second)]
+
+        #expect(BodegaMapViewModel.drawOrdered(items, frontIDs: []) == items)
+        #expect(BodegaMapViewModel.drawOrdered(items, frontIDs: [first.id]) == [cluster, .pin(second), .pin(first)])
+    }
+
     // Not covered here: a second in-flight fetch superseding an older one
     // (the `currentFetchGeneration` guard in `BodegaMapViewModel.refetch`).
     // Reliably forcing that race with `MockURLProtocol`'s instant-response

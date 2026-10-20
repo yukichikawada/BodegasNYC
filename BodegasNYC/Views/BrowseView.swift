@@ -76,6 +76,8 @@ struct BrowseView: View {
     /// The tutorial's Add tip: TipKit's display verdict and whether a
     /// detail has been opened (#22).
     @State private var addTipState = AddTipState()
+    /// Everything after a successful add (#25); camera bound on appear.
+    @State private var addCompletion: AddCompletionCoordinator
 
     init(
         bodegaService: BodegaService,
@@ -90,8 +92,11 @@ struct BrowseView: View {
     ) {
         self.firstRunState = firstRunState
         _showingOnboarding = showingOnboarding
-        _mapViewModel = State(initialValue: BodegaMapViewModel(bodegaService: bodegaService))
-        _listViewModel = State(initialValue: BodegaListViewModel(bodegaService: bodegaService))
+        let mapViewModel = BodegaMapViewModel(bodegaService: bodegaService)
+        let listViewModel = BodegaListViewModel(bodegaService: bodegaService)
+        _mapViewModel = State(initialValue: mapViewModel)
+        _listViewModel = State(initialValue: listViewModel)
+        _addCompletion = State(initialValue: .forBrowsing(firstRunState, mapViewModel, listViewModel))
         self.bodegaService = bodegaService
         self.reviewService = reviewService
         self.photoService = photoService
@@ -191,18 +196,9 @@ struct BrowseView: View {
                     mapViewModel.filter = newFilter
                     listViewModel.filter = newFilter
                 }
-                .sheet(item: $addBodegaViewModel) { viewModel in
-                    AddBodegaView(viewModel: viewModel, sessionStore: sessionStore) { insertedBodega in
-                        mapViewModel.bodegaWasAdded(insertedBodega)
-                        listViewModel.bodegaWasAdded(insertedBodega)
-                        // The single call site until #25's coordinator
-                        // takes it over and uses the return value. The
-                        // first add ends the tutorial (#22).
-                        if firstRunState.markFirstBodegaAdded() {
-                            TutorialTips.invalidateAll()
-                        }
-                        addBodegaViewModel = nil
-                    }
+                // The add sheet and everything after a successful add (#25).
+                .addBodegaFlow($addBodegaViewModel, sessionStore: sessionStore, completion: addCompletion) {
+                    activeTab = .map
                 }
                 .onChange(of: showingOnboarding) { _, isShowing in
                     syncTipParameters()
@@ -218,6 +214,7 @@ struct BrowseView: View {
                     }
                     syncTipParameters()
                 }
+                .addCompletion(addCompletion, camera: $cameraPosition, hasLeftMap: !path.isEmpty || activeTab == .list)
                 .onChange(of: isPlacingBodega) { syncTipParameters() }
                 .onChange(of: firstRunState.hasAddedFirstBodega) { syncTipParameters() }
                 .task { await addTipState.observe() }
@@ -271,7 +268,8 @@ struct BrowseView: View {
                 onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
                 onSelectBodega: { path.append($0) },
                 onClearFilters: { filter = filter.clearingAmenities() },
-                showsAddTip: showsAddTip
+                showsAddTip: showsAddTip,
+                addCompletion: addCompletion
             )
         case .list:
             BodegaListView(viewModel: listViewModel, filter: $filter) {

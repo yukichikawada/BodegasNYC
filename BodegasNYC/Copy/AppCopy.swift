@@ -86,6 +86,15 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case signInBody
     case nearMeAction
 
+    // MARK: Delight (#25)
+
+    case delightFirstAddTitle
+    case delightFirstAddBody
+    case delightFirstAddBodyCat
+    case delightDismiss
+    /// A pin's VoiceOver value when the bodega has a cat (design DD15).
+    case pinHasCatValue
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -151,6 +160,14 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .signInBody:
             CopyString(kind: .body, text: "Looking never needs an account. Adding, reviewing, and photos do.")
         case .nearMeAction: CopyString(kind: .label, text: "Near Me")
+        case .delightFirstAddTitle: CopyString(kind: .title, text: "One down.")
+        case .delightFirstAddBody: CopyString(kind: .body, text: "The map knows something it didn't a minute ago.")
+        case .delightFirstAddBodyCat:
+            CopyString(kind: .body, text: "The map knows something it didn't a minute ago. The cat, mostly.")
+        case .delightDismiss: CopyString(kind: .label, text: "Done")
+        // DD15 writes it "Has a cat"; as a label it takes Title Case. VoiceOver
+        // reads both the same.
+        case .pinHasCatValue: CopyString(kind: .label, text: "Has a Cat")
         }
     }
 
@@ -159,6 +176,14 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     /// the fixture "Deli". The period sits inside the closing curly quote.
     static func noSearchMatchesTitle(_ query: String) -> CopyString {
         CopyString(kind: .title, text: "Nothing called \u{201C}\(query).\u{201D}")
+    }
+
+    /// The VoiceOver announcement posted on every successful add (design
+    /// DD15), independent of the first-add card. `name` is user-typed and
+    /// exempt from the voice rules; the voice test checks the template with
+    /// the fixture "Deli".
+    static func addedAnnouncement(name: String) -> CopyString {
+        CopyString(kind: .body, text: "\(name) is on the map.")
     }
 
     /// The detail reviews section's empty state: the cat line only when the
