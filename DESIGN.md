@@ -294,8 +294,9 @@ Never labelled.
 **Map tiles** (#67 design D1): `.standard` with Apple's commercial points of interest excluded
 at every zoom, so the map's only business names are ours: store, food market, restaurant, cafe,
 bakery, brewery, winery, nightlife, pharmacy, laundry, ATM, bank, gas station, EV charger, car
-rental, hotel, fitness center, movie theater, theater, marina, spa
-(`BodegaMapViewModel.excludedPOICategories`). Wayfinding stays: public transport, parks,
+rental, hotel, fitness center, movie theater, theater, marina, spa, beauty, automotive repair,
+music venue (`BodegaMapViewModel.excludedPOICategories`). Businesses Apple leaves unclassified
+still show; no category can hide them. Wayfinding stays: public transport, parks,
 schools, universities, hospitals, libraries, museums, landmarks, airports, stadiums, national
 parks, beaches, zoos, aquariums, amusement parks, fire stations, police, post offices, restrooms.
 

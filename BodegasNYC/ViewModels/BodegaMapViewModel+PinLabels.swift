@@ -95,7 +95,8 @@ nonisolated extension BodegaMapViewModel {
     static let excludedPOICategories: [MKPointOfInterestCategory] = [
         .store, .foodMarket, .restaurant, .cafe, .bakery, .brewery, .winery, .nightlife,
         .pharmacy, .laundry, .atm, .bank, .gasStation, .evCharger, .carRental, .hotel,
-        .fitnessCenter, .movieTheater, .theater, .marina, .spa
+        .fitnessCenter, .movieTheater, .theater, .marina, .spa, .beauty, .automotiveRepair,
+        .musicVenue
     ]
 
     /// Whether the camera is at block zoom, given the visible map height and
