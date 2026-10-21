@@ -173,6 +173,11 @@ struct AddBodegaView: View {
 /// Shared by Add and Edit Bodega (both are this same `AddBodegaView`).
 private struct DayHoursRow: View {
     @Binding var entry: AddBodegaViewModel.DayEntry
+    /// Each day is its own Form row, so a Grid cannot align them; a minimum
+    /// width that scales with the label keeps "Closed" in one column at
+    /// every Dynamic Type size (a fixed 40 pt was narrower than "Wed" at
+    /// accessibility sizes, #77).
+    @ScaledMetric(relativeTo: .body) private var dayLabelMinWidth: CGFloat = 40
 
     private var isOpen: Binding<Bool> {
         Binding(get: { !entry.isClosed }, set: { entry.isClosed = !$0 })
@@ -182,11 +187,8 @@ private struct DayHoursRow: View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle(isOn: isOpen) {
                 HStack {
-                    // Never truncate/wrap the day at large Dynamic Type sizes.
-                    Text(entry.label)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(minWidth: 40, alignment: .leading)
+                    DayLabel(text: entry.label)
+                        .frame(minWidth: dayLabelMinWidth, alignment: .leading)
                     // Open rows already show their time fields below; only
                     // the collapsed (closed) state needs spelling out.
                     if entry.isClosed {
@@ -202,6 +204,7 @@ private struct DayHoursRow: View {
                     TextField("Close", text: $entry.close)
                 }
                 .font(.subheadline)
+                .monospacedDigit()
             }
         }
     }
