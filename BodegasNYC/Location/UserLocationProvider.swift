@@ -28,7 +28,7 @@ nonisolated struct UserFix: Equatable, Sendable {
 @MainActor
 @Observable
 final class UserLocationProvider {
-    /// Coarser fixes are kept but not published (eng D10): with Precise
+    /// Coarser fixes are never stored or published (eng D10): with Precise
     /// Location off the fix is kilometres wide, and a block count from it
     /// would be fiction.
     nonisolated static let maxAccuracyMeters: Double = 100
@@ -36,7 +36,7 @@ final class UserLocationProvider {
     /// to get a new one (eng D11).
     nonisolated static let maxFixAge: TimeInterval = 10 * 60
 
-    /// The last fix received, published or not.
+    /// The last fresh, precise fix received.
     private(set) var latestFix: UserFix?
 
     /// `latestFix` when its accuracy is good enough to measure blocks from
@@ -50,43 +50,66 @@ final class UserLocationProvider {
     /// The published coordinate (eng D6): `usableFix`'s, or `nil`.
     var coordinate: Coordinate? { usableFix?.coordinate }
 
-    /// Whether location is authorized right now. The rows and the header
-    /// reserve the distance slot only then (design D2); otherwise they render
-    /// exactly as before #68.
+    /// Whether location is authorized right now.
     var isAuthorized: Bool { checkAuthorized() }
 
+    /// Whether a usable fix is plausible: authorized with full accuracy. The
+    /// rows and the header reserve the distance slot only then (design D2, as
+    /// refined in review): with Precise Location off every fix is coarse, so
+    /// they render exactly as unauthorized instead of keeping a blank line.
+    var reservesDistanceSlot: Bool { checkAuthorized() && checkFullAccuracy() }
+
     @ObservationIgnored private let checkAuthorized: @MainActor () -> Bool
+    @ObservationIgnored private let checkFullAccuracy: @MainActor () -> Bool
     @ObservationIgnored private let requestFix: @MainActor () async -> CLLocation?
     @ObservationIgnored private let now: @MainActor () -> Date
+    /// The refresh started by `requestRefresh()`, while it runs.
+    @ObservationIgnored private var refreshTask: Task<Void, Never>?
 
     init(
         isAuthorized: @escaping @MainActor () -> Bool,
+        isFullAccuracy: @escaping @MainActor () -> Bool = { true },
         requestFix: @escaping @MainActor () async -> CLLocation?,
         now: @escaping @MainActor () -> Date = { Date() }
     ) {
         checkAuthorized = isAuthorized
+        checkFullAccuracy = isFullAccuracy
         self.requestFix = requestFix
         self.now = now
     }
 
-    /// Production wiring: authorization and the one-shot fix both come from
-    /// the app's single `LocationPermissionClient`. Reading its observable
-    /// `authorizationStatus` through `isAuthorized` keeps SwiftUI tracking it.
+    /// Production wiring: authorization, accuracy and the one-shot fix all
+    /// come from the app's single `LocationPermissionClient`. Reading its
+    /// observable properties through these closures keeps SwiftUI tracking them.
     convenience init(client: LocationPermissionClient) {
         self.init(
             isAuthorized: {
                 LocationPermissionClient.canRequestCurrentLocation(authorizationStatus: client.authorizationStatus)
             },
+            isFullAccuracy: { client.accuracyAuthorization == .fullAccuracy },
             requestFix: { await client.requestCurrentFix() }
         )
     }
 
+    /// What the view triggers call: starts `refresh()` unless one is already
+    /// in flight, in which case it does nothing (the running one is at most
+    /// the fix timeout old and would return the same fix).
+    func requestRefresh() {
+        guard refreshTask == nil else { return }
+        refreshTask = Task {
+            await refresh()
+            refreshTask = nil
+        }
+    }
+
     /// Fetches one fix. Unauthorized before or after the await clears the fix
     /// and discards any result (a revocation must not be undone by a fix that
-    /// was already in flight). A failed or timed-out fetch keeps the previous
-    /// fix while it is at most `maxFixAge` old, so one slow fix does not blank
-    /// every distance on screen. Overlapping refreshes are safe: each writes
-    /// when it completes, and the last to complete wins.
+    /// was already in flight). Only a fresh (at most `maxFixAge` old) and
+    /// precise fix is stored: a failed or timed-out fetch, CoreLocation's
+    /// stale cached fix, or a coarse fix all keep the previous fix while it is
+    /// at most `maxFixAge` old, so one bad fix does not blank or degrade every
+    /// distance on screen. Overlapping direct calls are safe: each writes when
+    /// it completes, and the last to complete wins.
     func refresh() async {
         guard checkAuthorized() else {
             latestFix = nil
@@ -97,7 +120,9 @@ final class UserLocationProvider {
             latestFix = nil
             return
         }
-        if let location {
+        if let location,
+           now().timeIntervalSince(location.timestamp) <= Self.maxFixAge,
+           Self.isPrecise(location.horizontalAccuracy) {
             latestFix = UserFix(
                 coordinate: Coordinate(location.coordinate),
                 horizontalAccuracy: location.horizontalAccuracy,

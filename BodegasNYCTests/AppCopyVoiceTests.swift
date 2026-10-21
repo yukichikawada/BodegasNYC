@@ -97,7 +97,8 @@ struct AppCopyVoiceTests {
     /// without a decimal, singular, and grouped.
     static let distanceFixtures: [BlockDistance] = [
         .aroundTheCorner, .blocks(1), .blocks(2), .blocks(10), .blocks(20),
-        .miles(0.55), .miles(1.0), .miles(1.0253), .miles(1.5), .miles(2.0), .miles(12.4), .miles(2450)
+        .miles(0.55), .miles(1.0), .miles(1.0253), .miles(1.25), .miles(1.5), .miles(2.0), .miles(2.75),
+        .miles(12.4), .miles(2450)
     ]
 
     @Test(arguments: VoiceRule.allCases)
@@ -141,7 +142,8 @@ struct AppCopyVoiceTests {
 
     /// protects: the exact words a row shows (design D5/D7: "miles" spelled
     /// out, no ".0", singular at 1, grouped thousands).
-    /// fails_when: "mi", "1.0 miles", "1 miles", "2450 miles" or a period.
+    /// fails_when: "mi", "1.0 miles", "1 miles", "2450 miles", banker's
+    /// rounding ("1.2 miles" for 1.25) or a period.
     /// no_claim: where the row places the value.
     @Test func distanceValueTexts() {
         let expected: [(BlockDistance, String)] = [
@@ -155,7 +157,10 @@ struct AppCopyVoiceTests {
             (.miles(1.5), "1.5 miles"),
             (.miles(2.0), "2 miles"),
             (.miles(12.4), "12.4 miles"),
-            (.miles(2450), "2,450 miles")
+            (.miles(2450), "2,450 miles"),
+            // Schoolbook rounding, as for blocks (exact binary halves).
+            (.miles(1.25), "1.3 miles"),
+            (.miles(2.75), "2.8 miles")
         ]
         for (distance, text) in expected {
             #expect(AppCopy.distanceValue(distance).text == text)

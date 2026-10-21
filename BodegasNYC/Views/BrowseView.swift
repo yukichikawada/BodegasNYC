@@ -171,8 +171,7 @@ struct BrowseView: View {
                         reviewService: reviewService,
                         photoService: photoService,
                         flagService: flagService,
-                        sessionStore: sessionStore,
-                        userLocation: userLocation
+                        sessionStore: sessionStore, userLocation: userLocation
                     ) { updatedBodega in
                         mapViewModel.bodegaWasUpdated(updatedBodega)
                         listViewModel.bodegaWasUpdated(updatedBodega)
@@ -392,7 +391,8 @@ extension BrowseView {
     }
 
     /// Mirrors the state the tips' rules read into their TipKit parameters.
-    private func syncTipParameters() {
+    func syncTipParameters() {
+        TutorialTips.canBePromptedForLocation = locationPermissionClient.authorizationStatus == .notDetermined
         TutorialTips.hasAddedFirstBodega = firstRunState.hasAddedFirstBodega
         TutorialTips.isOnboardingVisible = showingOnboarding
         TutorialTips.isPlacingBodega = isPlacingBodega

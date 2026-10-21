@@ -150,9 +150,68 @@ struct UserLocationProviderTests {
         let harness = Harness()
         harness.nextFix = harness.location(accuracy: 101)
         await harness.provider.refresh()
-        #expect(harness.provider.latestFix != nil)
+        // Not stored at all since review item 2: a coarse fix is treated
+        // like a failed one.
+        #expect(harness.provider.latestFix == nil)
         #expect(harness.provider.coordinate == nil)
         #expect(harness.provider.usableFix == nil)
+    }
+
+    /// protects: CoreLocation's stale cached fix is not taken as current.
+    /// fails_when: a fix timestamped 40 minutes ago is stored, or a 1-minute-
+    /// old one is rejected.
+    @Test func staleReturnedFixIsNotStored() async {
+        let harness = Harness()
+        harness.nextFix = harness.location(at: harness.now - 40 * 60)
+        await harness.provider.refresh()
+        #expect(harness.provider.latestFix == nil)
+
+        harness.nextFix = harness.location(at: harness.now - 60)
+        await harness.provider.refresh()
+        #expect(harness.provider.coordinate?.latitude == 40.7291)
+    }
+
+    /// protects: a coarse fix does not overwrite a kept precise one while it
+    /// is fresh, and does not keep it alive past `maxFixAge`.
+    /// fails_when: a 150 m fix replaces or blanks a recent precise fix, or an
+    /// 11-minute-old precise fix survives a coarse refresh.
+    @Test func coarseFixKeepsAFreshPreciseFixOnly() async {
+        let harness = Harness()
+        harness.nextFix = harness.location(accuracy: 20)
+        await harness.provider.refresh()
+        harness.nextFix = harness.location(latitude: 40.75, accuracy: 150)
+        await harness.provider.refresh()
+        #expect(harness.provider.coordinate?.latitude == 40.7291)
+
+        harness.now += 11 * 60
+        harness.nextFix = harness.location(latitude: 40.75, accuracy: 150)
+        await harness.provider.refresh()
+        #expect(harness.provider.latestFix == nil)
+    }
+
+    /// protects: triggers that land while a refresh is in flight do not start
+    /// another (review item 9).
+    /// fails_when: two back-to-back `requestRefresh()` calls fetch twice, or
+    /// a request after the first completes is dropped.
+    @Test func requestRefreshCoalescesWhileInFlight() async {
+        var continuations: [CheckedContinuation<CLLocation?, Never>] = []
+        let provider = UserLocationProvider(
+            isAuthorized: { true },
+            requestFix: { await withCheckedContinuation { continuations.append($0) } }
+        )
+        provider.requestRefresh()
+        provider.requestRefresh()
+        while continuations.isEmpty { await Task.yield() }
+        for _ in 0..<10 { await Task.yield() }
+        #expect(continuations.count == 1)
+
+        continuations[0].resume(returning: CLLocation(latitude: 40.7291, longitude: -73.9965))
+        while provider.coordinate == nil { await Task.yield() }
+        for _ in 0..<10 { await Task.yield() }
+        provider.requestRefresh()
+        while continuations.count < 2 { await Task.yield() }
+        #expect(continuations.count == 2)
+        continuations[1].resume(returning: nil)
     }
 
     /// protects: an invalid fix (negative accuracy) shows no distance.

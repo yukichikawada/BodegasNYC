@@ -17,11 +17,12 @@ import SwiftUI
 /// with no address, the value sits right under the name with no icon: that
 /// is deliberate, the words say what it is.
 ///
-/// Reserved slot (design D2): while location is authorized the slot is
-/// always there, a hidden placeholder as wide as the widest value ("20
-/// blocks", "0.6 miles", "Around the corner", "2,450 miles") side by side
-/// or an empty line stacked, so no row moves
-/// when a fix lands; the value fades in and out over it. Not authorized,
+/// Reserved slot (design D2): while location is authorized with full
+/// accuracy (Precise Location on) the slot is always there, a hidden
+/// placeholder as wide as the widest value ("20 blocks", "0.6 miles",
+/// "Around the corner", "2,450 miles") side by side or an empty line
+/// stacked, so no row moves when a fix lands; the value fades in and out
+/// over it. Not authorized, or with Precise Location off,
 /// there is no slot and the row is exactly the pre-#68 row.
 ///
 /// VoiceOver hears one element, `accessibilityText`: "Name, address, 2
@@ -29,7 +30,8 @@ import SwiftUI
 struct BodegaRow: View {
     let bodega: Bodega
     var distance: BlockDistance?
-    /// Location is authorized: show the slot even before there is a value.
+    /// Location is authorized with full accuracy: show the slot even before
+    /// there is a value.
     var reservesDistanceSlot = false
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize

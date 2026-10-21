@@ -64,7 +64,7 @@ struct BlockDistanceTests {
 
     /// protects: "Around the corner" only on a fix accurate to 50 m or better
     /// (design D3).
-    /// fails_when: a 60 m or unknown-accuracy fix claims the corner, or a
+    /// fails_when: a 60 m, unknown or negative-accuracy fix claims the corner, or a
     /// 30 m / 50 m fix does not.
     /// no_claim: whether CoreLocation's reported accuracy is truthful.
     @Test func cornerNeedsAnAccurateFix() {
@@ -73,6 +73,8 @@ struct BlockDistanceTests {
         #expect(Self.distance(0, accuracy: 60) == .blocks(1))
         #expect(Self.distance(40.2, accuracy: 60) == .blocks(1))
         #expect(Self.distance(0, accuracy: nil) == .blocks(1))
+        // Negative accuracy means an invalid fix: unknown, not "very precise".
+        #expect(Self.distance(10, accuracy: -1) == .blocks(1))
     }
 
     /// protects: a huge distance becomes miles without converting to Int.

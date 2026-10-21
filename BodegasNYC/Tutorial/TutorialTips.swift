@@ -1,3 +1,4 @@
+import CoreLocation
 import SwiftUI
 import TipKit
 
@@ -10,7 +11,7 @@ import TipKit
 /// - `PlacementTip`: popover on "Use This Location" in placement mode.
 /// - `FormTip`: inline at the top of the Add a Bodega form (never Edit).
 /// - `DistancesTip` (#68, design D4): inline at the top of the loaded list
-///   while location is not authorized. Not part of the add tutorial: the
+///   while location has never been asked for. Not part of the add tutorial: the
 ///   first add does not invalidate it; the first published fix does.
 ///
 /// The parameters below are mirrored from `BrowseView` state (on appear and
@@ -28,9 +29,11 @@ nonisolated enum TutorialTips {
     /// Mirrors `BrowseView.isPlacingBodega`. Transient for the same reason.
     @Parameter(.transient) static var isPlacingBodega: Bool = false
 
-    /// Mirrors `UserLocationProvider.isAuthorized` (#68). Transient: the
-    /// system decides authorization, and it is re-mirrored on every appear.
-    @Parameter(.transient) static var isLocationAuthorized: Bool = false
+    /// Whether the map's Locate Me can still show the When-In-Use prompt
+    /// (`authorizationStatus == .notDetermined`), mirrored by
+    /// `BrowseView.syncTipParameters()` (#68). Transient, and false by default
+    /// so the Distances tip fails closed until the mirror has run.
+    @Parameter(.transient) static var canBePromptedForLocation: Bool = false
 
     /// Donated each time a bodega detail screen opens, from any path (map
     /// pin or list row; both go through `BrowseView`'s
@@ -51,10 +54,13 @@ nonisolated enum TutorialTips {
     }
 
     /// The Distances tip's gating (#68, design D4), the pure form of
-    /// `DistancesTip.rules`: offered only while location is not authorized.
+    /// `DistancesTip.rules` and of the value `BrowseView` mirrors into
+    /// `canBePromptedForLocation`: offered only while location has never been
+    /// asked for. Denied or restricted users get no tip, since Locate Me
+    /// cannot prompt them again (and nothing points them at Settings).
     /// Where it renders (the loaded list with rows) is `BodegaListView`'s.
-    static func shouldOfferDistancesTip(isLocationAuthorized: Bool) -> Bool {
-        !isLocationAuthorized
+    static func shouldOfferDistancesTip(authorizationStatus: CLAuthorizationStatus) -> Bool {
+        authorizationStatus == .notDetermined
     }
 
     /// The first successful add ends the tutorial: none of the three tips
@@ -141,7 +147,7 @@ nonisolated struct FormTip: Tip {
 }
 
 /// "Distances come in blocks." Inline as the first element of the loaded
-/// list while location is not authorized (#68, design D4). Its one action,
+/// list while location has never been asked for (#68, design D4). Its one action,
 /// "Show Map", switches to the Map tab, where Locate Me is; it never asks for
 /// permission itself. Close hides it for good; `BrowseView` invalidates it
 /// (`.actionPerformed`) the first time the user's fix is published.
@@ -156,7 +162,7 @@ nonisolated struct DistancesTip: Tip {
     }
 
     var rules: [Rule] {
-        #Rule(TutorialTips.$isLocationAuthorized) { $0 == false }
+        #Rule(TutorialTips.$canBePromptedForLocation) { $0 == true }
     }
 }
 

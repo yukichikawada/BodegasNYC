@@ -276,13 +276,14 @@ nonisolated extension AppCopy {
         return number == "1" ? "1 mile" : "\(number) miles"
     }
 
-    /// At most one decimal, none when it would be ".0", grouping on, in a
-    /// fixed `en_US` locale (the app is English-only): 0.55 → "0.6",
-    /// 1.0 → "1", 12.4 → "12.4", 2450 → "2,450".
+    /// At most one decimal, none when it would be ".0", schoolbook rounding
+    /// (as for blocks), grouping on, in a fixed `en_US` locale (the app is
+    /// English-only): 0.55 → "0.6", 1.0 → "1", 1.25 → "1.3", 2450 → "2,450".
     private static func milesText(_ miles: Double) -> String {
         miles.formatted(
             .number
                 .precision(.fractionLength(0...1))
+                .rounded(rule: .toNearestOrAwayFromZero)
                 .grouping(.automatic)
                 .locale(Locale(identifier: "en_US"))
         )

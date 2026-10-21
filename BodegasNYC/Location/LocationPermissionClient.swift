@@ -16,6 +16,10 @@ import Observation
 @Observable
 final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     private(set) var authorizationStatus: CLAuthorizationStatus
+    /// Precise Location on or off. Changes arrive through the same
+    /// `locationManagerDidChangeAuthorization` callback (#68: the distance
+    /// slot is reserved only with full accuracy).
+    private(set) var accuracyAuthorization: CLAccuracyAuthorization
 
     private let manager: CLLocationManager
     /// Keyed rather than a single slot: `requestAlwaysAuthorization()` can be
@@ -48,6 +52,7 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         let manager = CLLocationManager()
         self.manager = manager
         self.authorizationStatus = manager.authorizationStatus
+        self.accuracyAuthorization = manager.accuracyAuthorization
         super.init()
         manager.delegate = self
     }
@@ -129,8 +134,10 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
+        let accuracy = manager.accuracyAuthorization
         Task { @MainActor in
             authorizationStatus = status
+            accuracyAuthorization = accuracy
             for id in pendingContinuations.keys {
                 resumePending(id: id, status: status)
             }

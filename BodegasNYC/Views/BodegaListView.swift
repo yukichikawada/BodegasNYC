@@ -137,7 +137,10 @@ struct BodegaListView: View {
                 // whose top is in view.
                 .onScrollPhaseChange { _, phase in
                     guard phase == .idle, hasRestoredScroll else { return }
-                    scrollID = rowTops.topRow(in: viewModel.filteredBodegas)
+                    // At the first row, store nil (the top of the list), so
+                    // a round trip does not scroll an open tip off screen.
+                    let top = rowTops.topRow(in: viewModel.filteredBodegas)
+                    scrollID = top == viewModel.filteredBodegas.first?.id ? nil : top
                 }
             }
         case .failed:

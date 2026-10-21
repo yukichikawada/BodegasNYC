@@ -283,7 +283,7 @@ loading. Advance 0.3s ease-in-out; exit 0.35s (0.25s opacity-only under Reduce M
 renders nothing when there is no average; the reviews section owns the empty state. Third line
 (#68): the distance as a sentence, `AppCopy.distanceFromYou` ("2 blocks from you."),
 `.subheadline` secondary, no monospaced digits, 4pt under the address (under the name when there
-is no address); its own VoiceOver element, not a header. While location is authorized the line is
+is no address); its own VoiceOver element, not a header. While location is authorized with full accuracy the line is
 reserved as an empty line and the sentence fades in over it (0.2s `easeOut`, opacity only), so
 the sections below never shift.
 
@@ -292,7 +292,7 @@ at every size and never truncating. The distance (`AppCopy.distanceValue`, `.val
 `.subheadline` secondary with monospaced digits, trailing the name on its first baseline with at
 least 8pt between, one line, while the whole row fits on one line; otherwise, and always from
 `.accessibility1` up, it is a third leading line under the address and may wrap (the `ReviewRow`
-idiom). While location is authorized the slot is reserved (a hidden placeholder as wide as the
+idiom). While location is authorized with full accuracy (Precise Location on) the slot is reserved (a hidden placeholder as wide as the
 widest value, "Around the corner" or "2,450 miles", side by side, an empty line stacked) and the value fades in
 and out over it with a 0.2s opacity-only `easeOut` (`BrowseMotion.Distance.appearSeconds`); a
 value that changes is not animated. Not authorized: no slot, and the row is name over address.
@@ -300,8 +300,10 @@ VoiceOver reads one element, "Name, address, 2 blocks from you." The #20 duplica
 same row with no distance. The distance is straight-line from the location fix to the pin, a folk
 estimate like every map app's list distance, not blocks walked; a block is a street block at 20 to
 the mile. No permission, a coarse or expired fix and Precise Location off are silent states: no
-hint, no footer, no spinner, no red. The one visible addition without permission is the one-time
-Distances tip inline at the top of the loaded list (Show Map; never prompts).
+hint, no footer, no spinner, no red; with Precise Location off no slot is reserved either. The one
+visible addition is the one-time Distances tip inline at the top of the loaded list, shown only
+while location has never been asked for (Show Map; never prompts). Denied users get no tip and no
+Settings nudge.
 
 **Section empty state** (DD9): title `.subheadline` secondary, body `.footnote` tertiary, 2pt
 apart, leading, no symbol, inside the section's `VStack`. List-tab empty states use

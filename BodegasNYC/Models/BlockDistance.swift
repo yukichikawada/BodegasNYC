@@ -28,8 +28,9 @@ nonisolated enum BlockDistance: Equatable, Sendable {
     static let maxCornerAccuracyMeters: Double = 50
 
     /// `nil` for a negative, NaN or infinite distance. `horizontalAccuracy`
-    /// is the fix's own (`CLLocation.horizontalAccuracy`, metres); `nil`
-    /// means unknown, which never earns "Around the corner".
+    /// is the fix's own (`CLLocation.horizontalAccuracy`, metres); `nil` or a
+    /// negative value (invalid) means unknown, which never earns "Around the
+    /// corner".
     ///
     /// Schoolbook rounding (`.toNearestOrAwayFromZero`) on a `Double`, and
     /// every branch is decided before any `Int` conversion, so a huge
@@ -40,7 +41,7 @@ nonisolated enum BlockDistance: Equatable, Sendable {
         if rounded > Double(Self.maxBlocks) {
             self = .miles(meters / Self.metersPerMile)
         } else if rounded == 0 {
-            if let horizontalAccuracy, horizontalAccuracy <= Self.maxCornerAccuracyMeters {
+            if let horizontalAccuracy, horizontalAccuracy >= 0, horizontalAccuracy <= Self.maxCornerAccuracyMeters {
                 self = .aroundTheCorner
             } else {
                 self = .blocks(1)

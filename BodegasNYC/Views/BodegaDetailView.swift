@@ -257,8 +257,8 @@ struct BodegaDetailView: View {
     }
 
     /// "2 blocks from you." under the address, or under the name when there
-    /// is none, 4pt either way (#68). While location is authorized the line
-    /// is reserved as an empty `.subheadline` line so the sections below
+    /// is none, 4pt either way (#68). While location is authorized with full
+    /// accuracy the line is reserved as an empty `.subheadline` line so the sections below
     /// never shift when the fix lands; the sentence fades in over it (design
     /// D2). Its own VoiceOver element after the address, not a header, and
     /// no monospaced digits on a sentence. Reads `viewModel.bodega`, so an
@@ -266,7 +266,7 @@ struct BodegaDetailView: View {
     @ViewBuilder
     private var distanceLine: some View {
         let distance = viewModel.bodega.coordinate.blockDistance(from: userLocation?.usableFix)
-        if distance != nil || userLocation?.isAuthorized == true {
+        if distance != nil || userLocation?.reservesDistanceSlot == true {
             DistanceSlot(
                 text: distance.map { AppCopy.distanceFromYou($0).text },
                 placeholders: [" "],
