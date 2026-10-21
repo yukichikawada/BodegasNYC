@@ -293,7 +293,7 @@ at every size and never truncating. The distance (`AppCopy.distanceValue`, `.val
 least 8pt between, one line, while the whole row fits on one line; otherwise, and always from
 `.accessibility1` up, it is a third leading line under the address and may wrap (the `ReviewRow`
 idiom). While location is authorized the slot is reserved (a hidden placeholder as wide as the
-longer of "20 blocks" and "0.6 miles" side by side, an empty line stacked) and the value fades in
+widest value, "Around the corner" or "2,450 miles", side by side, an empty line stacked) and the value fades in
 and out over it with a 0.2s opacity-only `easeOut` (`BrowseMotion.Distance.appearSeconds`); a
 value that changes is not animated. Not authorized: no slot, and the row is name over address.
 VoiceOver reads one element, "Name, address, 2 blocks from you." The #20 duplicate sheet uses the
