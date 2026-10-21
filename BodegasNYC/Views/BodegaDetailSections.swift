@@ -159,18 +159,21 @@ struct HoursSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("Hours").font(.headline)
-            ForEach(orderedDays, id: \.label) { day in
-                HStack {
-                    // Never truncate/wrap the day at large Dynamic Type sizes;
-                    // kept in step with `DayHoursRow` in AddBodegaView.
-                    Text(day.label)
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
-                        .frame(minWidth: 40, alignment: .leading)
-                    Text(describe(day.dayHours))
-                        .foregroundStyle(.secondary)
+            // A two-column grid sizes the day column to its widest label, so
+            // the times share one leading edge at every Dynamic Type size; a
+            // fixed minimum width was narrower than "Wed" at accessibility
+            // sizes and staggered the times (#77).
+            Grid(alignment: .leadingFirstTextBaseline, horizontalSpacing: 8, verticalSpacing: 6) {
+                ForEach(orderedDays, id: \.label) { day in
+                    GridRow {
+                        DayLabel(text: day.label)
+                            .gridColumnAlignment(.leading)
+                        Text(describe(day.dayHours))
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .font(.subheadline)
                 }
-                .font(.subheadline)
             }
         }
     }
@@ -178,6 +181,19 @@ struct HoursSection: View {
     private func describe(_ dayHours: BodegaHours.DayHours?) -> String {
         guard let dayHours, !dayHours.isClosed else { return "Closed" }
         return "\(dayHours.open) – \(dayHours.close)"
+    }
+}
+
+/// A weekday label ("Mon") that never truncates or wraps at large Dynamic
+/// Type sizes. Shared by `HoursSection` here and `DayHoursRow` in
+/// AddBodegaView so the two hours lists do not drift.
+struct DayLabel: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
     }
 }
 
