@@ -8,7 +8,7 @@
 //  is up. Label sizes come from `testLabelSize` (8pt per character up to 18,
 //  plus 12pt padding, 22pt high), so every rect below is exact: an 18+
 //  character name is 156 x 22 and spans y - 40 to y - 18 above its pin.
-//  Circles are 32pt squares (36pt for a priority pin, 44pt for the location
+//  Circles are 32pt squares (36pt for a priority pin, 24pt for the location
 //  dot). Labels keep 4pt from each other; against a circle the label itself
 //  must not touch it.
 //
@@ -282,7 +282,7 @@ struct PinLabelPlacementTests {
         #expect(fixture.labelled(priority: [standIn.id]) == [standIn.id])
     }
 
-    /// The location dot (design D1) blocks a label like a 44pt circle and
+    /// The location dot (design D1) blocks a label like a 24pt circle and
     /// is never labelled.
     @Test func userLocationDotIsAnObstacleOnly() throws {
         var fixture = Fixture()
@@ -290,6 +290,29 @@ struct PinLabelPlacementTests {
         fixture.points[BodegaMapViewModel.userLocationObstacleID] = CGPoint(x: 200, y: 250)
         #expect(fixture.labelled().isEmpty)
         fixture.points[BodegaMapViewModel.userLocationObstacleID] = CGPoint(x: 400, y: 250)
+        #expect(fixture.labelled().count == 1)
+    }
+
+    /// A user standing on a bodega keeps its name (#67 QA): the 24pt dot
+    /// square (y 288 to 312) sits under the label (y 260 to 282).
+    @Test func aPinAtTheUserLocationKeepsItsLabel() throws {
+        var fixture = Fixture()
+        let here = try fixture.pin(1, at: CGPoint(x: 200, y: 300))
+        _ = try fixture.pin(2, at: CGPoint(x: 230, y: 300))
+        fixture.points[BodegaMapViewModel.userLocationObstacleID] = CGPoint(x: 200, y: 300)
+        #expect(fixture.labelled() == [here.id])
+        fixture.points[BodegaMapViewModel.userLocationObstacleID] = CGPoint(x: 230, y: 300)
+        #expect(fixture.labelled() == [here.id])
+    }
+
+    /// A label whose rect would cover the 24pt dot square is hidden: the dot
+    /// at (200, 272) spans y 260 to 284, across the label's y 260 to 282.
+    @Test func aLabelOverTheLocationDotIsHidden() throws {
+        var fixture = Fixture()
+        _ = try fixture.pin(1, at: CGPoint(x: 200, y: 300))
+        fixture.points[BodegaMapViewModel.userLocationObstacleID] = CGPoint(x: 200, y: 272)
+        #expect(fixture.labelled().isEmpty)
+        fixture.points[BodegaMapViewModel.userLocationObstacleID] = CGPoint(x: 200, y: 246)
         #expect(fixture.labelled().count == 1)
     }
 

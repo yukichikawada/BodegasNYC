@@ -78,10 +78,14 @@ nonisolated extension BodegaMapViewModel {
     static let labelClearance: CGFloat = 4
     /// Obstacles are the drawn circles (design D8): a 28pt pin or badge plus
     /// its 2pt stroke; the held or dropping pin at its 1.15 selected scale
-    /// with a 3pt stroke; the user-location dot with its halo.
+    /// with a 3pt stroke; the user-location dot as drawn (the blue dot and
+    /// its white ring, about 22pt; the translucent accuracy halo may be
+    /// covered). Not the halo: a user standing on a pin lost that pin's and
+    /// its neighbour's labels to a 44pt square (#67 QA, refining design D1).
+    /// At 24pt, a label above a pin at the user's point clears the dot.
     static let itemObstacleSide: CGFloat = 32
     static let priorityObstacleSide: CGFloat = 36
-    static let userLocationObstacleSide: CGFloat = 44
+    static let locationDotObstacleSide: CGFloat = 24
     /// The `points` key for the user-location dot: an obstacle, never a
     /// candidate (no item has this id).
     static let userLocationObstacleID = "user-location"
@@ -204,7 +208,7 @@ nonisolated extension BodegaMapViewModel {
             return (item.id, square(at: point, side: isPriority ? priorityObstacleSide : itemObstacleSide))
         }
         if let dot = points[userLocationObstacleID] {
-            obstacles.append((userLocationObstacleID, square(at: dot, side: userLocationObstacleSide)))
+            obstacles.append((userLocationObstacleID, square(at: dot, side: locationDotObstacleSide)))
         }
         return obstacles
     }
