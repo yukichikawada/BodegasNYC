@@ -100,15 +100,6 @@ nonisolated enum BrowseMotion {
         static let appearSeconds: TimeInterval = 0.2
     }
 
-    // MARK: Pin labels (#67)
-
-    /// A pin label fades in and out with an opacity-only `easeOut` (DESIGN.md
-    /// Motion: small state flips), whether it follows selection, the drop or
-    /// block-zoom placement. Reduce Motion needs no branch.
-    enum PinLabel {
-        static let fadeSeconds: TimeInterval = 0.2
-    }
-
     /// The crosshair's vertical centre, in the map's local coordinates: the
     /// middle of the band the placement card leaves uncovered, i.e. between
     /// the map's top edge and the card's top edge (`mapHeight - cardHeight -

@@ -1,5 +1,4 @@
 import SwiftUI
-import UIKit
 
 /// The one pin view for every bodega on the map (spec D10, design DD3), so
 /// the pin that drops in after an add (#25) never looks different from its
@@ -20,12 +19,8 @@ import UIKit
 /// a neighbour just north of a dropping or selected pin sits behind it, so
 /// the label covers that neighbour's circle for as long as it shows.
 struct BodegaPinView: View {
-    nonisolated static let diameter: CGFloat = 28
-    /// The label's text width cap before its padding (#67 design D3): one
-    /// line, tail-truncated, one rule for every label.
-    nonisolated static let maxLabelWidth: CGFloat = 160
-    nonisolated static let labelHorizontalPadding: CGFloat = 6
-    nonisolated static let labelVerticalPadding: CGFloat = 2
+    static let diameter: CGFloat = 28
+    nonisolated static let maxLabelCharacters = 18
 
     let bodega: Bodega
     let isSelected: Bool
@@ -34,38 +29,16 @@ struct BodegaPinView: View {
     /// drop on appear or on change, `.atRest` is every other pin. An edit
     /// never sets a phase, so edited pins never drop.
     let phase: AddCompletionCoordinator.PinPhase
-    /// Placement chose this pin's label at block zoom (#67, `PinLabelState`).
-    var showsBlockLabel = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Whether this pin's drop has played; only read while `phase` isn't
     /// `.atRest`.
     @State private var hasLanded = false
 
-    /// DD3: the label shows while selected (held) or dropping, and at block
-    /// zoom when placement kept it.
-    static func showsLabel(
-        isSelected: Bool,
-        phase: AddCompletionCoordinator.PinPhase,
-        showsBlockLabel: Bool
-    ) -> Bool {
-        isSelected || phase != .atRest || showsBlockLabel
-    }
-
-    /// The label capsule's size as `nameLabel` draws it, for placement
-    /// (#67 eng D2): `.caption2` at `contentSize` capped at `.xxLarge`, text
-    /// width capped at `maxLabelWidth`, plus the padding; rounded up.
-    static func measuredLabelSize(for name: String, contentSize: UIContentSizeCategory) -> CGSize {
-        let category = min(contentSize, .extraExtraLarge)
-        let font = UIFont.preferredFont(
-            forTextStyle: .caption2,
-            compatibleWith: UITraitCollection(preferredContentSizeCategory: category)
-        )
-        let textWidth = (name as NSString).size(withAttributes: [.font: font]).width
-        return CGSize(
-            width: ceil(min(textWidth, maxLabelWidth) + labelHorizontalPadding * 2),
-            height: ceil(font.lineHeight + labelVerticalPadding * 2)
-        )
+    /// The name, cut to `maxLabelCharacters` with a trailing ellipsis.
+    nonisolated static func labelText(for name: String) -> String {
+        guard name.count > maxLabelCharacters else { return name }
+        return String(name.prefix(maxLabelCharacters - 1)) + "\u{2026}"
     }
 
     private var isAtRest: Bool {
@@ -76,13 +49,7 @@ struct BodegaPinView: View {
         }
     }
 
-    private var showsLabel: Bool {
-        Self.showsLabel(isSelected: isSelected, phase: phase, showsBlockLabel: showsBlockLabel)
-    }
-
-    /// Only the selected, held or dropping label is lifted off the map;
-    /// resting block-zoom labels are a flat material layer (#67 D7 + D10).
-    private var liftsLabel: Bool { isSelected || phase != .atRest }
+    private var showsLabel: Bool { isSelected || phase != .atRest }
 
     /// Reduce Motion (#23 design review 7A): the selected look keeps its
     /// stroke, shadow and label but doesn't grow.
@@ -97,21 +64,15 @@ struct BodegaPinView: View {
         circle
             .scaleEffect(selectedScale)
             .overlay(alignment: .bottom) {
-                ZStack {
-                    if showsLabel {
-                        nameLabel
-                            .fixedSize()
-                            // Sit the label above the circle (clear of the
-                            // selected 1.15 scale; see the type comment for
-                            // why not below); an alignment guide here is not
-                            // honored inside the annotation.
-                            .offset(y: -(Self.diameter + 4))
-                            .transition(.opacity)
-                    }
+                if showsLabel {
+                    nameLabel
+                        .fixedSize()
+                        // Sit the label above the circle (clear of the
+                        // selected 1.15 scale; see the type comment for why
+                        // not below); an alignment guide here is not honored
+                        // inside the annotation.
+                        .offset(y: -(Self.diameter + 4))
                 }
-                // The fade is scoped to the label, so the circle keeps its
-                // own 0.15s selection animation.
-                .animation(.easeOut(duration: BrowseMotion.PinLabel.fadeSeconds), value: showsLabel)
             }
             .offset(y: dropOffset)
             .scaleEffect(dropScale)
@@ -138,17 +99,14 @@ struct BodegaPinView: View {
     }
 
     private var nameLabel: some View {
-        Text(bodega.name)
+        Text(Self.labelText(for: bodega.name))
             .font(.caption2)
             .foregroundStyle(.primary)
             .lineLimit(1)
-            .truncationMode(.tail)
-            .frame(maxWidth: Self.maxLabelWidth)
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-            .padding(.horizontal, Self.labelHorizontalPadding)
-            .padding(.vertical, Self.labelVerticalPadding)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
             .background(.regularMaterial, in: Capsule())
-            .shadow(color: .black.opacity(0.3), radius: liftsLabel ? 2 : 0, y: liftsLabel ? 1 : 0)
     }
 
     private func dropIfNeeded() {
@@ -170,21 +128,6 @@ struct BodegaPinView: View {
 /// (`MapScreenView`).
 struct ClusterBadge: View {
     let count: Int
-
-    /// The badge's obstacle side for label placement (#67): the count in
-    /// `.caption` bold at `contentSize` capped at `.xxLarge`, plus the 6pt
-    /// padding on each side and the 2pt stroke on each side, never under the
-    /// pin's 32pt.
-    static func measuredObstacleSide(count: Int, contentSize: UIContentSizeCategory) -> CGFloat {
-        let category = min(contentSize, .extraExtraLarge)
-        let caption = UIFont.preferredFont(
-            forTextStyle: .caption1,
-            compatibleWith: UITraitCollection(preferredContentSizeCategory: category)
-        )
-        let bold = caption.fontDescriptor.withSymbolicTraits(.traitBold).map { UIFont(descriptor: $0, size: 0) }
-        let text = ("\(count)" as NSString).size(withAttributes: [.font: bold ?? caption])
-        return max(BodegaMapViewModel.itemObstacleSide, ceil(max(text.width, text.height) + 12 + 4))
-    }
 
     var body: some View {
         Text("\(count)")

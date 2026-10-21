@@ -776,63 +776,6 @@ struct BodegaMapViewModelTests {
         #expect(BodegaMapViewModel.drawOrdered(items, frontIDs: [first.id]) == [cluster, .pin(second), .pin(first)])
     }
 
-    // MARK: Pin labels (#67). protects: `updatePinLabels` is what writes the
-    // observable the pins read, and leaving block zoom empties it.
-    // fails_when: the solver's result never reaches `pinLabels.ids`, or a
-    // non-block-zoom update leaves stale labels showing. no_claim: the
-    // placement rule itself (`PinLabelPlacementTests`), the points
-    // `MapScreenView` converts, or rendering.
-
-    @Test func updatePinLabelsWritesTheLabelledSet() throws {
-        let viewModel = makeViewModel()
-        let west = try makeTestBodega(name: "West", latitude: 40.7291, longitude: -73.9970)
-        let east = try makeTestBodega(name: "East", latitude: 40.7291, longitude: -73.9960)
-        let points = [west.id.uuidString: CGPoint(x: 100, y: 300), east.id.uuidString: CGPoint(x: 300, y: 300)]
-
-        viewModel.updatePinLabels(
-            items: [.pin(west), .pin(east)], points: points, isBlockZoom: true,
-            priorityIDs: [], contentSize: .large
-        )
-
-        #expect(viewModel.pinLabels.ids == [west.id, east.id])
-        #expect(viewModel.pinLabels.isBlockZoom)
-    }
-
-    /// Design D11: while a just-added bodega drops, only it is labelled.
-    @Test func whileAPinDropsOnlyThePriorityPinsAreLabelled() throws {
-        let viewModel = makeViewModel()
-        let west = try makeTestBodega(name: "West", latitude: 40.7291, longitude: -73.9970)
-        let dropping = try makeTestBodega(name: "Dropping", latitude: 40.7291, longitude: -73.9960)
-        let points = [west.id.uuidString: CGPoint(x: 100, y: 300), dropping.id.uuidString: CGPoint(x: 300, y: 300)]
-        viewModel.highlightedBodegaID = dropping.id
-
-        viewModel.updatePinLabels(
-            items: [.pin(west), .pin(dropping)], points: points, isBlockZoom: true,
-            priorityIDs: [dropping.id], contentSize: .large
-        )
-
-        #expect(viewModel.pinLabels.ids == [dropping.id])
-    }
-
-    @Test func aNonBlockZoomUpdateClearsTheLabels() throws {
-        let viewModel = makeViewModel()
-        let pin = try makeTestBodega(name: "Pin")
-        let points = [pin.id.uuidString: CGPoint(x: 200, y: 300)]
-        viewModel.updatePinLabels(
-            items: [.pin(pin)], points: points, isBlockZoom: true,
-            priorityIDs: [], contentSize: .large
-        )
-        #expect(viewModel.pinLabels.ids == [pin.id])
-
-        viewModel.updatePinLabels(
-            items: [.pin(pin)], points: points, isBlockZoom: false,
-            priorityIDs: [], contentSize: .large
-        )
-
-        #expect(viewModel.pinLabels.ids.isEmpty)
-        #expect(!viewModel.pinLabels.isBlockZoom)
-    }
-
     // Not covered here: a second in-flight fetch superseding an older one
     // (the `currentFetchGeneration` guard in `BodegaMapViewModel.refetch`).
     // Reliably forcing that race with `MockURLProtocol`'s instant-response

@@ -17,7 +17,6 @@ extension BrowseView {
                 viewModel: mapViewModel,
                 cameraPosition: $cameraPosition,
                 locationPermissionClient: locationPermissionClient,
-                userLocation: userLocation,
                 streetsWalkedViewModel: streetsWalkedViewModel,
                 isPlacingBodega: $isPlacingBodega,
                 onConfirmPlacement: { presentAddBodegaSheet(coordinate: $0) },
