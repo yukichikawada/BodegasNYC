@@ -21,6 +21,9 @@ final class BodegaMapViewModel {
 
     private(set) var loadState: LoadState = .idle
     private(set) var displayItems: [MapDisplayItem] = []
+    /// Which pins show their name at block zoom (#67), written only by
+    /// `updatePinLabels` (`BodegaMapViewModel+PinLabels.swift`).
+    let pinLabels = PinLabelState()
     /// Starts in `.all` so the screen has something to show with no
     /// location permission required — matches the PRD's "no upfront
     /// permission wall" requirement. Only switches to `.nearby` via an
