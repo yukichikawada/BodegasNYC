@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import UIKit
 
 /// The list screen: a flat, `.all`-only list of bodegas (see
@@ -29,12 +30,21 @@ import UIKit
 /// Empty-state copy comes from `AppCopy` (#24). `onAddBodega` is the
 /// nothing-loaded state's "Add a Bodega": `BrowseView` switches to the Map
 /// tab in placement mode.
+///
+/// Distances (#68): `userFix` is `BrowseView`'s `UserLocationProvider`
+/// fix (nil until a usable one lands) and `reservesDistanceSlot` whether
+/// location is authorized; each row computes its own `BlockDistance`. While
+/// location is not authorized the loaded list opens with `DistancesTip`,
+/// whose Show Map runs `onShowMap`.
 struct BodegaListView: View {
     let viewModel: BodegaListViewModel
     @Binding var filter: BodegaFilter
     @Binding var scrollID: Bodega.ID?
     var searchFocus: FocusState<Bool>.Binding
+    var userFix: UserFix?
+    var reservesDistanceSlot = false
     let onAddBodega: () -> Void
+    var onShowMap: () -> Void = {}
 
     /// `List` ignores `.scrollPosition(id:)`, so the top row is tracked by
     /// hand (#23): the top edge of each row on screen, kept in a plain
@@ -91,17 +101,29 @@ struct BodegaListView: View {
             noMatches
         case .loaded:
             ScrollViewReader { proxy in
-                List(viewModel.filteredBodegas) { bodega in
-                    NavigationLink(value: bodega) {
-                        BodegaRow(bodega: bodega)
+                List {
+                    // The FormTip pattern: inline, first in the list, only
+                    // when there are rows (#68, design D4).
+                    TipView(DistancesTip()) { action in
+                        if action.id == DistancesTip.showMapActionID { onShowMap() }
                     }
-                    .id(bodega.id)
-                    .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
-                        rowTops.tops[bodega.id] = $0
+                    .inlineBodegaTipStyle()
+                    ForEach(viewModel.filteredBodegas) { bodega in
+                        NavigationLink(value: bodega) {
+                            BodegaRow(
+                                bodega: bodega,
+                                distance: bodega.coordinate.blockDistance(from: userFix),
+                                reservesDistanceSlot: reservesDistanceSlot
+                            )
+                        }
+                        .id(bodega.id)
+                        .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
+                            rowTops.tops[bodega.id] = $0
+                        }
+                        // Off screen (or jumped past by a scrollTo): never the top.
+                        .onDisappear { rowTops.tops[bodega.id] = nil }
+                        .accessibilityFocused($focusedRowID, equals: bodega.id)
                     }
-                    // Off screen (or jumped past by a scrollTo): never the top.
-                    .onDisappear { rowTops.tops[bodega.id] = nil }
-                    .accessibilityFocused($focusedRowID, equals: bodega.id)
                 }
                 .listStyle(.plain)
                 // Where content stops hiding under the navigation bar: the
@@ -115,7 +137,10 @@ struct BodegaListView: View {
                 // whose top is in view.
                 .onScrollPhaseChange { _, phase in
                     guard phase == .idle, hasRestoredScroll else { return }
-                    scrollID = rowTops.topRow(in: viewModel.filteredBodegas)
+                    // At the first row, store nil (the top of the list), so
+                    // a round trip does not scroll an open tip off screen.
+                    let top = rowTops.topRow(in: viewModel.filteredBodegas)
+                    scrollID = top == viewModel.filteredBodegas.first?.id ? nil : top
                 }
             }
         case .failed:

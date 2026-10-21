@@ -16,6 +16,10 @@ import Observation
 @Observable
 final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     private(set) var authorizationStatus: CLAuthorizationStatus
+    /// Precise Location on or off. Changes arrive through the same
+    /// `locationManagerDidChangeAuthorization` callback (#68: the distance
+    /// slot is reserved only with full accuracy).
+    private(set) var accuracyAuthorization: CLAccuracyAuthorization
 
     private let manager: CLLocationManager
     /// Keyed rather than a single slot: `requestAlwaysAuthorization()` can be
@@ -24,10 +28,11 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// single slot would silently overwrite — and leak — the earlier
     /// continuation.
     private var pendingContinuations: [UUID: CheckedContinuation<CLAuthorizationStatus, Never>] = [:]
-    /// Same rationale as `pendingContinuations`, for `requestCurrentLocation()`
+    /// Same rationale as `pendingContinuations`, for `requestCurrentFix()`
     /// callers — e.g. Add-a-Bodega's placement-mode auto-pan and "Use Current
-    /// Location" shortcut could plausibly race.
-    private var pendingLocationContinuations: [UUID: CheckedContinuation<CLLocationCoordinate2D?, Never>] = [:]
+    /// Location" shortcut could plausibly race, and the list's distances
+    /// (#68) refresh on every tab switch and navigation change.
+    private var pendingLocationContinuations: [UUID: CheckedContinuation<CLLocation?, Never>] = [:]
 
     /// CLLocationManager's Always-upgrade prompt is documented to be
     /// presentable only once per install; a second call while still
@@ -47,6 +52,7 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         let manager = CLLocationManager()
         self.manager = manager
         self.authorizationStatus = manager.authorizationStatus
+        self.accuracyAuthorization = manager.accuracyAuthorization
         super.init()
         manager.delegate = self
     }
@@ -102,6 +108,13 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// manual panning without it).
     @discardableResult
     func requestCurrentLocation() async -> CLLocationCoordinate2D? {
+        await requestCurrentFix()?.coordinate
+    }
+
+    /// The same one-shot fetch, keeping the whole `CLLocation` so callers can
+    /// read its accuracy and timestamp (`UserLocationProvider`, #68). Never
+    /// prompts: `nil` unless When-In-Use or Always is already granted.
+    func requestCurrentFix() async -> CLLocation? {
         guard Self.canRequestCurrentLocation(authorizationStatus: authorizationStatus) else { return nil }
         let id = UUID()
         manager.requestLocation()
@@ -109,20 +122,22 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
             pendingLocationContinuations[id] = continuation
             Task { @MainActor in
                 try? await Task.sleep(for: Self.locationFixTimeout)
-                self.resumePendingLocation(id: id, coordinate: nil)
+                self.resumePendingLocation(id: id, location: nil)
             }
         }
     }
 
-    private func resumePendingLocation(id: UUID, coordinate: CLLocationCoordinate2D?) {
+    private func resumePendingLocation(id: UUID, location: CLLocation?) {
         guard let continuation = pendingLocationContinuations.removeValue(forKey: id) else { return }
-        continuation.resume(returning: coordinate)
+        continuation.resume(returning: location)
     }
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         let status = manager.authorizationStatus
+        let accuracy = manager.accuracyAuthorization
         Task { @MainActor in
             authorizationStatus = status
+            accuracyAuthorization = accuracy
             for id in pendingContinuations.keys {
                 resumePending(id: id, status: status)
             }
@@ -130,10 +145,10 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        guard let coordinate = locations.last?.coordinate else { return }
+        guard let location = locations.last else { return }
         Task { @MainActor in
             for id in pendingLocationContinuations.keys {
-                resumePendingLocation(id: id, coordinate: coordinate)
+                resumePendingLocation(id: id, location: location)
             }
         }
     }
@@ -141,7 +156,7 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
         Task { @MainActor in
             for id in pendingLocationContinuations.keys {
-                resumePendingLocation(id: id, coordinate: nil)
+                resumePendingLocation(id: id, location: nil)
             }
         }
     }

@@ -36,6 +36,10 @@ struct BodegaDetailView: View {
     private let photoService: PhotoService
     private let flagService: FlagService
     let sessionStore: SessionStore
+    /// The user's fix for the header's distance line (#68). `BrowseView`'s
+    /// provider itself rather than a snapshot, so a fix that lands while the
+    /// page is open fills the line in; `nil` (the default) shows no line.
+    private let userLocation: UserLocationProvider?
     /// Fired after an Edit Bodega save so `BrowseView` can update the same
     /// row on the map and list. This screen updates itself first, via its
     /// own view model — it never re-reads the `Bodega` it was pushed with.
@@ -48,8 +52,10 @@ struct BodegaDetailView: View {
         photoService: PhotoService,
         flagService: FlagService,
         sessionStore: SessionStore,
+        userLocation: UserLocationProvider? = nil,
         onBodegaUpdated: @escaping (Bodega) -> Void
     ) {
+        self.userLocation = userLocation
         self.bodegaService = bodegaService
         self.reviewService = reviewService
         self.photoService = photoService
@@ -246,6 +252,28 @@ struct BodegaDetailView: View {
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
             }
+            distanceLine
+        }
+    }
+
+    /// "2 blocks from you." under the address, or under the name when there
+    /// is none, 4pt either way (#68). While location is authorized with full
+    /// accuracy the line is reserved as an empty `.subheadline` line so the sections below
+    /// never shift when the fix lands; the sentence fades in over it (design
+    /// D2). Its own VoiceOver element after the address, not a header, and
+    /// no monospaced digits on a sentence. Reads `viewModel.bodega`, so an
+    /// Edit that moves the pin updates it.
+    @ViewBuilder
+    private var distanceLine: some View {
+        let distance = viewModel.bodega.coordinate.blockDistance(from: userLocation?.usableFix)
+        if distance != nil || userLocation?.reservesDistanceSlot == true {
+            DistanceSlot(
+                text: distance.map { AppCopy.distanceFromYou($0).text },
+                placeholders: [" "],
+                alignment: .leading
+            )
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
         }
     }
 }

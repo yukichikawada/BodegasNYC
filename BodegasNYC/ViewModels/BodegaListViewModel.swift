@@ -6,15 +6,10 @@ import Observation
 /// already decoupled at the view layer — this one has no camera/region
 /// concept to react to.
 ///
-/// `.all`-only for now. Unlike the map, which never actually asks
-/// `LocationPermissionClient` for a location fix — it piggybacks entirely on
-/// MapKit's own camera-follow to get a region to derive a fetch radius from
-/// — a list has no such mechanism, and `LocationPermissionClient` today only
-/// bridges authorization status, not an actual coordinate. Building a real
-/// "nearby" mode here needs a genuine new one-shot location-fix capability
-/// there first (e.g. a `CLLocationManager.requestLocation()` bridge), which
-/// is out of proportion for this slice. Follow-up: add that capability,
-/// then give this a `BrowseMode` toggle mirroring `BodegaMapViewModel`'s.
+/// `.all`-only for now: the one-shot fix a nearby mode would need exists
+/// (`LocationPermissionClient.requestCurrentFix()`, read by
+/// `UserLocationProvider` for the rows' distances, #68), but the list still
+/// has no nearby mode or nearest-first sort; that is the follow-up.
 @MainActor
 @Observable
 final class BodegaListViewModel {

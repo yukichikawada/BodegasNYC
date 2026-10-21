@@ -16,6 +16,7 @@
 //  simulator).
 //
 
+import CoreLocation
 import Testing
 
 @testable import BodegasNYC
@@ -53,6 +54,23 @@ struct TutorialTipsTests {
 
     @Test func suppressedUntilADetailHasBeenOpened() {
         #expect(!Self.offer(hasOpenedDetail: false))
+    }
+
+    /// The Distances tip (#68, design D4), the pure form of
+    /// `DistancesTip.rules` (`canBePromptedForLocation`).
+    /// protects: the tip is offered only while Locate Me can still prompt
+    /// (`.notDetermined`), never to denied, restricted or authorized users.
+    /// fails_when: any status other than `.notDetermined` offers it, or
+    /// `.notDetermined` does not.
+    /// no_claim: TipKit's close persistence, the `.actionPerformed`
+    /// invalidation on the first fix, that `BrowseView` mirrors the live
+    /// status, or that the list renders it only with rows (QA checks those).
+    @Test func distancesTipOfferedOnlyWhileLocationCanBePrompted() {
+        #expect(TutorialTips.shouldOfferDistancesTip(authorizationStatus: .notDetermined))
+        #expect(!TutorialTips.shouldOfferDistancesTip(authorizationStatus: .denied))
+        #expect(!TutorialTips.shouldOfferDistancesTip(authorizationStatus: .restricted))
+        #expect(!TutorialTips.shouldOfferDistancesTip(authorizationStatus: .authorizedWhenInUse))
+        #expect(!TutorialTips.shouldOfferDistancesTip(authorizationStatus: .authorizedAlways))
     }
 
     /// The full 16-row table: true in exactly one row.
