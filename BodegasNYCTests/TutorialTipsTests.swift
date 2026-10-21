@@ -55,6 +55,19 @@ struct TutorialTipsTests {
         #expect(!Self.offer(hasOpenedDetail: false))
     }
 
+    /// The Distances tip (#68, design D4), the pure form of
+    /// `DistancesTip.rules`.
+    /// protects: the tip is offered only while location is not authorized.
+    /// fails_when: it is offered with location authorized, or withheld
+    /// without it.
+    /// no_claim: TipKit's close persistence, the `.actionPerformed`
+    /// invalidation on the first fix, or that the list renders it only with
+    /// rows (QA checks those).
+    @Test func distancesTipOfferedOnlyWithoutLocation() {
+        #expect(TutorialTips.shouldOfferDistancesTip(isLocationAuthorized: false))
+        #expect(!TutorialTips.shouldOfferDistancesTip(isLocationAuthorized: true))
+    }
+
     /// The full 16-row table: true in exactly one row.
     @Test func fullTruthTableAllowsExactlyOneRow() {
         var allowed: [[Bool]] = []

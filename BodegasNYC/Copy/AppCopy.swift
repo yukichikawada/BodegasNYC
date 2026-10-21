@@ -2,12 +2,18 @@ import Foundation
 
 /// One user-facing string plus the kind of slot it fills. The kind decides
 /// which voice rules apply to it (see `AppCopyVoiceTests`): titles and
-/// bodies are sentences, labels are Title Case button text.
+/// bodies are sentences, labels are Title Case button text, values are short
+/// data fragments.
 nonisolated struct CopyString: Hashable, Sendable {
     nonisolated enum Kind: Hashable, Sendable {
         case title
         case body
         case label
+        /// A short data fragment in a data position: a row's trailing text, a
+        /// column value ("2 blocks"). 1 to 4 words, no trailing period, not
+        /// forced into Title Case, never starting lowercase (#68, spec D4).
+        /// The five global voice rules still apply.
+        case value
     }
 
     let kind: Kind
@@ -116,6 +122,13 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case duplicatePromptFootnote
     case duplicateConfirmNewAction
 
+    // MARK: Distances tip (#68, design D4)
+
+    case distancesTipTitle
+    case distancesTipBody
+    /// The tip's one action: switches to the Map tab, where Locate Me is.
+    case showMapAction
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -197,6 +210,10 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
             CopyString(kind: .body, text: "The map already has something right there. If it's the same place, open it.")
         case .duplicatePromptFootnote: CopyString(kind: .body, text: "Opening one drops what you typed.")
         case .duplicateConfirmNewAction: CopyString(kind: .label, text: "No, It's New")
+        case .distancesTipTitle: CopyString(kind: .title, text: "Distances come in blocks.")
+        case .distancesTipBody:
+            CopyString(kind: .body, text: "Tap Locate Me on the map and the list measures the way you do.")
+        case .showMapAction: CopyString(kind: .label, text: "Show Map")
         }
     }
 
@@ -221,5 +238,53 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         hasCat
             ? (.emptyNoReviewsCatTitle, .emptyNoReviewsCatBody)
             : (.emptyNoReviewsTitle, .emptyNoReviewsBody)
+    }
+}
+
+// MARK: - Distance (#68)
+
+/// The number is data, so these are templates rather than cases; the voice
+/// test runs them over a fixture set covering every branch.
+nonisolated extension AppCopy {
+    /// A list row's trailing value (design D5/D7): "Around the corner",
+    /// "1 block", "2 blocks", "0.6 miles", "1 mile", "2,450 miles".
+    static func distanceValue(_ distance: BlockDistance) -> CopyString {
+        let text = switch distance {
+        case .aroundTheCorner: "Around the corner"
+        case .blocks(1): "1 block"
+        case .blocks(let count): "\(count) blocks"
+        case .miles(let miles): milesPhrase(miles)
+        }
+        return CopyString(kind: .value, text: text)
+    }
+
+    /// The detail header's line and a row's VoiceOver ending: "Around the
+    /// corner.", "1 block from you.", "0.6 miles from you.".
+    static func distanceFromYou(_ distance: BlockDistance) -> CopyString {
+        let text = switch distance {
+        case .aroundTheCorner: "Around the corner."
+        case .blocks(1): "1 block from you."
+        case .blocks(let count): "\(count) blocks from you."
+        case .miles(let miles): "\(milesPhrase(miles)) from you."
+        }
+        return CopyString(kind: .body, text: text)
+    }
+
+    /// "1 mile" when the number reads as exactly one, else "<n> miles".
+    private static func milesPhrase(_ miles: Double) -> String {
+        let number = milesText(miles)
+        return number == "1" ? "1 mile" : "\(number) miles"
+    }
+
+    /// At most one decimal, none when it would be ".0", grouping on, in a
+    /// fixed `en_US` locale (the app is English-only): 0.55 → "0.6",
+    /// 1.0 → "1", 12.4 → "12.4", 2450 → "2,450".
+    private static func milesText(_ miles: Double) -> String {
+        miles.formatted(
+            .number
+                .precision(.fractionLength(0...1))
+                .grouping(.automatic)
+                .locale(Locale(identifier: "en_US"))
+        )
     }
 }

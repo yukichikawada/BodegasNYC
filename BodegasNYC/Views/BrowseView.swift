@@ -88,6 +88,7 @@ struct BrowseView: View {
     @State var addCompletion: AddCompletionCoordinator
     @Namespace var detailTransition // pin → detail zoom source (#23)
     @State var pinMotion = PinMotionState()
+    @State var userLocation: UserLocationProvider // distances (#68), see BrowseView+Distance.swift
 
     init(
         bodegaService: BodegaService,
@@ -107,6 +108,7 @@ struct BrowseView: View {
         _mapViewModel = State(initialValue: mapViewModel)
         _listViewModel = State(initialValue: listViewModel)
         _addCompletion = State(initialValue: .forBrowsing(firstRunState, mapViewModel, listViewModel))
+        _userLocation = State(initialValue: UserLocationProvider(client: locationPermissionClient))
         self.bodegaService = bodegaService
         self.reviewService = reviewService
         self.photoService = photoService
@@ -169,7 +171,8 @@ struct BrowseView: View {
                         reviewService: reviewService,
                         photoService: photoService,
                         flagService: flagService,
-                        sessionStore: sessionStore
+                        sessionStore: sessionStore,
+                        userLocation: userLocation
                     ) { updatedBodega in
                         mapViewModel.bodegaWasUpdated(updatedBodega)
                         listViewModel.bodegaWasUpdated(updatedBodega)
@@ -216,6 +219,7 @@ struct BrowseView: View {
                 .onChange(of: isPlacingBodega) { syncTipParameters() }
                 .onChange(of: firstRunState.hasAddedFirstBodega) { syncTipParameters() }
                 .task { await addTipState.observe() }
+                .modifier(userLocationRefresh)
                 // Popover tips (the placement tip) inherit this; the inline
                 // tips set their own inline variant.
                 .tipViewStyle(BodegaTipStyle())

@@ -60,7 +60,10 @@ extension BrowseView {
                     filter: $filter,
                     scrollID: $listScrollID,
                     searchFocus: $isSearchFocused,
-                    onAddBodega: requestPlacement
+                    userFix: userLocation.usableFix,
+                    reservesDistanceSlot: userLocation.isAuthorized,
+                    onAddBodega: requestPlacement,
+                    onShowMap: { tabSelection.wrappedValue = .map }
                 )
                 .transition(listTransition)
                 .zIndex(1)

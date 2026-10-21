@@ -191,18 +191,21 @@ capped at `.xxLarge`. Hierarchy comes from the text style and color, not from we
 title `.headline`, body `.subheadline` secondary on cards; `.subheadline` secondary + `.footnote`
 tertiary on section empty states; `.title3` secondary for onboarding body.
 
-**Numerals:** `.monospacedDigit()` on hours, counts, and the rating number so columns do not
-jitter.
+**Numerals:** `.monospacedDigit()` on hours, counts, the rating number and a list row's distance
+value so columns do not jitter (not on the detail header's distance sentence: it is prose).
 
 **Copy:** every string comes from `AppCopy` and passes `AppCopyVoiceTests`. Titles and bodies
-are sentences; labels are Title Case. Symbols are exempt from the voice test.
+are sentences; labels are Title Case; values (`CopyString.Kind.value`, #68) are short data
+fragments in a data position, 1 to 4 words, no period, not Title Case, never starting lowercase
+("2 blocks", "Around the corner", "0.6 miles"). Symbols are exempt from the voice test.
 
 ## Layout
 
 **Grid:** 4pt base. Page inset 16pt; card inset 16pt and padding 16pt; onboarding inset 24pt.
 Grouping 12pt, title-to-body 4pt, section change 20 to 24pt, major break 32pt. Leading alignment
-everywhere; nothing is centered except the system `ContentUnavailableView` on the list tab and
-the page dots.
+everywhere, except a trailing data value on a list row, which sits at the row's trailing edge when
+the whole row fits on one line. Nothing is centered except the system `ContentUnavailableView` on
+the list tab and the page dots.
 
 **Widths:** floating overlays `maxWidth: 480pt` centered (iPad, landscape); onboarding content
 `maxWidth: 560pt`, top-aligned at 25% of the height.
@@ -277,7 +280,28 @@ loading. Advance 0.3s ease-in-out; exit 0.35s (0.25s opacity-only under Reduce M
 
 **Detail header:** name in the display register (`.title`, heavy, condensed), address
 `.subheadline` secondary, stars `systemYellow` with the numeric rating tabular. `RatingSummaryView`
-renders nothing when there is no average; the reviews section owns the empty state.
+renders nothing when there is no average; the reviews section owns the empty state. Third line
+(#68): the distance as a sentence, `AppCopy.distanceFromYou` ("2 blocks from you."),
+`.subheadline` secondary, no monospaced digits, 4pt under the address (under the name when there
+is no address); its own VoiceOver element, not a header. While location is authorized the line is
+reserved as an empty line and the sentence fades in over it (0.2s `easeOut`, opacity only), so
+the sections below never shift.
+
+**List row** (`BodegaRow`, #68): name `.headline`, address `.subheadline` secondary, both wrapping
+at every size and never truncating. The distance (`AppCopy.distanceValue`, `.value` kind) is
+`.subheadline` secondary with monospaced digits, trailing the name on its first baseline with at
+least 8pt between, one line, while the whole row fits on one line; otherwise, and always from
+`.accessibility1` up, it is a third leading line under the address and may wrap (the `ReviewRow`
+idiom). While location is authorized the slot is reserved (a hidden placeholder as wide as the
+longer of "20 blocks" and "0.6 miles" side by side, an empty line stacked) and the value fades in
+and out over it with a 0.2s opacity-only `easeOut` (`BrowseMotion.Distance.appearSeconds`); a
+value that changes is not animated. Not authorized: no slot, and the row is name over address.
+VoiceOver reads one element, "Name, address, 2 blocks from you." The #20 duplicate sheet uses the
+same row with no distance. The distance is straight-line from the location fix to the pin, a folk
+estimate like every map app's list distance, not blocks walked; a block is a street block at 20 to
+the mile. No permission, a coarse or expired fix and Precise Location off are silent states: no
+hint, no footer, no spinner, no red. The one visible addition without permission is the one-time
+Distances tip inline at the top of the loaded list (Show Map; never prompts).
 
 **Section empty state** (DD9): title `.subheadline` secondary, body `.footnote` tertiary, 2pt
 apart, leading, no symbol, inside the section's `VStack`. List-tab empty states use
@@ -291,7 +315,7 @@ opacity. No custom button shapes; no gradient fills.
 error text `.footnote` in red inside its section. Sign-in presented from the add flow at
 `.medium` detent on `.regularMaterial`.
 
-**Tips** (`AddBodegaTip`, placement tip): `BodegaTipStyle` renders no background when inline in
+**Tips** (`AddBodegaTip`, placement tip, `DistancesTip` first in the loaded list, #68): `BodegaTipStyle` renders no background when inline in
 the card; the card supplies the material.
 
 ## Do's and Don'ts
@@ -349,7 +373,8 @@ the card; the card supplies the material.
   on the three surfaces; toggle sections tinted.
 - Ideas from the independent proposals, filed as issues, not adopted here: #67 pin name plates at
   block zoom (reads the block like the street; conflicts with DD3's label rule and MapKit's
-  stacking, see #59), and #68 distances in blocks in the voice ("Closest is 2 blocks").
+  stacking, see #59), and #68 distances in blocks in the voice ("Closest is 2 blocks"; list rows
+  and the detail header adopted 2026-10-21, the map result line is still an idea).
 
 ## Decisions Log
 | Date | Decision | Rationale |
@@ -366,3 +391,6 @@ the card; the card supplies the material.
 | 2026-10-20 | #23 T3: the placement bar becomes a floating card in the bottom slot (card chrome, title in voice, Cancel bordered), the crosshair centred in the uncovered band | A safe-area inset moved every pin on entry and exit; a strip cannot clear the attribution row; the card family already owns the slot |
 | 2026-10-20 | #23 design review: pin hold 0.25s, no tap haptic, slot and crosshair fade under Reduce Motion, list leaves before placement arrives, the one material-under-controls exception for the placement card | Design review 2A to 18A, owner accepted all; the placement card is a task panel, so its buttons stay native controls on material |
 | 2026-10-20 | #23: every bottom-slot card (map card, first-add card, placement card) carries the radius 2 / y 1 shadow from `MapBottomCardChrome` | Elevation already specified it; the #58 cards shipped without it |
+| 2026-10-21 | #68 spec D1 to D4: distance on list rows and the detail header; a block is a street block at 20 to the mile, rounded to the nearest whole block, "Around the corner" when it rounds to zero; position read only when When-In-Use is already granted, never prompted from the list or detail; a fourth copy kind, `.value`, and a full sentence in the header | New Yorkers measure in blocks; the voice goes into the numbers on the two Read surfaces that already exist, with no new map chrome |
+| 2026-10-21 | #68 eng D5 to D12: tests in `BlockDistanceTests` (no `CoordinateTests`); `UserLocationProvider` owns the fix; one explicit row VoiceOver label; regression contract (no permission renders as before); foreground refresh; fixes carry accuracy and coarse fixes (over 100 m) are hidden; a kept fix expires after 10 minutes; straight-line distance, documented | `/plan-eng-review` plus a Codex outside voice; owner accepted all |
+| 2026-10-21 | #68 design D1 to D7: trailing value when the whole row fits, else stacked; reserved slot with a 0.2s opacity fade; "Around the corner" needs a fix accurate to 50 m; one-time inline Distances tip; "miles" spelled out with no ".0" and singular at 1; 20 blocks before miles | `/plan-design-review` with two outside voices; owner accepted all. Late arrival must not move rows, and a ten-block cap put most of a city-wide list in miles |

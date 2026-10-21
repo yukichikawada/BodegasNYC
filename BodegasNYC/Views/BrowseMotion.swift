@@ -91,6 +91,15 @@ nonisolated enum BrowseMotion {
         static let fadeOutSeconds: TimeInterval = 0.15
     }
 
+    // MARK: Distances (#68)
+
+    /// A list row's or the detail header's distance fades into its reserved
+    /// slot, and out of it, with an opacity-only `easeOut` (DESIGN.md Motion:
+    /// small state flips; design D2). A value that changes is not animated.
+    enum Distance {
+        static let appearSeconds: TimeInterval = 0.2
+    }
+
     /// The crosshair's vertical centre, in the map's local coordinates: the
     /// middle of the band the placement card leaves uncovered, i.e. between
     /// the map's top edge and the card's top edge (`mapHeight - cardHeight -
