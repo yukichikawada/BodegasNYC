@@ -26,25 +26,31 @@ struct MapScreenView: View {
     /// every text size) rather than on top of it (#58).
     private static let attributionClearance: CGFloat = 24
 
-    private let viewModel: BodegaMapViewModel
+    let viewModel: BodegaMapViewModel
     @Binding private var cameraPosition: MapCameraPosition
     /// The tapped pin or cluster. Both are tagged so MapKit's one tap
     /// recognizer decides every tap; a badge tap gesture used to zoom first,
     /// then MapKit's delayed selection opened a member now under the finger.
-    @State private var selectedItemID: MapDisplayItem.ID?
-    @State private var lastVisibleRegion: MKCoordinateRegion?
+    @State var selectedItemID: MapDisplayItem.ID?
+    @State var lastVisibleRegion: MKCoordinateRegion?
     @State private var showingClearConfirmation = false
     /// A settle held back under the List tab, and the last one delivered:
     /// the held one is replayed on return only if the camera really moved.
-    @State private var pendingSettledRegion: MKCoordinateRegion?
-    @State private var deliveredRegion: MKCoordinateRegion?
+    @State var pendingSettledRegion: MKCoordinateRegion?
+    @State var deliveredRegion: MKCoordinateRegion?
+    /// Pin labels (#67, see `MapScreenView+PinLabels.swift`).
+    @State var isCameraMoving = false
+    @State var lastSettledCamera: MapCamera?
+    @State var mapSize: CGSize = .zero
     /// Placement card height (slot chrome included) and the crosshair's
     /// global centre, the space `MapProxy.convert` reads (#23 T3).
     @State private var placementCardHeight: CGFloat = 0
     @State private var crosshairPoint: CGPoint?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(PinMotionState.self) private var pinMotion // held pin (#23 T1)
+    @Environment(\.dynamicTypeSize) var dynamicTypeSize
+    @Environment(PinMotionState.self) var pinMotion // held pin (#23 T1)
     private let locationPermissionClient: LocationPermissionClient
+    let userLocation: UserLocationProvider? // the dot, a pin-label obstacle (#67)
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
     @Binding private var isPlacingBodega: Bool
     private let onConfirmPlacement: (CLLocationCoordinate2D) -> Void
@@ -55,14 +61,15 @@ struct MapScreenView: View {
     /// verdict), so the slot never shows an empty card.
     private let showsAddTip: Bool
     /// Pin drop phases, the first-add card, the settle signal (#25).
-    private let addCompletion: AddCompletionCoordinator?
+    let addCompletion: AddCompletionCoordinator?
     /// False under the List tab: no Locate Me / Streets Walked, settles held.
-    private let showsToolbar: Bool
+    let showsToolbar: Bool
 
     init(
         viewModel: BodegaMapViewModel,
         cameraPosition: Binding<MapCameraPosition>,
         locationPermissionClient: LocationPermissionClient,
+        userLocation: UserLocationProvider? = nil,
         streetsWalkedViewModel: StreetsWalkedViewModel? = nil,
         isPlacingBodega: Binding<Bool>,
         onConfirmPlacement: @escaping (CLLocationCoordinate2D) -> Void,
@@ -75,6 +82,7 @@ struct MapScreenView: View {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
         self.locationPermissionClient = locationPermissionClient
+        self.userLocation = userLocation
         self.streetsWalkedViewModel = streetsWalkedViewModel
         _isPlacingBodega = isPlacingBodega
         self.onConfirmPlacement = onConfirmPlacement
@@ -113,21 +121,14 @@ struct MapScreenView: View {
         )
     }
 
-    /// Selected, held and highlighted pins declared last. MapKit stacks by screen
-    /// position, so this only settles ties at equal height (see
-    /// `BodegaMapViewModel.drawOrdered`, #59).
-    private var orderedDisplayItems: [MapDisplayItem] {
-        let front = [
-            selectedItemID.flatMap(UUID.init(uuidString:)), pinMotion.phase.bodega?.id, viewModel.highlightedBodegaID
-        ]
-        return BodegaMapViewModel.drawOrdered(viewModel.displayItems, frontIDs: Set(front.compactMap { $0 }))
-    }
-
     var body: some View {
         MapReader { proxy in
             // Back to front (spec layer order): map, bottom slot, crosshair
             // (never covered by the card), tracking-error banner.
-            map
+            pinLabelTriggers(map(proxy), proxy: proxy)
+                .onChange(of: showsToolbar) { _, isMapTab in
+                    if isMapTab { mapTabDidReturn(proxy) }
+                }
                 .overlay { PinTransitionAnchor(proxy: proxy) }
                 // An overlay, not a safe-area inset, so the map doesn't shift
                 // when a card or the placement card comes or goes (#58, #23).
@@ -153,13 +154,6 @@ struct MapScreenView: View {
         }
         // The List tab's search keyboard must never resize the covered map.
         .ignoresSafeArea(.keyboard)
-        .onChange(of: showsToolbar) { _, isMapTab in
-            guard isMapTab, let region = pendingSettledRegion else { return }
-            pendingSettledRegion = nil
-            guard !region.isSameCamera(as: deliveredRegion) else { return }
-            deliveredRegion = region
-            viewModel.regionDidSettle(region)
-        }
         .onChange(of: isPlacingBodega) { _, isPlacing in
             guard !isPlacing else { return }
             // Measure afresh next time; VoiceOver restarts at the toolbar.
@@ -190,7 +184,7 @@ struct MapScreenView: View {
         }
     }
 
-    private var map: some View {
+    private func map(_ proxy: MapProxy) -> some View {
         Map(position: $cameraPosition, selection: $selectedItemID) {
             ForEach(orderedDisplayItems) { item in
                 switch item {
@@ -200,6 +194,7 @@ struct MapScreenView: View {
                         HeldPinView(
                             bodega: bodega,
                             motion: pinMotion,
+                            labels: viewModel.pinLabels,
                             phase: addCompletion?.pinPhase(for: bodega.id) ?? .atRest
                         )
                     }
@@ -232,17 +227,9 @@ struct MapScreenView: View {
         // blue rather than taking the app tint (DESIGN.md Colors). Applied
         // to the Map alone, before the overlays, so they keep the tint.
         .tint(.blue)
-        .onMapCameraChange(frequency: .onEnd) { context in
-            lastVisibleRegion = context.region
-            // Under the List tab nothing may refetch or recluster.
-            guard showsToolbar else {
-                pendingSettledRegion = context.region
-                return
-            }
-            deliveredRegion = context.region
-            viewModel.regionDidSettle(context.region)
-            addCompletion?.cameraDidSettle(center: Coordinate(context.region.center))
-        }
+        // Ours are the only business names; wayfinding stays (#67 D1).
+        .mapStyle(.standard(pointsOfInterest: .excluding(BodegaMapViewModel.excludedPOICategories)))
+        .onMapCameraChange(frequency: .onEnd) { cameraDidSettle($0, proxy: proxy) }
         .onChange(of: selectedItemID) { _, newValue in
             guard let newValue else { return }
             // Cleared at once so every tap is a change. MapKit reports taps late:

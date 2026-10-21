@@ -90,10 +90,11 @@ components:
     shadow: radius 4, y 2
     scale: 1.15
   pin-label:
-    font: "{typography.label}"
+    font: "{typography.label}"   # .caption2, Dynamic Type capped at .xxLarge
     material: regularMaterial
     rounded: "{rounded.full}"
-    maxCharacters: 18
+    maxWidth: 160pt              # text width before 6pt side padding; tail-truncated (#67)
+    shadow: radius 2, y 1        # selected, held or dropping only; resting labels are flat
   cluster-badge:
     size: 28pt+
     backgroundColor: "{colors.cluster}"
@@ -187,7 +188,10 @@ sizes. The register never appears in body text, list rows, the map card body, or
 
 **Scale:** Dynamic Type text styles only, never fixed point sizes except for symbol sizes
 (44pt onboarding spine, 28pt card symbol column, 14pt pin glyph) and the pin label, which is
-capped at `.xxLarge`. Hierarchy comes from the text style and color, not from weight alone:
+capped at `.xxLarge` (DD16, kept by #67 design D5): past that the capsule outgrows the 28pt
+circle it names and block-zoom placement would hide most labels. The tradeoff is deliberate: the
+List tab, whose rows wrap at every size and carry the distance, is the fully scaling way to
+compare the same places. Hierarchy comes from the text style and color, not from weight alone:
 title `.headline`, body `.subheadline` secondary on cards; `.subheadline` secondary + `.footnote`
 tertiary on section empty states; `.title3` secondary for onboarding body.
 
@@ -212,7 +216,8 @@ the list tab and the page dots.
 
 **Density:** medium on the map (one floating object at a time in the bottom slot; precedence
 placement card > first-add card > empty state > add tip > streets banner), comfortable on
-onboarding and detail. The map is never replaced by a results screen; list and detail sit over
+onboarding and detail. At block zoom the pin layer carries names (#67); the bottom-slot rule is
+unchanged. The map is never replaced by a results screen; list and detail sit over
 it. The List tab slides over the live map; detail zooms out of its pin.
 
 **Touch:** 44pt minimum for every target, including the pin's hit area and the card's close.
@@ -221,8 +226,9 @@ it. The List tab slides over the live map; detail zooms out of its pin.
 
 Three layers: the map (opaque), floating content on `.regularMaterial`, floating controls on
 system Liquid Glass. Shadows are offset and soft: `radius 2, y 1` on pins and cluster badges,
-`radius 4, y 2` on the selected pin. Pin labels and the card rely on material contrast plus the
-same small shadow. No zero-offset glows, no borders as depth. Sheets use system presentation;
+`radius 4, y 2` on the selected pin. The card relies on material contrast plus the same small
+shadow. Pin labels at rest are a flat material layer; the selected, held or dropping label
+carries the small shadow (#67). No zero-offset glows, no borders as depth. Sheets use system presentation;
 the sign-in sheet from the add flow is `.medium` detent on `.regularMaterial`.
 
 ## Shapes
@@ -247,8 +253,24 @@ loadFailed `exclamationmark.triangle`), firstAdd, addTip, streets banner, tracki
 
 **Pin** (`BodegaPinView`, DD3): 28pt circle, `.pin` or `.catPin`, white 14pt glyph, 2pt white
 stroke, shadow 2/1, 44pt hit area, anchored at center. Selected: 3pt stroke, shadow 4/2, scale
-1.15, drawn last. Label (`.caption2`, material capsule, 18 characters, above the circle) only
-when selected or dropping. Drop: spring 0.5s bounce 0.35 with success haptic; Reduce Motion:
+1.15, drawn last. Label: `.caption2` `.primary` on a `.regularMaterial` capsule, one line up to
+160pt of text, tail-truncated, 4pt above the circle. It shows when the pin is selected (held) or
+dropping, and at block zoom on every pin whose label clears every kept label and every drawn
+circle (#67). Block zoom is a visible map height (top-centre to bottom-centre of the map) of
+400 m or less; labels stay until it passes 440 m, so a settle near the line never blinks them.
+Placement: held and dropping labels first, always kept; then north to south, then by id; a label
+that would touch another label (4pt clearance) or another pin's, cluster's or the location
+dot's drawn circle is hidden, never moved. The location dot counts as drawn, a 24pt square for
+the blue dot and its white ring; its translucent accuracy halo may be covered, so a user standing
+on a bodega keeps its name. North-first is for pan stability, not relevance: a
+pure pan never swaps which neighbour is named, so do not change it to distance from the centre.
+Labels change only when the camera settles (or the map's size, the text size or the Map tab's
+return); a pinch clears them and the settle brings them back; each fades 0.2s ease-out, opacity
+only. During the first add only the dropping pin is labelled. A hidden label is recovered by the
+tap, which holds the pin 0.25s and commits to detail. A tap on a shown label opens its pin
+(MapKit hit-tests the whole annotation view, label included); where a label lies over a
+neighbour's 44pt target, a tap there still opens the neighbour (checked live on #67). Labels under the glass toolbar or the bottom
+card are illegible, as pins there already are. Drop: spring 0.5s bounce 0.35 with success haptic; Reduce Motion:
 0.2s fade in place. VoiceOver: name, "Has a cat", button trait.
 
 **Placement card** (`PlacementBottomBar`, #23): the bottom slot's top-precedence occupant, in the
@@ -269,6 +291,18 @@ presented 0.3s after the card appears and dismissed before the card leaves. The 
 hidden from VoiceOver; the card's title is the instruction.
 
 **Cluster badge:** same family as the pin, `systemGray` fill, white count, same stroke and shadow.
+Never labelled.
+
+**Map tiles** (#67 design D1): `.standard` with Apple's commercial points of interest excluded
+at every zoom, so the map's only business names are ours: store, food market, restaurant, cafe,
+bakery, brewery, winery, nightlife, pharmacy, laundry, ATM, bank, gas station, EV charger, car
+rental, hotel, fitness center, movie theater, theater, marina, spa, beauty, automotive repair,
+music venue (`BodegaMapViewModel.excludedPOICategories`). Businesses Apple leaves unclassified
+still show; no category can hide them. Wayfinding stays: public transport, parks,
+schools, universities, hospitals, libraries, museums, landmarks, airports, stadiums, national
+parks, beaches, zoos, aquariums, amusement parks, fire stations, police, post offices, restrooms.
+Pin labels are placed clear of the location dot itself (24pt) at each settle; the dot may drift
+under a label between settles, and its accuracy halo may sit under a label.
 
 **Onboarding page** (`OnboardingView`, DD1 + D5): opaque `systemBackground`; 44pt symbol in
 `.catPin` (`cat`, `line.3.horizontal.decrease.circle`, `mappin.and.ellipse`); title in the
@@ -373,9 +407,9 @@ the card; the card supplies the material.
 
 - #66 (done 2026-10-20): `AccentColor` asset set to #0A7A43 / #34C77B; `Font.display` applied
   on the three surfaces; toggle sections tinted.
-- Ideas from the independent proposals, filed as issues, not adopted here: #67 pin name plates at
-  block zoom (reads the block like the street; conflicts with DD3's label rule and MapKit's
-  stacking, see #59), and #68 distances in blocks in the voice ("Closest is 2 blocks"; list rows
+- Ideas from the independent proposals, filed as issues: #67 names at block zoom (adopted
+  2026-10-21 as DD3 capsule labels, not the proposed name plates; see the Decisions Log), and #68
+  distances in blocks in the voice ("Closest is 2 blocks"; list rows
   and the detail header adopted 2026-10-21, the map result line is still an idea).
 
 ## Decisions Log
@@ -396,3 +430,6 @@ the card; the card supplies the material.
 | 2026-10-21 | #68 spec D1 to D4: distance on list rows and the detail header; a block is a street block at 20 to the mile, rounded to the nearest whole block, "Around the corner" when it rounds to zero; position read only when When-In-Use is already granted, never prompted from the list or detail; a fourth copy kind, `.value`, and a full sentence in the header | New Yorkers measure in blocks; the voice goes into the numbers on the two Read surfaces that already exist, with no new map chrome |
 | 2026-10-21 | #68 eng D5 to D12: tests in `BlockDistanceTests` (no `CoordinateTests`); `UserLocationProvider` owns the fix; one explicit row VoiceOver label; regression contract (no permission renders as before); foreground refresh; fixes carry accuracy and coarse fixes (over 100 m) are hidden; a kept fix expires after 10 minutes; straight-line distance, documented | `/plan-eng-review` plus a Codex outside voice; owner accepted all |
 | 2026-10-21 | #68 design D1 to D7: trailing value when the whole row fits, else stacked; reserved slot with a 0.2s opacity fade; "Around the corner" needs a fix accurate to 50 m; one-time inline Distances tip; "miles" spelled out with no ".0" and singular at 1; 20 blocks before miles | `/plan-design-review` with two outside voices; owner accepted all. Late arrival must not move rows, and a ten-block cap put most of a city-wide list in miles |
+| 2026-10-21 | #67 spec D1 to D2: at block zoom every pin shows the existing DD3 capsule label with overlap avoidance, and the circle stays; the display-register name plates were not adopted; block zoom is a zoom threshold only (visible height 400 m), greedy placement, priority then north first, no pin-count rule | D5 keeps the display register to three surfaces; a pin-count rule blinks when the 13th pin pans in |
+| 2026-10-21 | #67 eng D1 to D3 and F1 to F3: data and priority refreshes wait for the camera to settle; label widths and heights are measured with the font (cached per name and text size), not estimated; only items within half a span of the visible region take part; the held stand-in is an item; fixtures isolate the label-label rule; the pan guarantee holds for uniform screen translations only (pitch may change spacing) | `/plan-eng-review` plus a Codex outside voice; owner accepted all. The 8pt-per-character figure was not an upper bound |
+| 2026-10-21 | #67 design D1 to D11: Apple's commercial POIs hidden and the location dot an obstacle; hysteresis 400/440 m; truncation by width (160pt) for every label; visible height measured from the screen, so heading does not change it; the `.xxLarge` cap kept with the List tab as the scaling surface; contrast gate with `.thickMaterial` as the pre-approved fallback; one label style, the priority label alone lifted by the small shadow; obstacles are the drawn circles (32pt, 36pt held or dropping, 24pt location dot), and the 4pt clearance applies between labels only; a pinch clears labels; the first add labels only the dropping pin | `/plan-design-review` with two outside voices; owner accepted all. Two bodegas across a street lost both labels to the 44pt hit square. D1 refined in QA: the location-dot obstacle shrunk from 44pt to the drawn 24pt dot after QA found a user standing on a pin lost both labels |

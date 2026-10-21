@@ -167,12 +167,21 @@ struct PinTransitionAnchor: View {
 /// changes (verified on the simulator: a pin passed `isSelected` from the
 /// phase never showed the held look), so the pin reads the observable phase
 /// itself, inside the view MapKit hosts.
+///
+/// The block-zoom label (#67) follows the same rule: the pin reads the
+/// observable `PinLabelState` here, not a captured flag.
 struct HeldPinView: View {
     let bodega: Bodega
     let motion: PinMotionState
+    let labels: PinLabelState
     let phase: AddCompletionCoordinator.PinPhase
 
     var body: some View {
-        BodegaPinView(bodega: bodega, isSelected: motion.phase.bodega?.id == bodega.id, phase: phase)
+        BodegaPinView(
+            bodega: bodega,
+            isSelected: motion.phase.bodega?.id == bodega.id,
+            phase: phase,
+            showsBlockLabel: labels.ids.contains(bodega.id)
+        )
     }
 }
