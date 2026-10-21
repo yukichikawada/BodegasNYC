@@ -14,8 +14,13 @@ final class PinLabelState {
     private(set) var ids: Set<Bodega.ID> = []
     /// The last block-zoom verdict, the hysteresis input (design D2).
     @ObservationIgnored private(set) var isBlockZoom = false
-    /// Measured capsule sizes per name, valid for `cachedCategory` only.
+    /// The `displayItemsVersion` the last placement used, so a data change
+    /// already placed by the settle refresh is not placed twice.
+    @ObservationIgnored var placedItemsVersion: Int?
+    /// Measured capsule sizes per name and badge sides per count, valid for
+    /// `cachedCategory` only.
     @ObservationIgnored private var sizeCache: [String: CGSize] = [:]
+    @ObservationIgnored private var clusterSideCache: [Int: CGFloat] = [:]
     @ObservationIgnored private var cachedCategory: UIContentSizeCategory?
 
     /// Writes only when the set differs, so redundant refreshes never
@@ -34,14 +39,28 @@ final class PinLabelState {
     /// The capsule size `BodegaPinView` draws for `name` at `contentSize`,
     /// measured once per name per content size (eng D2).
     func labelSize(for name: String, contentSize: UIContentSizeCategory) -> CGSize {
-        if cachedCategory != contentSize {
-            sizeCache = [:]
-            cachedCategory = contentSize
-        }
+        resetCacheIfNeeded(for: contentSize)
         if let size = sizeCache[name] { return size }
         let size = BodegaPinView.measuredLabelSize(for: name, contentSize: contentSize)
         sizeCache[name] = size
         return size
+    }
+
+    /// The obstacle side of a cluster badge showing `count`, measured once
+    /// per count per content size: the badge grows with its count.
+    func clusterObstacleSide(count: Int, contentSize: UIContentSizeCategory) -> CGFloat {
+        resetCacheIfNeeded(for: contentSize)
+        if let side = clusterSideCache[count] { return side }
+        let side = ClusterBadge.measuredObstacleSide(count: count, contentSize: contentSize)
+        clusterSideCache[count] = side
+        return side
+    }
+
+    private func resetCacheIfNeeded(for contentSize: UIContentSizeCategory) {
+        guard cachedCategory != contentSize else { return }
+        sizeCache = [:]
+        clusterSideCache = [:]
+        cachedCategory = contentSize
     }
 }
 
@@ -105,8 +124,10 @@ nonisolated extension BodegaMapViewModel {
 
     /// Whether the camera is at block zoom, given the visible map height and
     /// the previous verdict.
+    /// the previous verdict. A non-positive height (the map not laid out yet)
+    /// is no measure, so not block zoom.
     static func isBlockZoom(heightMeters: Double, wasBlockZoom: Bool) -> Bool {
-        heightMeters <= (wasBlockZoom ? blockZoomExitMeters : blockZoomEnterMeters)
+        heightMeters > 0 && heightMeters <= (wasBlockZoom ? blockZoomExitMeters : blockZoomEnterMeters)
     }
 
     /// Whether `coordinate` lies inside `region` grown by `padding` times
@@ -140,14 +161,16 @@ nonisolated extension BodegaMapViewModel {
     /// The pins whose label shows. `points` is keyed by `MapDisplayItem.id`
     /// (plus `userLocationObstacleID`); an item without a point is neither a
     /// candidate nor an obstacle. `labelSize` returns the capsule size for a
-    /// name. With `onlyPriority` (the first add's drop, design D11) only the
-    /// priority pins are returned.
+    /// name; `clusterObstacleSide` the badge's obstacle side for a count. With
+    /// `onlyPriority` (the first add's drop, design D11) only the priority
+    /// pins are returned.
     static func labelledPinIDs(
         items: [MapDisplayItem],
         points: [String: CGPoint],
         isBlockZoom: Bool,
         priorityIDs: [Bodega.ID],
         onlyPriority: Bool = false,
+        clusterObstacleSide: (Int) -> CGFloat = { _ in itemObstacleSide },
         labelSize: (String) -> CGSize
     ) -> Set<Bodega.ID> {
         guard isBlockZoom else { return [] }
@@ -161,7 +184,9 @@ nonisolated extension BodegaMapViewModel {
         if onlyPriority { return Set(priority) }
 
         let prioritySet = Set(priority)
-        let obstacles = obstacleRects(items: items, points: points, priority: prioritySet)
+        let obstacles = obstacleRects(
+            items: items, points: points, priority: prioritySet, clusterSide: clusterObstacleSide
+        )
         let rest = pins.values.filter { !prioritySet.contains($0.id) }.sorted(by: isPlacedBefore)
 
         var kept = Set<Bodega.ID>()
@@ -200,12 +225,16 @@ nonisolated extension BodegaMapViewModel {
     private static func obstacleRects(
         items: [MapDisplayItem],
         points: [String: CGPoint],
-        priority: Set<Bodega.ID>
+        priority: Set<Bodega.ID>,
+        clusterSide: (Int) -> CGFloat
     ) -> [(id: String, rect: CGRect)] {
         var obstacles: [(id: String, rect: CGRect)] = items.compactMap { item in
             guard let point = points[item.id] else { return nil }
-            let isPriority = if case .pin(let bodega) = item { priority.contains(bodega.id) } else { false }
-            return (item.id, square(at: point, side: isPriority ? priorityObstacleSide : itemObstacleSide))
+            let side = switch item {
+            case .pin(let bodega): priority.contains(bodega.id) ? priorityObstacleSide : itemObstacleSide
+            case .cluster(let cluster): max(itemObstacleSide, clusterSide(cluster.bodegaIDs.count))
+            }
+            return (item.id, square(at: point, side: side))
         }
         if let dot = points[userLocationObstacleID] {
             obstacles.append((userLocationObstacleID, square(at: dot, side: locationDotObstacleSide)))
@@ -237,6 +266,7 @@ extension BodegaMapViewModel {
             isBlockZoom: isBlockZoom,
             priorityIDs: priorityIDs,
             onlyPriority: highlightedBodegaID != nil,
+            clusterObstacleSide: { pinLabels.clusterObstacleSide(count: $0, contentSize: contentSize) },
             labelSize: { pinLabels.labelSize(for: $0, contentSize: contentSize) }
         )
         pinLabels.update(ids: ids, isBlockZoom: isBlockZoom)

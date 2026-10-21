@@ -56,15 +56,17 @@ struct PinLabelPlacementTests {
             return bodega
         }
 
-        mutating func cluster(at point: CGPoint) {
+        mutating func cluster(at point: CGPoint, count: Int = 2) {
             let cluster = MapDisplayItem.Cluster(
                 id: "cluster-test",
                 coordinate: Coordinate(latitude: 40.73 - Double(point.y) * 0.00001, longitude: -74.0),
-                bodegaIDs: []
+                bodegaIDs: (0..<count).map { _ in UUID() }
             )
             items.append(.cluster(cluster))
             points[cluster.id] = point
         }
+
+        var clusterSide: (Int) -> CGFloat = { _ in BodegaMapViewModel.itemObstacleSide }
 
         func labelled(isBlockZoom: Bool = true, priority: [Bodega.ID] = [], onlyPriority: Bool = false) -> Set<UUID> {
             BodegaMapViewModel.labelledPinIDs(
@@ -73,6 +75,7 @@ struct PinLabelPlacementTests {
                 isBlockZoom: isBlockZoom,
                 priorityIDs: priority,
                 onlyPriority: onlyPriority,
+                clusterObstacleSide: clusterSide,
                 labelSize: PinLabelPlacementTests.testLabelSize
             )
         }
@@ -80,14 +83,15 @@ struct PinLabelPlacementTests {
 
     // MARK: isBlockZoom (design D2: enter at 400 m, leave above 440 m)
 
-    /// protects: labels appear at 400 m or less and stay until above 440 m.
-    /// fails_when: either threshold moves, or the previous state is ignored
-    /// (a settle at 420 m blinks every label). no_claim: the screen-height
-    /// measure `MapScreenView` feeds in.
+    /// protects: labels appear at 400 m or less and stay until above 440 m;
+    /// a zero height (the map not laid out) is never block zoom.
+    /// fails_when: either threshold moves, the previous state is ignored
+    /// (a settle at 420 m blinks every label), or 0 m reads as block zoom.
+    /// no_claim: the screen-height measure `MapScreenView` feeds in.
     @Test(arguments: [
         (399.0, false, true), (401.0, false, false), (439.0, false, false), (441.0, false, false),
         (399.0, true, true), (401.0, true, true), (439.0, true, true), (441.0, true, false),
-        (400.0, false, true), (440.0, true, true), (0.0, false, true)
+        (400.0, false, true), (440.0, true, true), (0.0, false, false), (0.0, true, false)
     ])
     func blockZoomHysteresis(heightMeters: Double, wasBlockZoom: Bool, expected: Bool) {
         #expect(BodegaMapViewModel.isBlockZoom(heightMeters: heightMeters, wasBlockZoom: wasBlockZoom) == expected)
@@ -249,6 +253,20 @@ struct PinLabelPlacementTests {
         var fixture = Fixture()
         _ = try fixture.pin(1, at: CGPoint(x: 200, y: 300))
         fixture.cluster(at: CGPoint(x: 200, y: 260))
+        #expect(fixture.labelled().isEmpty)
+    }
+
+    /// A badge grows with its count (code review, #67): a "12" at
+    /// `.xxLarge` is a 36pt obstacle (`ClusterBadge.measuredObstacleSide`,
+    /// checked in `BodegaPinViewTests`). At (295, 271) its 36pt square (x 277
+    /// to 313) reaches A's label (x 122 to 278, y 260 to 282); a fixed 32pt
+    /// square (x 279 to 311) would not.
+    @Test func fGrownClusterBadgeHidesTheLabel() throws {
+        var fixture = Fixture()
+        let pin = try fixture.pin(1, at: CGPoint(x: 200, y: 300))
+        fixture.cluster(at: CGPoint(x: 295, y: 271), count: 12)
+        #expect(fixture.labelled() == [pin.id])
+        fixture.clusterSide = { $0 >= 10 ? 36 : 32 }
         #expect(fixture.labelled().isEmpty)
     }
 

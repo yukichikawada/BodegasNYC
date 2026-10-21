@@ -44,17 +44,32 @@ extension MapScreenView {
                 guard !isCameraMoving else { return }
                 refreshPinLabels(proxy)
             }
-            .onChange(of: viewModel.displayItems) {
-                guard !isCameraMoving else { return }
+            // A version, not the array: cheap to compare, and a recluster the
+            // settle refresh already placed is skipped.
+            .onChange(of: viewModel.displayItemsVersion) { _, version in
+                guard !isCameraMoving, viewModel.pinLabels.placedItemsVersion != version else { return }
                 refreshPinLabels(proxy)
             }
             .onMapCameraChange(frequency: .continuous) { context in
+                guard let settled = lastSettledCamera else { return }
+                // A trailing callback at the settled camera must not mark it
+                // moving again (nothing would clear the flag).
+                guard Self.hasMoved(from: settled, to: context.camera) else { return }
                 if !isCameraMoving { isCameraMoving = true }
-                let settled = lastSettledCameraDistance
-                if settled > 0, abs(context.camera.distance - settled) / settled > 0.10 {
+                if abs(context.camera.distance - settled.distance) / settled.distance > 0.10 {
                     viewModel.pinLabels.clear()
                 }
             }
+    }
+
+    /// Whether `camera` differs from `settled` beyond float noise: 0.5 m of
+    /// distance, about 0.1 m of centre, 0.1° of heading or pitch.
+    private static func hasMoved(from settled: MapCamera, to camera: MapCamera) -> Bool {
+        abs(camera.distance - settled.distance) > 0.5
+            || abs(camera.centerCoordinate.latitude - settled.centerCoordinate.latitude) > 1e-6
+            || abs(camera.centerCoordinate.longitude - settled.centerCoordinate.longitude) > 1e-6
+            || abs(camera.heading - settled.heading) > 0.1
+            || abs(camera.pitch - settled.pitch) > 0.1
     }
 
     /// The camera settled: recluster (held back under the List tab, where
@@ -62,7 +77,7 @@ extension MapScreenView {
     func cameraDidSettle(_ context: MapCameraUpdateContext, proxy: MapProxy) {
         lastVisibleRegion = context.region
         isCameraMoving = false
-        lastSettledCameraDistance = context.camera.distance
+        lastSettledCamera = context.camera
         guard showsToolbar else {
             pendingSettledRegion = context.region
             return
@@ -97,6 +112,18 @@ extension MapScreenView {
         guard showsToolbar, mapSize.height > 0,
               let bottom = proxy.convert(CGPoint(x: mapSize.width / 2, y: mapSize.height), from: .local)
         else { return }
+        viewModel.pinLabels.placedItemsVersion = viewModel.displayItemsVersion
+        let contentSize = UIContentSizeCategory(dynamicTypeSize)
+        let isBlockZoom = visibleHeightMeters(proxy, bottom: bottom).map {
+            BodegaMapViewModel.isBlockZoom(heightMeters: $0, wasBlockZoom: viewModel.pinLabels.isBlockZoom)
+        } ?? false
+        // Above block zoom nothing is converted: placement returns no labels.
+        guard isBlockZoom else {
+            viewModel.updatePinLabels(
+                items: [], points: [:], isBlockZoom: false, priorityIDs: [], contentSize: contentSize
+            )
+            return
+        }
         let region = lastVisibleRegion ?? Self.newYorkCityDefault
         var items = viewModel.displayItems
         // The held pin outside `displayItems` is drawn by its stand-in: it is
@@ -112,15 +139,12 @@ extension MapScreenView {
         if let dot = userLocation?.coordinate {
             points[BodegaMapViewModel.userLocationObstacleID] = proxy.convert(dot.clLocationCoordinate, to: .local)
         }
-        let isBlockZoom = visibleHeightMeters(proxy, bottom: bottom).map {
-            BodegaMapViewModel.isBlockZoom(heightMeters: $0, wasBlockZoom: viewModel.pinLabels.isBlockZoom)
-        } ?? false
         viewModel.updatePinLabels(
             items: items,
             points: points,
-            isBlockZoom: isBlockZoom,
+            isBlockZoom: true,
             priorityIDs: labelPriorityIDs,
-            contentSize: UIContentSizeCategory(dynamicTypeSize)
+            contentSize: contentSize
         )
     }
 

@@ -301,8 +301,8 @@ music venue (`BodegaMapViewModel.excludedPOICategories`). Businesses Apple leave
 still show; no category can hide them. Wayfinding stays: public transport, parks,
 schools, universities, hospitals, libraries, museums, landmarks, airports, stadiums, national
 parks, beaches, zoos, aquariums, amusement parks, fire stations, police, post offices, restrooms.
-Pin labels never cover the location dot itself (24pt); the dot's accuracy halo may sit under a
-label.
+Pin labels are placed clear of the location dot itself (24pt) at each settle; the dot may drift
+under a label between settles, and its accuracy halo may sit under a label.
 
 **Onboarding page** (`OnboardingView`, DD1 + D5): opaque `systemBackground`; 44pt symbol in
 `.catPin` (`cat`, `line.3.horizontal.decrease.circle`, `mappin.and.ellipse`); title in the

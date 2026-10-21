@@ -97,18 +97,22 @@ struct BodegaPinView: View {
         circle
             .scaleEffect(selectedScale)
             .overlay(alignment: .bottom) {
-                if showsLabel {
-                    nameLabel
-                        .fixedSize()
-                        // Sit the label above the circle (clear of the
-                        // selected 1.15 scale; see the type comment for why
-                        // not below); an alignment guide here is not honored
-                        // inside the annotation.
-                        .offset(y: -(Self.diameter + 4))
-                        .transition(.opacity)
+                ZStack {
+                    if showsLabel {
+                        nameLabel
+                            .fixedSize()
+                            // Sit the label above the circle (clear of the
+                            // selected 1.15 scale; see the type comment for
+                            // why not below); an alignment guide here is not
+                            // honored inside the annotation.
+                            .offset(y: -(Self.diameter + 4))
+                            .transition(.opacity)
+                    }
                 }
+                // The fade is scoped to the label, so the circle keeps its
+                // own 0.15s selection animation.
+                .animation(.easeOut(duration: BrowseMotion.PinLabel.fadeSeconds), value: showsLabel)
             }
-            .animation(.easeOut(duration: BrowseMotion.PinLabel.fadeSeconds), value: showsLabel)
             .offset(y: dropOffset)
             .scaleEffect(dropScale)
             .opacity(isAtRest ? 1 : 0)
@@ -144,7 +148,7 @@ struct BodegaPinView: View {
             .padding(.horizontal, Self.labelHorizontalPadding)
             .padding(.vertical, Self.labelVerticalPadding)
             .background(.regularMaterial, in: Capsule())
-            .shadow(color: .black.opacity(liftsLabel ? 0.3 : 0), radius: 2, y: 1)
+            .shadow(color: .black.opacity(0.3), radius: liftsLabel ? 2 : 0, y: liftsLabel ? 1 : 0)
     }
 
     private func dropIfNeeded() {
@@ -166,6 +170,21 @@ struct BodegaPinView: View {
 /// (`MapScreenView`).
 struct ClusterBadge: View {
     let count: Int
+
+    /// The badge's obstacle side for label placement (#67): the count in
+    /// `.caption` bold at `contentSize` capped at `.xxLarge`, plus the 6pt
+    /// padding on each side and the 2pt stroke on each side, never under the
+    /// pin's 32pt.
+    static func measuredObstacleSide(count: Int, contentSize: UIContentSizeCategory) -> CGFloat {
+        let category = min(contentSize, .extraExtraLarge)
+        let caption = UIFont.preferredFont(
+            forTextStyle: .caption1,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: category)
+        )
+        let bold = caption.fontDescriptor.withSymbolicTraits(.traitBold).map { UIFont(descriptor: $0, size: 0) }
+        let text = ("\(count)" as NSString).size(withAttributes: [.font: bold ?? caption])
+        return max(BodegaMapViewModel.itemObstacleSide, ceil(max(text.width, text.height) + 12 + 4))
+    }
 
     var body: some View {
         Text("\(count)")

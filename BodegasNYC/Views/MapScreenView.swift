@@ -40,7 +40,7 @@ struct MapScreenView: View {
     @State var deliveredRegion: MKCoordinateRegion?
     /// Pin labels (#67, see `MapScreenView+PinLabels.swift`).
     @State var isCameraMoving = false
-    @State var lastSettledCameraDistance: Double = 0
+    @State var lastSettledCamera: MapCamera?
     @State var mapSize: CGSize = .zero
     /// Placement card height (slot chrome included) and the crosshair's
     /// global centre, the space `MapProxy.convert` reads (#23 T3).

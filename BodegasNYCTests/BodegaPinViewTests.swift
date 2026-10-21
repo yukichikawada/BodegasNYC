@@ -60,6 +60,11 @@ struct BodegaPinViewTests {
         #expect(atAX5 == atCap)
         #expect(atCap.height > atDefault.height)
 
+        // A ~330pt name is capped like 18 W's: placement and the drawn
+        // capsule both stop at 160 + 12.
+        let veryLong = "QA67-Sunny & Annie's Gourmet Deli and Grocery on Fifth Avenue"
+        #expect(BodegaPinView.measuredLabelSize(for: veryLong, contentSize: .large).width == BodegaPinView.maxLabelWidth + 12)
+
         let short = BodegaPinView.measuredLabelSize(for: "Deli", contentSize: .large)
         #expect(short.width < atDefault.width)
 
@@ -67,5 +72,23 @@ struct BodegaPinViewTests {
         #expect(state.labelSize(for: wide, contentSize: .large) == atDefault)
         #expect(state.labelSize(for: wide, contentSize: .large) == atDefault)
         #expect(state.labelSize(for: wide, contentSize: .extraExtraLarge) == atCap)
+    }
+
+    /// protects: a cluster badge's obstacle grows with its count and text
+    /// size, never under the pin's 32pt, and stops growing at `.xxLarge`.
+    /// fails_when: the badge is assumed to be 32pt at every count and size,
+    /// or the cache disagrees with a fresh measurement. no_claim: the drawn
+    /// badge's exact size (live QA).
+    @Test func clusterObstacleGrowsWithTheBadge() {
+        let small = ClusterBadge.measuredObstacleSide(count: 3, contentSize: .large)
+        let twelveCap = ClusterBadge.measuredObstacleSide(count: 12, contentSize: .extraExtraLarge)
+        let twelveAX5 = ClusterBadge.measuredObstacleSide(count: 12, contentSize: .accessibilityExtraExtraExtraLarge)
+        let hundreds = ClusterBadge.measuredObstacleSide(count: 120, contentSize: .extraExtraLarge)
+
+        #expect(small == BodegaMapViewModel.itemObstacleSide)
+        #expect(twelveCap > BodegaMapViewModel.itemObstacleSide)
+        #expect(twelveAX5 == twelveCap)
+        #expect(hundreds > twelveCap)
+        #expect(PinLabelState().clusterObstacleSide(count: 12, contentSize: .extraExtraLarge) == twelveCap)
     }
 }
