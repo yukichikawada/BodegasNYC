@@ -26,8 +26,9 @@
 # "Clone 1 of" device for the duration of the run; xcodebuild deletes it
 # afterwards and the sweep catches any it leaves behind.
 #
-# The pinned device is shut down after the run (machine rule in
-# ~/.claude/CLAUDE.md: a simulator stays booted only while it is in use).
+# The pinned device is shut down after the run if it was shut down before
+# it (machine rule in ~/.claude/CLAUDE.md: a simulator stays booted only
+# while it is in use); one that was already booted is left booted.
 #
 # DerivedData goes to build/dd inside this checkout (gitignored) rather than
 # ~/Library/Developer/Xcode/DerivedData. Xcode keys the default location by
@@ -108,6 +109,13 @@ if [ -z "$DEVICE_UDID" ]; then
   exit 1
 fi
 
+# Recorded inside the lock, before this run boots it: only a device that
+# was shut down beforehand gets shut down again afterwards.
+WAS_SHUTDOWN=0
+if xcrun simctl list devices | grep -F "$DEVICE_UDID" | grep -qF "(Shutdown)"; then
+  WAS_SHUTDOWN=1
+fi
+
 xcrun simctl boot "$DEVICE_UDID" >/dev/null 2>&1 || true
 
 TEST_ARGS=()
@@ -129,9 +137,12 @@ fi
 EXIT_CODE=$?
 
 # Machine rule (~/.claude/CLAUDE.md): a simulator stays booted only while
-# its lane is building or testing. Done here, inside the lock, so it can
-# never shut down a device another lane's run has just booted.
-xcrun simctl shutdown "$DEVICE_UDID" >/dev/null 2>&1 || true
+# its lane is building or testing. Only if this run booted it (a device
+# someone booted on purpose stays as it was), and inside the lock, so it
+# can never shut down a device another lane's run has just booted.
+if [ "$WAS_SHUTDOWN" -eq 1 ]; then
+  xcrun simctl shutdown "$DEVICE_UDID" >/dev/null 2>&1 || true
+fi
 
 sweep_clones
 

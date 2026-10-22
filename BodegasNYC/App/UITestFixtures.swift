@@ -27,9 +27,9 @@ nonisolated enum UITestFixtures {
     }
 }
 
-/// Answers every request locally: `bodegas` selects and the
-/// `nearby_bodegas` RPC return the fixture row, any other PostgREST or
-/// Storage read returns an empty JSON array.
+/// Answers every request locally: `bodegas` GETs and the
+/// `nearby_bodegas` RPC return the fixture row, any other GET returns an
+/// empty JSON array, and any other write fails with a 501.
 nonisolated final class FixtureURLProtocol: URLProtocol {
     static let bodegaJSON = """
     [{
@@ -57,17 +57,23 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
 
     override func startLoading() {
         let path = request.url?.path ?? ""
+        let method = request.httpMethod ?? "GET"
         let body: String
-        if path.hasSuffix("/rest/v1/bodegas") || path.hasSuffix("/rpc/nearby_bodegas") {
+        var statusCode = 200
+        if (method == "GET" && path.hasSuffix("/rest/v1/bodegas")) || path.hasSuffix("/rpc/nearby_bodegas") {
             body = Self.bodegaJSON
-        } else {
+        } else if method == "GET" {
             body = "[]"
+        } else {
+            // Unknown writes fail loudly, so a write test can't pass on a silent `[]`.
+            statusCode = 501
+            body = "UITestFixtures: no fixture for \(method) \(path)"
         }
         let response = HTTPURLResponse(
             url: request.url ?? URL(fileURLWithPath: "/"),
-            statusCode: 200,
+            statusCode: statusCode,
             httpVersion: "HTTP/1.1",
-            headerFields: ["Content-Type": "application/json"]
+            headerFields: ["Content-Type": statusCode == 200 ? "application/json" : "text/plain"]
         )
         if let response {
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
