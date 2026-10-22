@@ -21,7 +21,9 @@ scripts/cleanup-worktrees.sh --apply  # unlocks + removes them, deletes their lo
 ```
 
 Only worktrees whose branch has a merged or closed PR (per `gh pr list`) are removed; a worktree
-with an open PR, no PR, or uncommitted tracked changes is kept and listed. Untracked `build/`
+with an open PR, no PR, uncommitted tracked changes, or git activity in the last two hours (a
+builder lane that has not committed yet looks like "no PR, tip on main") is kept and listed. Even
+so, do not run `--apply` while a builder worktree is minutes old: wait for its first commit. Untracked `build/`
 output does not count as uncommitted work. Squash merges mean commit ancestry proves nothing, so
 PR state is the source of truth. The script also deletes `worktree-agent-*` scratch branches that
 point at commits already on `main` and runs `scripts/sim-for-branch.sh delete` for each removed
