@@ -46,7 +46,7 @@ struct AddBodegaView: View {
                 // Edit Bodega never shows it.
                 if !isEditing {
                     TipView(FormTip())
-                        .inlineBodegaTipStyle()
+                        .inlineBodegaTipStyle(onOpaqueSurface: true)
                 }
                 Section("Basics") {
                     TextField("Name", text: $viewModel.name)
@@ -205,7 +205,7 @@ private struct DayHoursRow: View {
                     // the collapsed (closed) state needs spelling out.
                     if entry.isClosed {
                         Text("Closed")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textMuted)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }

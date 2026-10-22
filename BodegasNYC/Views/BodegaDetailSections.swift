@@ -10,13 +10,24 @@ struct DataPointsSection: View {
 
     /// The caption is the same `AppCopy` label onboarding uses for the
     /// amenity, so the two screens never drift ("Hot Food" in both).
-    private struct DataPoint {
+    struct DataPoint {
         let label: AppCopy
         let systemImage: String
         let isPresent: Bool
+
+        /// Present: symbol and caption in `.primary`. Absent: the same symbol
+        /// and a struck-through caption in `textMuted`, never dimmed by
+        /// opacity (#95 design D9). D9 asks for the symbol's `.slash` variant
+        /// where one exists; none of the five has one in iOS 26 (`cat.slash`,
+        /// `flame.slash`, `smoke.slash`, `mug.slash` and `ticket.slash` are
+        /// not SF Symbols), so the strikethrough is the shape cue for all.
+        var foreground: Color { isPresent ? .primary : .textMuted }
+        var strikesCaption: Bool { !isPresent }
     }
 
-    private var points: [DataPoint] {
+    private var points: [DataPoint] { Self.points(for: bodega) }
+
+    static func points(for bodega: Bodega) -> [DataPoint] {
         [
             DataPoint(label: .onboardingCatLabel, systemImage: "cat", isPresent: bodega.hasCat),
             DataPoint(label: .onboardingHotFoodLabel, systemImage: "flame", isPresent: bodega.servesHotFood),
@@ -69,20 +80,20 @@ struct DataPointsSection: View {
         }
     }
 
-    /// Presence is visual only (opacity), so the symbol is hidden from
-    /// VoiceOver and the caption carries a Yes/No value instead; before
-    /// this every amenity read as present.
+    /// Presence is visual only (color and the caption's strikethrough), so
+    /// the symbol is hidden from VoiceOver and the caption carries a Yes/No
+    /// value instead; before this every amenity read as present.
     private func icon(for point: DataPoint) -> some View {
         Image(systemName: point.systemImage)
-            .foregroundStyle(point.isPresent ? .primary : .secondary)
-            .opacity(point.isPresent ? 1 : 0.3)
+            .foregroundStyle(point.foreground)
             .accessibilityHidden(true)
     }
 
     private func caption(for point: DataPoint) -> some View {
         Text(point.label.copy.text)
             .font(.caption2)
-            .foregroundStyle(.secondary)
+            .strikethrough(point.strikesCaption)
+            .foregroundStyle(point.foreground)
             .accessibilityValue(
                 (point.isPresent ? AppCopy.dataPointPresentValue : AppCopy.dataPointAbsentValue).copy.text
             )
@@ -170,7 +181,7 @@ struct HoursSection: View {
                             .gridColumnAlignment(.leading)
                         Text(describe(day.dayHours))
                             .monospacedDigit()
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textMuted)
                     }
                     .font(.subheadline)
                 }
@@ -227,6 +238,6 @@ struct ReviewRow: View {
     private var date: some View {
         Text(review.createdAt, style: .date)
             .font(.caption)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.textMuted)
     }
 }

@@ -189,7 +189,7 @@ private struct OnboardingPage<Extra: View>: View {
                         .accessibilityAddTraits(.isHeader)
                     Text(message.copy.text)
                         .font(.title3)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Color.textMuted)
                         .fixedSize(horizontal: false, vertical: true)
                     extra()
                 }
@@ -252,7 +252,7 @@ private struct PageDots: View {
         HStack(spacing: 8) {
             ForEach(0..<count, id: \.self) { index in
                 Circle()
-                    .fill(index == current ? AnyShapeStyle(.primary) : AnyShapeStyle(.tertiary))
+                    .fill(index == current ? AnyShapeStyle(.primary) : AnyShapeStyle(.secondary))
                     .frame(width: 8, height: 8)
             }
         }

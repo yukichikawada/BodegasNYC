@@ -120,7 +120,7 @@ struct BodegaListView: View {
                     TipView(DistancesTip()) { action in
                         if action.id == DistancesTip.showMapActionID { onShowMap() }
                     }
-                    .inlineBodegaTipStyle()
+                    .inlineBodegaTipStyle(onOpaqueSurface: true)
                     .id(Self.tipRowID)
                     let reorderKey = viewModel.reorderKey
                     ForEach(viewModel.filteredBodegas) { bodega in

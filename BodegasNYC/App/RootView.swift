@@ -73,7 +73,7 @@ struct RootView: View {
                 ProgressView()
                 Text(AppCopy.rootLoading.copy.text)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textMuted)
             }
             .task { await load() }
         case .ready(let environment):
@@ -94,7 +94,7 @@ struct RootView: View {
                     .font(.headline)
                 Text(message)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.primary)
                 Button("Retry") {
                     state = .loading
                 }

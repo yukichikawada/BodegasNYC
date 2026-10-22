@@ -60,7 +60,7 @@ struct FirstAddCard: View {
                 .accessibilitySortPriority(3)
             Text(bodyCopy.copy.text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .lineLimit(4)
                 .minimumScaleFactor(0.85)
                 .fixedSize(horizontal: false, vertical: true)

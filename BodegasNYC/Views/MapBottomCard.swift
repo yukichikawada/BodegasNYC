@@ -275,7 +275,7 @@ private struct EmptyStateCard: View {
                 .accessibilitySortPriority(4)
             Text(state.body.copy.text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .lineLimit(4)
                 .minimumScaleFactor(0.85)
                 .fixedSize(horizontal: false, vertical: true)

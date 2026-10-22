@@ -89,7 +89,7 @@ struct BodegaRow: View {
                     alignment: .trailing
                 )
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textMuted)
                 .monospacedDigit()
                 .lineLimit(1)
                 .fixedSize()
@@ -105,7 +105,7 @@ struct BodegaRow: View {
             if showsDistanceSlot {
                 DistanceSlot(text: valueText, placeholders: [" "], alignment: .leading)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textMuted)
                     .monospacedDigit()
             }
         }
@@ -121,7 +121,7 @@ struct BodegaRow: View {
         if let address = bodega.address {
             Text(address)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textMuted)
         }
     }
 }
