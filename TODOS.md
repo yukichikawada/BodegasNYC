@@ -2,15 +2,13 @@
 
 ## QA
 
-### Make BodegasNYCUITests reliable under scripts/run-tests.sh --ui
+### Add the #20 duplicate-check UI tests
 
-**What:** Get the UI test target to run to completion under `scripts/run-tests.sh --ui` without the simulator-clone hang, so UI flows can be asserted in CI.
+**What:** Cover the #20 duplicate-check flows in `BodegasNYCUITests`. The target now runs to completion under `scripts/run-tests.sh --ui` (#101: `-parallel-testing-enabled NO`, so no simulator clones) and has a pin-tap-to-detail test on the DEBUG `-UITestFixtures` seam (`BodegasNYC/App/UITestFixtures.swift`).
 
-**Why:** The riskiest UI paths (tap a pin to open detail, the first-run onboarding and tutorial flow) are covered only by scripted live QA on a branch simulator. An automated tap test would catch a Marker-to-Annotation or navigation regression before QA does.
+**Why:** Each case is covered today only by live QA on a branch simulator.
 
-**Context:** CLAUDE.md "Running tests": xcodebuild clones the destination simulator for `BodegasNYCUITests` and can hang launching onto the fresh clone with no internal timeout, so `--ui` runs usually hit the 3-minute cap and get killed. Start at the clone step in `scripts/run-tests.sh` (a pre-booted, pinned destination and `-parallel-testing-enabled NO` are the first things to try), then add one `XCUITest` that taps a pin and asserts the detail title. Surfaced by the 2026-10-19 eng review of the voice and first-run spec (decision R3/D5, TODO D12).
-
-**Cases to add once the target runs** (#20 duplicate check, eng review D9; each is covered today only by live QA on a branch simulator):
+**Context:** The fixture seam answers every Supabase request through a `URLProtocol`, so these cases need it extended: a `nearby_bodegas` response with a match within 50 m, an insert response, a stalled RPC, and a signed-out session. Cases (#20 eng review D9):
 
 - Submit with a bodega within 50 m → the "Is this one of these?" sheet → tap a match → the add sheet closes and that bodega's detail is pushed.
 - Submit with a match → "No, It's New" → inserted, the pin drops.
@@ -20,7 +18,7 @@
 
 **Effort:** M
 **Priority:** P3
-**Depends on:** None
+**Depends on:** #101
 
 ### Check the zoom swipe-back on a physical iPhone
 
