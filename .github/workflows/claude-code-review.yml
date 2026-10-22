@@ -45,8 +45,8 @@ jobs:
         Every pull request in this repository gets a full review: PRs written with Claude Code, reverts, probes, PRs whose description says they are throwaway or will not be merged, and PRs that look trivial. Never decide that a PR does not need review, never skip steps, and never finish without posting the summary comment described below.
 
         How to read the PR:
-        1. Run `gh pr view <PR NUMBER> --repo <REPO>` for the title and description. When the description references an issue (for example "Closes #N"), run `gh issue view N --repo <REPO> --comments`: the spec, eng-review and design-review comments on that issue say what the change is supposed to do.
-        2. Run `gh pr diff <PR NUMBER> --repo <REPO>` for the full diff. When the output is large it is saved to a file whose path is shown in the result; read that file with the Read tool, in parts if needed, until you have seen every changed file. Do not stop at the first screen of output.
+        1. Run `gh pr view <PR NUMBER> --repo <REPO> --json title,body,files` for the title, description and file list (always pass `--json`; the plain form fails on this runner's token). When the description references an issue (for example "Closes #N"), run `gh issue view N --repo <REPO> --comments`: the spec, eng-review and design-review comments on that issue say what the change is supposed to do.
+        2. Run `gh pr diff <PR NUMBER> --repo <REPO>` for the full diff. When the output is large it is saved to a file whose path is shown in the result. Read that whole file with the Read tool: start at offset 1 and keep reading successive ranges until a read returns the end of the file. A review that has not read the diff to its last line is not finished; do not post anything until every hunk of every changed file has been read.
         3. The PR head is already checked out in the working directory. Use Read, and `grep`/`rg` through Bash, there for the context around a change. There is no Xcode on this runner: do not build, run tests or launch a simulator, and do not clone, fetch or check anything out.
         4. Check the change against the conventions in CLAUDE.md and docs/PRD.md, and against DESIGN.md for anything visual or UI (fonts, colors, spacing, motion, copy).
         5. Keep each Bash call to one plain command: no `cd`, pipes, `&&`, `;` or redirects, which are refused here. Read, Grep-style searches and `gh pr diff` are enough.
@@ -65,8 +65,9 @@ jobs:
 
           No issues found. (or: Found N issues, each left as an inline comment: one line per issue.)
 
-          Checked: every changed file (list them), plus the context files you read, against CLAUDE.md, docs/PRD.md and DESIGN.md.
+          Checked: the changed files you read in full (list them), plus the context files you read, against CLAUDE.md, docs/PRD.md and DESIGN.md.
 
+        The "Checked" line must be true: list only files you actually read in full. If something kept you from reading a file or the issue, say so in the summary instead of claiming it was checked.
         Only comments posted to GitHub count; text returned as a plain message is not seen by anyone.
     permissions:
       contents: read
@@ -91,7 +92,11 @@ jobs:
           # Read-only tools only. Read is permission-free inside the checkout; the gh and
           # grep commands let the agent fetch the PR, its issue and the diff and search the
           # tree. No write tool, no git write, no github_token.
+          # Opus, not the default Sonnet: on Sonnet the same prompt read the first 400 lines of
+          # an 80 KB diff, missed a planted one-line logic error, and posted a summary claiming
+          # every file was checked (probe PR #88).
           claude_args: >-
+            --model claude-opus-5-5
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(grep:*),Bash(rg:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
           # Log the full Claude transcript (tool calls, permission denials, subagent results) so a
           # run that posts nothing or rubber-stamps a large PR can be diagnosed from the job log
@@ -126,7 +131,11 @@ jobs:
           # Read-only tools only. Read is permission-free inside the checkout; the gh and
           # grep commands let the agent fetch the PR, its issue and the diff and search the
           # tree. No write tool, no git write, no github_token.
+          # Opus, not the default Sonnet: on Sonnet the same prompt read the first 400 lines of
+          # an 80 KB diff, missed a planted one-line logic error, and posted a summary claiming
+          # every file was checked (probe PR #88).
           claude_args: >-
+            --model claude-opus-5-5
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Bash(gh issue view:*),Bash(grep:*),Bash(rg:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
           # Log the full Claude transcript (tool calls, permission denials, subagent results) so a
           # run that posts nothing or rubber-stamps a large PR can be diagnosed from the job log
