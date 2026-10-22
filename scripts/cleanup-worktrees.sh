@@ -138,15 +138,22 @@ while read -r b; do
 done < <(git branch --list 'worktree-agent-*' --format='%(refname:short)')
 
 # DerivedData folders whose project path was inside this repo and is gone.
+# Scanned once for the report, and again under --apply after the worktrees
+# above are removed, so a worktree removed in this run is swept in this run.
 DD_ORPHANS=()   # "path|workspace-path|size"
-for d in "$HOME"/Library/Developer/Xcode/DerivedData/*/ \
-         "$HOME"/Library/Developer/MobileBuildMCP/workspaces/*/DerivedData/*/; do
-  [ -f "$d/info.plist" ] || continue
-  wp=$(/usr/libexec/PlistBuddy -c 'Print :WorkspacePath' "$d/info.plist" 2>/dev/null) || continue
-  case "$wp" in "$MAIN_ROOT"/*) ;; *) continue ;; esac
-  [ -e "$wp" ] && continue
-  DD_ORPHANS+=("${d%/}|$wp|$(du -sh "$d" 2>/dev/null | cut -f1)")
-done
+scan_dd_orphans() {
+  local d wp
+  DD_ORPHANS=()
+  for d in "$HOME"/Library/Developer/Xcode/DerivedData/*/ \
+           "$HOME"/Library/Developer/MobileBuildMCP/workspaces/*/DerivedData/*/; do
+    [ -f "$d/info.plist" ] || continue
+    wp=$(/usr/libexec/PlistBuddy -c 'Print :WorkspacePath' "$d/info.plist" 2>/dev/null) || continue
+    case "$wp" in "$MAIN_ROOT"/*) ;; *) continue ;; esac
+    [ -e "$wp" ] && continue
+    DD_ORPHANS+=("${d%/}|$wp|$(du -sh "$d" 2>/dev/null | cut -f1)")
+  done
+}
+scan_dd_orphans
 
 echo "== removable worktrees (${#REMOVE[@]}) =="
 for e in "${REMOVE[@]:-}"; do
@@ -195,6 +202,7 @@ for b in "${SCRATCH[@]:-}"; do
   git branch -D "$b" >/dev/null 2>&1 && echo "deleted scratch branch $b" || echo "kept $b (still checked out)"
 done
 
+scan_dd_orphans   # picks up the DerivedData of worktrees removed just above
 for e in "${DD_ORPHANS[@]:-}"; do
   [ -n "$e" ] || continue
   IFS='|' read -r p wp size <<<"$e"
