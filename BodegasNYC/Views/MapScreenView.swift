@@ -47,10 +47,11 @@ struct MapScreenView: View {
     @State private var placementCardHeight: CGFloat = 0
     @State private var crosshairPoint: CGPoint?
     /// Locate Me (#84, `MapScreenView+LocateMe.swift`): the latest tap, the
-    /// pulse, and the settles so far.
+    /// pulse, and the settles that moved the camera's centre.
     @State var locateRequest: LocateRequest?
     @State var isLocating = false
-    @State var settleCount = 0
+    @State var cameraTakeoverCount = 0
+    @State var mapResizedAt: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(PinMotionState.self) var pinMotion // held pin (#23 T1)
@@ -69,6 +70,9 @@ struct MapScreenView: View {
     let addCompletion: AddCompletionCoordinator?
     /// False under the List tab: no Locate Me / Streets Walked, settles held.
     let showsToolbar: Bool
+    /// The List tab or a pushed detail is up (live, from `BrowseView`): a
+    /// pending Locate Me is cancelled (#84).
+    let hasLeftMap: Bool
 
     init(
         viewModel: BodegaMapViewModel,
@@ -82,7 +86,8 @@ struct MapScreenView: View {
         onClearFilters: @escaping () -> Void,
         showsAddTip: Bool = false,
         addCompletion: AddCompletionCoordinator? = nil,
-        showsToolbar: Bool = true
+        showsToolbar: Bool = true,
+        hasLeftMap: Bool = false
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -96,6 +101,7 @@ struct MapScreenView: View {
         self.showsAddTip = showsAddTip
         self.addCompletion = addCompletion
         self.showsToolbar = showsToolbar
+        self.hasLeftMap = hasLeftMap
     }
 
     /// The bottom slot's one occupant: the placement card while placing,
@@ -131,7 +137,7 @@ struct MapScreenView: View {
         MapReader { proxy in
             // Back to front (spec layer order): map, bottom slot, crosshair
             // (never covered by the card), tracking-error banner.
-            pinLabelTriggers(map(proxy), proxy: proxy)
+            locateMeEvents(pinLabelTriggers(map(proxy), proxy: proxy))
                 .onChange(of: showsToolbar) { _, isMapTab in
                     if isMapTab { mapTabDidReturn(proxy) }
                 }

@@ -388,10 +388,12 @@ the card; the card supplies the material.
   second tap re-centres (probe P1: handing over to `.userLocation` at the landing's settle made
   MapKit re-zoom to its own follow distance, 2,425 m of visible height, so the handover was
   dropped and the toolbar symbol has no follow state). Without a precise fix, Locate
-  Me lands where MapKit lands it, at its zoom, with the accuracy halo; no hint. A result that
-  comes back after a pan, a newer tap, the List tab or a change of placement is dropped. Ignored
-  during the first add's drop and card. The `.nearby` radius keeps its 200 m floor, so an empty
-  block shows noneOnBlock.
+  Me lands where MapKit lands it, at its zoom, with the accuracy halo; no hint. A fix older than
+  10 minutes never lands block zoom. A result that comes back after a pan (the centre moved over
+  20 m; rotation and layout settles do not count), a newer tap, the List tab, a pushed detail or a
+  change of placement is dropped, and the pulse stops. Ignored during the first add's drop and
+  card. The `.nearby` radius keeps its 200 m floor, so an empty block shows noneOnBlock; the
+  nearby fetch waits for the landing's settle, so the bottom card changes once.
 - **The one authored moment:** the first add. Sheet closes, camera settles, pin drops with a
   spring and a success haptic; at +0.6s the first-add card rises; if the bodega has a cat, the
   cat enters from +24pt with a spring and bounces once; the card auto-dismisses after 8s (never

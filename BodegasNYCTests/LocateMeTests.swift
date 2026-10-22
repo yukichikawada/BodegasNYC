@@ -4,7 +4,8 @@
 //
 //  Locate Me lands at block zoom (#84 item 1): the pure decisions in
 //  `MapScreenView+LocateMe.swift`. Which result may still move the camera
-//  (eng R1), which fix lands block zoom (eng R3), when a kept fix lands at
+//  (eng R1) and which settle is a takeover, which fix lands block zoom (eng
+//  R3, with an age limit on the one-shot fix), when a kept fix lands at
 //  once (design D1), how long the flight is (design D8), and when the first
 //  add owns the camera (design D6). Eng R4's `isLandedCamera` and its five
 //  tests went with the follow handover, which probe P1 dropped (MapKit
@@ -26,29 +27,67 @@ struct LocateMeTests {
 
     // MARK: LocateRequest.shouldApply (eng R1)
 
-    /// protects: the result of the latest tap lands when nothing happened
-    /// since the tap, from the toolbar and from Near Me alike.
+    /// protects: the result of the latest tap lands when no settle moved
+    /// the camera since the tap.
     /// fails_when: a current, untouched request is dropped.
-    /// no_claim: that `MapScreenView` counts settles or passes live values.
+    /// no_claim: that `MapScreenView` counts takeovers; the List tab, detail
+    /// and placement cancels are view state (`locateMeEvents`, live QA).
     @Test func currentUntouchedRequestApplies() {
-        let toolbar = LocateRequest(settleCount: 3, wasPlacing: false)
-        #expect(toolbar.shouldApply(current: toolbar, settleCountNow: 3, showsToolbar: true, isPlacing: false))
-        let nearMe = LocateRequest(settleCount: 3, wasPlacing: true)
-        #expect(nearMe.shouldApply(current: nearMe, settleCountNow: 3, showsToolbar: true, isPlacing: true))
+        let request = LocateRequest(takeoverCount: 3)
+        #expect(request.shouldApply(current: request, takeoverCountNow: 3))
     }
 
     /// protects: a late fix never takes the camera back: a newer tap, a
-    /// settle since the tap (the user panned), the List tab, or a change of
-    /// placement each drop it.
-    /// fails_when: any one of the four conditions alone still applies it.
+    /// cancel (the List tab, a detail, a placement change) or a camera
+    /// takeover since the tap each drop it.
+    /// fails_when: any one of the three alone still applies it.
     /// no_claim: none beyond protects.
     @Test func lateOrSupersededRequestIsDropped() {
-        let request = LocateRequest(settleCount: 3, wasPlacing: false)
-        let newer = LocateRequest(settleCount: 3, wasPlacing: false)
-        #expect(!request.shouldApply(current: newer, settleCountNow: 3, showsToolbar: true, isPlacing: false))
-        #expect(!request.shouldApply(current: request, settleCountNow: 4, showsToolbar: true, isPlacing: false))
-        #expect(!request.shouldApply(current: request, settleCountNow: 3, showsToolbar: false, isPlacing: false))
-        #expect(!request.shouldApply(current: request, settleCountNow: 3, showsToolbar: true, isPlacing: true))
+        let request = LocateRequest(takeoverCount: 3)
+        let newer = LocateRequest(takeoverCount: 3)
+        #expect(!request.shouldApply(current: newer, takeoverCountNow: 3))
+        #expect(!request.shouldApply(current: nil, takeoverCountNow: 3))
+        #expect(!request.shouldApply(current: request, takeoverCountNow: 4))
+    }
+
+    // MARK: isCameraTakeover (#84 review)
+
+    /// protects: only a settle that moved the centre more than 20 m drops a
+    /// pending Locate Me; a heading-only settle (centre kept) does not.
+    /// fails_when: a 10 m wobble counts as a takeover, or a 30 m pan does not.
+    /// no_claim: none beyond protects.
+    @Test func onlyACentreMoveIsATakeover() {
+        let north10m = Coordinate(latitude: Self.block.latitude + 0.00009, longitude: Self.block.longitude)
+        let north30m = Coordinate(latitude: Self.block.latitude + 0.00027, longitude: Self.block.longitude)
+        #expect(!MapScreenView.isCameraTakeover(from: Self.block, to: Self.block, secondsSinceResize: nil))
+        #expect(!MapScreenView.isCameraTakeover(from: Self.block, to: north10m, secondsSinceResize: nil))
+        #expect(MapScreenView.isCameraTakeover(from: Self.block, to: north30m, secondsSinceResize: 5))
+    }
+
+    /// protects: device rotation (MapKit's layout settles moved the centre
+    /// 2.4 km live) never drops a pending Locate Me.
+    /// fails_when: a 2 km move half a second after a resize is a takeover.
+    /// no_claim: that the view stamps every resize (live QA: rotate while
+    /// waiting, the landing still happens).
+    @Test func layoutSettlesAfterAResizeAreNotATakeover() {
+        let north2km = Coordinate(latitude: Self.block.latitude + 0.018, longitude: Self.block.longitude)
+        #expect(!MapScreenView.isCameraTakeover(from: Self.block, to: north2km, secondsSinceResize: 0.5))
+        #expect(MapScreenView.isCameraTakeover(from: Self.block, to: north2km, secondsSinceResize: 1.5))
+    }
+
+    // MARK: landsOnFreshFix (eng R3, #84 review)
+
+    /// protects: a one-shot fix lands only when precise and at most 10
+    /// minutes old: CoreLocation's cached fix can be hours old and precise.
+    /// fails_when: a 15 m fix from 3 hours ago, or a 150 m fix from now,
+    /// lands at block zoom; a 15 m fix from a minute ago does not.
+    /// no_claim: the provider path (`UserLocationProvider.refresh`, its own
+    /// tests).
+    @Test func oneShotFixMustBePreciseAndFresh() {
+        let now = Date()
+        #expect(MapScreenView.landsOnFreshFix(accuracy: 15, timestamp: now.addingTimeInterval(-60), now: now))
+        #expect(!MapScreenView.landsOnFreshFix(accuracy: 15, timestamp: now.addingTimeInterval(-3 * 3600), now: now))
+        #expect(!MapScreenView.landsOnFreshFix(accuracy: 150, timestamp: now, now: now))
     }
 
     // MARK: landsBlockZoom (eng R3)

@@ -71,7 +71,7 @@ struct MapBottomCard: View {
         browseMode: BrowseMode,
         isLoadedEmpty: Bool,
         isFilteredEmpty: Bool,
-        isBlockZoom: Bool = false
+        isBlockZoom: Bool
     ) -> EmptyState? {
         if isLoadedEmpty {
             guard browseMode == .nearby else { return .noBodegas }

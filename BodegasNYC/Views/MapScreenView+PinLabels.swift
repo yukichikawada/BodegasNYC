@@ -37,6 +37,7 @@ extension MapScreenView {
         content
             .onGeometryChange(for: CGSize.self) { $0.size } action: { size in
                 mapSize = size
+                mapResizedAt = Date()
                 refreshPinLabels(proxy)
             }
             .onChange(of: dynamicTypeSize) { refreshPinLabels(proxy) }
@@ -77,8 +78,8 @@ extension MapScreenView {
     func cameraDidSettle(_ context: MapCameraUpdateContext, proxy: MapProxy) {
         lastVisibleRegion = context.region
         isCameraMoving = false
+        countLocateTakeover(settledAt: context.camera)
         lastSettledCamera = context.camera
-        settleCount += 1
         guard showsToolbar else {
             pendingSettledRegion = context.region
             return
