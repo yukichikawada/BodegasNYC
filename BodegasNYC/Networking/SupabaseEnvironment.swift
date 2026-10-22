@@ -54,6 +54,12 @@ nonisolated final class SupabaseEnvironment: Sendable {
     /// `postgrest`/`storage` clients haven't been given an `Authorization`
     /// header yet. Subsequent events (sign-in/out, token refresh) keep
     /// propagating via a background `Task` continuing the same iterator.
+    ///
+    /// Opts in to `emitLocalSessionAsInitialSession` (the SDK's next-major
+    /// default; supabase-swift #822): the initial event carries the stored
+    /// session as-is, possibly expired, and the SDK refreshes it in the
+    /// background, emitting `tokenRefreshed` (or `signedOut`) afterwards.
+    /// See `bearerToken(for:anonKey:)` for how an expired one is handled.
     init(config: SupabaseConfig, urlSession: URLSession = .shared) async {
         let anonKey = config.anonKey
         let tokenBox = TokenBox(anonKey)
@@ -67,7 +73,8 @@ nonisolated final class SupabaseEnvironment: Sendable {
                 headers: ["apikey": anonKey],
                 localStorage: AuthClient.Configuration.defaultLocalStorage,
                 logger: nil,
-                fetch: fetch
+                fetch: fetch,
+                emitLocalSessionAsInitialSession: true
             )
         )
         postgrest = PostgrestClient(
@@ -100,7 +107,7 @@ nonisolated final class SupabaseEnvironment: Sendable {
 
         let postgrest = postgrest
         func applyAuth(_ session: Session?) {
-            let token = session?.accessToken ?? anonKey
+            let token = Self.bearerToken(for: session, anonKey: anonKey)
             postgrest.setAuth(token)
             tokenBox.set(token)
         }
@@ -114,5 +121,15 @@ nonisolated final class SupabaseEnvironment: Sendable {
                 applyAuth(session)
             }
         }
+    }
+
+    /// The bearer token to send for `session`: its access token while it's
+    /// valid, otherwise the anon key. An expired session only reaches here
+    /// as the initial event (see `init`), and sending its access token would
+    /// get every request rejected until the background refresh lands;
+    /// public reads work fine on the anon key in the meantime.
+    static func bearerToken(for session: Session?, anonKey: String) -> String {
+        guard let session, !session.isExpired else { return anonKey }
+        return session.accessToken
     }
 }

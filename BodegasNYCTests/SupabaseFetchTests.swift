@@ -62,6 +62,22 @@ struct SupabaseFetchTests {
 
         #expect(capturedAuthHeader.get() == "Bearer test-anon-key")
     }
+
+    @Test func bearerTokenUsesValidSessionAccessToken() {
+        let session = makeTestSession(accessToken: "user-token")
+
+        #expect(SupabaseEnvironment.bearerToken(for: session, anonKey: "test-anon-key") == "user-token")
+    }
+
+    @Test func bearerTokenFallsBackToAnonKeyForExpiredSession() {
+        let session = makeTestSession(accessToken: "stale-token", expiresIn: -60)
+
+        #expect(SupabaseEnvironment.bearerToken(for: session, anonKey: "test-anon-key") == "test-anon-key")
+    }
+
+    @Test func bearerTokenFallsBackToAnonKeyWithNoSession() {
+        #expect(SupabaseEnvironment.bearerToken(for: nil, anonKey: "test-anon-key") == "test-anon-key")
+    }
 }
 
 }
