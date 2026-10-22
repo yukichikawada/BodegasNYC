@@ -9,7 +9,7 @@ colors:
   surface-grouped: "#F2F2F7"  # secondarySystemBackground / grouped; dark #1C1C1E
   text: "#000000"             # label; dark #FFFFFF
   text-muted: "#636366"       # textMuted asset (#95 D6); dark #98989F, Increase Contrast #545458 / #AEAEB2. Data lines on opaque surfaces only
-  text-secondary: "#8A8A8E"   # secondaryLabel flattened on white; dark #8D8D93. Vibrant .secondary on material surfaces and system Form footers
+  text-secondary: "#8A8A8E"   # secondaryLabel flattened on white; dark #8D8D93. Symbols on material, system Form headers and footers (body text on material is .primary, #95 D11)
   text-tertiary: "#C4C4C6"    # tertiaryLabel flattened; dark #48484A. Non-text only (decorative chevrons), never on text (#95 D7)
   separator: "#C6C6C8"        # separator; dark #38383A
   accent: "#FF3B30"           # pin, systemRed asset color; dark #FF453A. Bodega pins and the mappin symbol
@@ -39,7 +39,7 @@ typography:
     lineHeight: 22pt
   subheadline:
     fontFamily: SF Pro
-    fontSize: 15pt             # .subheadline; muted color in nearly every use (textMuted opaque, .secondary on material)
+    fontSize: 15pt             # .subheadline; textMuted on opaque surfaces, .primary as body on material (#95 D11)
   label:
     fontFamily: SF Pro
     fontSize: 13pt             # .footnote; .caption 12pt and .caption2 11pt below it
@@ -73,7 +73,7 @@ components:
     style: plain
     textColor: "{colors.error}"
   card:
-    material: thickMaterial      # #95 D8 fallback; was regularMaterial
+    material: regularMaterial
     rounded: "{rounded.lg}"
     padding: "{spacing.lg}"
     inset: "{spacing.lg}"
@@ -150,12 +150,13 @@ on white and 3.29:1 on grouped, under WCAG AA, so muted text on an opaque surfac
 duplicate rows, the detail header's address, distance and rating count, hours, review dates,
 section empty states, the onboarding body, a tip inline in the form or the list) uses the
 `textMuted` asset, #636366 / #98989F with Increase Contrast slots #545458 / #AEAEB2, at least
-4.5:1 on white, grouped and the elevated #2C2C2E. Material surfaces (the map card, the tip
-popover and card tips, the banner, the sign-in and duplicate headers) and system `Form` headers
-and footers keep vibrant `.secondary`. The gate was 4.5:1 live over the map with `.thickMaterial`
-as the fallback; measured on #95, the light-mode vibrant `.secondary` holds 3.3 to 4.0:1 on
-either material (dark passes, 4.8 on regular and 5.5 on thick), so the surfaces moved to
-`.thickMaterial` for dark and the light shortfall is an open decision (see the #95 PR). `.tertiary` is
+4.5:1 on white, grouped and the elevated #2C2C2E. Body text on material (#95 D11: every map
+card body, tip messages on the card and in the popover, the sign-in and duplicate sheet bodies)
+is `.primary`, as in iOS notification banners; titles keep `.headline` for hierarchy, and symbols
+and icons on material stay `.secondary` (non-text, 3:1). Vibrant `.secondary` measured 3.3 to
+4.0:1 on material in light, on `.regularMaterial` and `.thickMaterial` alike, so thickening could
+not meet 4.5:1; the materials stay `.regularMaterial` and `.thickMaterial` is not used. System
+`Form` headers and footers and the DEBUG captions keep `.secondary`. `.tertiary` is
 never on text (#95 D7); it is for non-text decoration only. Error and consequence copy is
 `.primary` (#95 D8). Two asset-catalog colors, `pin` (systemRed) and `catPin`
 (systemOrange), are the data colors and the brand; stars are `systemYellow`; cluster badges are
@@ -180,7 +181,7 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   first-add card, the noBodegas empty state). Yellow is stars and only stars.
 - Cat and non-cat pins are distinguished by glyph (`cat` vs `figure.wave`) as well as color, so
   the red/orange pair is a redundant encoding, not the only one. Keep it that way.
-- Materials carry floating content: `.thickMaterial` for the bottom-slot cards, the tip popover and the sign-in and duplicate sheets (#95 D8), `.regularMaterial` for the pin label. On iOS 26 the
+- Materials (`.regularMaterial`) carry floating content (map card, pin label); `.thickMaterial` is not used (#95 D11). On iOS 26 the
   system's Liquid Glass carries floating controls (toolbars, tab bar, map buttons) by default;
   do not apply glass to content and do not apply material to controls. Pages are opaque.
 
@@ -205,7 +206,7 @@ capped at `.xxLarge` (DD16, kept by #67 design D5): past that the capsule outgro
 circle it names and block-zoom placement would hide most labels. The tradeoff is deliberate: the
 List tab, whose rows wrap at every size and carry the distance, is the fully scaling way to
 compare the same places. Hierarchy comes from the text style and color, not from weight alone:
-title `.headline`, body `.subheadline` secondary on cards; `.subheadline` + `.footnote`, both
+title `.headline`, body `.subheadline` `.primary` on cards (#95 D11); `.subheadline` + `.footnote`, both
 `textMuted`, on section empty states; `.title3` `textMuted` for onboarding body. No text is
 `.tertiary` (#95 D7).
 
@@ -238,12 +239,12 @@ it. The List tab slides over the live map; detail zooms out of its pin.
 
 ## Elevation & Depth
 
-Three layers: the map (opaque), floating content on material (`.thickMaterial`; the pin label `.regularMaterial`), floating controls on
+Three layers: the map (opaque), floating content on `.regularMaterial`, floating controls on
 system Liquid Glass. Shadows are offset and soft: `radius 2, y 1` on pins and cluster badges,
 `radius 4, y 2` on the selected pin. The card relies on material contrast plus the same small
 shadow. Pin labels at rest are a flat material layer; the selected, held or dropping label
 carries the small shadow (#67). No zero-offset glows, no borders as depth. Sheets use system presentation;
-the sign-in sheet from the add flow is `.medium` detent on `.thickMaterial` (#95 D8).
+the sign-in sheet from the add flow is `.medium` detent on `.regularMaterial`.
 
 ## Shapes
 
@@ -254,11 +255,11 @@ capsule is a control or a pin label, never a tag.
 
 ## Components
 
-**Map bottom card** (`MapBottomCard`, DD13): 16pt inset, `.thickMaterial` (#95 D8) in a 16pt rounded
+**Map bottom card** (`MapBottomCard`, DD13): 16pt inset, `.regularMaterial` in a 16pt rounded
 rectangle with the small card shadow (radius 2, y 1, under the shape), 16pt padding, 8pt above
 the safe area, max 480pt. Grid: 28pt symbol column
 (`.title2`; `.catPin` for cat, `.secondary` otherwise), title `.headline`, body `.subheadline`
-secondary (`.lineLimit(4)`, `.minimumScaleFactor(0.85)`), trailing `xmark.circle.fill` close with
+`.primary` (#95 D11; `.lineLimit(4)`, `.minimumScaleFactor(0.85)`), trailing `xmark.circle.fill` close with
 a 44pt target, `.bordered` action row below the text. Stacks vertically at `.accessibility1` and
 up. Reading order title, body, action, close. Every content change moves from the bottom edge
 with opacity over 0.25s ease-in-out (opacity only under Reduce Motion, #23). States: emptyState (noBodegas cat/catPin with bounded
@@ -290,7 +291,7 @@ card are illegible, as pins there already are. Drop: spring 0.5s bounce 0.35 wit
 0.2s fade in place. VoiceOver: name, "Has a cat", button trait.
 
 **Placement card** (`PlacementBottomBar`, #23): the bottom slot's top-precedence occupant, in the
-card family. Chrome `{components.card}`: `.thickMaterial` in a `{rounded.lg}` 16pt rounded
+card family. Chrome `{components.card}`: `.regularMaterial` in a `{rounded.lg}` 16pt rounded
 rectangle, `{spacing.lg}` 16pt padding and side inset, `maxWidth` 480pt, `{spacing.sm}` 8pt above
 the slot's 24pt attribution clearance, the card shadow. Text column: a title
 `.headline` in voice (`AppCopy.placementCardTitle`), no body, no symbol column. Action row below:
@@ -403,12 +404,12 @@ opacity. No custom button shapes; no gradient fills.
 
 **Forms and sheets:** system `Form`/`List` grouped style, `.navigationBarTitleDisplayMode(.inline)`,
 error text `.footnote` in red inside its section. Sign-in presented from the add flow at
-`.medium` detent on `.thickMaterial`, as is the #20 duplicate sheet (#95 D8).
+`.medium` detent on `.regularMaterial`, as is the #20 duplicate sheet.
 
 **Tips** (`AddBodegaTip`, placement tip, `DistancesTip` first in the loaded list, #68): `BodegaTipStyle` renders no background when inline in
 the card; the card supplies the material. Inline on an opaque container (the add form's
 first row, the list's Distances tip) the message is `textMuted` (`onOpaqueSurface`, #95 D6);
-on the card it stays vibrant `.secondary`. The popover sits on `.thickMaterial` (#95 D8).
+on the card and in the popover it is `.primary` (#95 D11).
 
 ## Do's and Don'ts
 
@@ -512,4 +513,5 @@ on the card it stays vibrant `.secondary`. The popover sits on `.thickMaterial` 
 | 2026-10-21 | #84 eng R1 to R4: a late Locate Me result is dropped after a newer tap, a settle, the List tab or a change of placement; only a precise fix (100 m or better) lands block zoom, else MapKit's `.userLocation`; R2 (scene-inactive event) belongs to the peek, which did not ship; R4's landing check went with the handover | `/plan-eng-review` plus a Codex outside voice; owner accepted all |
 | 2026-10-21 | #84 design D1, D3, D5 to D8: a precise fix kept from the last 60s lands at once, else the symbol pulses while waiting; noneOnBlock card at block zoom; D5's follow glyph fell away with the handover; Locate Me ignored during the first add; Near Me lands one-shot; 0.9s flights over three zoom levels or 2 km, 0.6s otherwise | `/plan-design-review` with two outside voices; owner accepted all |
 | 2026-10-21 | #84 spec D4 (long-press peek) not shipped: probe P2 check (e) failed with both gesture forms. With `.onLongPressGesture` on the pin MapKit still reported the touch as a selection about 0.1s into the press, so the pin held and the detail pushed under the finger; with `.simultaneousGesture(LongPressGesture)` the press peeked cleanly but MapKit stopped seeing quick taps at all (check (a)). DD3's recovery stays the tap; #84 stays open for the peek | Design D4's stop rule; a UIKit long-press recognizer hit-testing annotation points is the remaining route, a separate decision |
-| 2026-10-21 | #95 design D6 to D9: a `textMuted` asset (#636366 / #98989F, Increase Contrast #545458 / #AEAEB2) for muted text on opaque surfaces, a scoped exception to the system-neutrals rule; `.tertiary` never on text (empty-state bodies `textMuted`, the duplicate footnote `.primary`, page dots `textMuted`, the decorative chevron kept); error and consequence copy `.primary`, the onboarding body `textMuted`, material surfaces and system `Form` footers keep vibrant `.secondary`; data points carry presence by shape plus contrast (absent: struck-through caption in `textMuted`, no opacity; none of the five symbols has a `.slash` variant); inline tips on opaque rows take `textMuted`; the bottom-slot cards, tip popover and sign-in and duplicate sheets move to `.thickMaterial` (the D8 fallback), which lifts dark but leaves light vibrant `.secondary` at 3.3 to 4.0:1, an open decision | `/plan-design-review` with a Codex design voice and an independent Claude pass; owner accepted all. Flattened `secondaryLabel` measured 3.44:1 on white and 3.29:1 on grouped, `.tertiary` 1.74:1, under WCAG AA for body text |
+| 2026-10-21 | #84 long-press peek shelved (owner D10). Probe P4 tried the single-owner route (D5: no `selection:`, no `.tag`, annotation gestures own the tap). Taps, cluster zoom and VoiceOver buttons worked, but no SwiftUI long press both recognises inside an annotation and lets a pan that starts on a pin move the map: `.onLongPressGesture` never fired, and the `simultaneousGesture` forms blocked the pan (0/9). The window-observer route was rejected in eng review (a MapKit selection carries no touch identity). DD3 recovery stays the tap or a zoom; main keeps MapKit selection | Evidence under `~/.gstack/projects/yukichikawada-BodegasNYC/qa/84-peek-probe/` (P2, `p4/`); reopen only with a UIKit route that keeps map pans |
+| 2026-10-21 | #95 design D6 to D9 and D11: a `textMuted` asset (#636366 / #98989F, Increase Contrast #545458 / #AEAEB2) for muted text on opaque surfaces, a scoped exception to the system-neutrals rule; `.tertiary` never on text (empty-state bodies `textMuted`, the duplicate footnote `.primary`, page dots `textMuted`, the decorative chevron kept); error and consequence copy `.primary`, the onboarding body `textMuted`, system `Form` headers and footers keep `.secondary`; data points carry presence by shape plus contrast (absent: struck-through caption in `textMuted`, no opacity; none of the five symbols has a `.slash` variant); inline tips on opaque rows take `textMuted`. D11 (owner): body text on material (map card bodies, tip messages on the card and in the popover, the sign-in and duplicate sheet bodies) is `.primary`, as in iOS notification banners, titles keep `.headline`, symbols on material stay `.secondary`, and the materials stay `.regularMaterial` (`.thickMaterial` is not used) | `/plan-design-review` with a Codex design voice and an independent Claude pass; owner accepted all. Flattened `secondaryLabel` measured 3.44:1 on white and 3.29:1 on grouped, `.tertiary` 1.74:1, under WCAG AA for body text. D11: live, vibrant `.secondary` on material held 3.3 to 4.0:1 in light on both regular and thick material, so thickening could not meet the 4.5:1 gate |

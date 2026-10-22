@@ -7,36 +7,40 @@
 
 import XCTest
 
+/// Runs against the app's DEBUG `-UITestFixtures` seam (#101): one fixture
+/// bodega served locally, no network or hosted database.
 final class BodegasNYCUITests: XCTestCase {
+    /// Must match `UITestFixtures.bodegaName` in the app target.
+    private static let fixtureBodegaName = "Fixture Deli"
 
     override func setUpWithError() throws {
-        // Put setup code here. This method is called before the invocation of each test method in the class.
-
-        // In UI tests it is usually best to stop immediately when a failure occurs.
         continueAfterFailure = false
-
-        // In UI tests it’s important to set the initial state - such as interface orientation -
-        // required for your tests before they run. The setUp method is a good place to do this.
     }
 
-    override func tearDownWithError() throws {
-        // Put teardown code here. This method is called after the invocation of each test method in the class.
-    }
-
+    /// Launches past onboarding, onto the map, with the fixture bodega.
     @MainActor
-    func testExample() throws {
-        // UI tests must launch the application that they test.
+    private func launchWithFixtures() -> XCUIApplication {
         let app = XCUIApplication()
+        app.launchArguments += [
+            "-UITestFixtures",
+            // NSArgumentDomain overrides UserDefaults: skip onboarding.
+            "-firstRun.hasCompletedOnboarding", "YES"
+        ]
         app.launch()
-
-        // Use XCTAssert and related functions to verify your tests produce the correct results.
+        return app
     }
 
+    /// Tapping a bodega's pin pushes its detail (the Marker-to-Annotation
+    /// and pin-to-detail paths, #23/#24).
     @MainActor
-    func testLaunchPerformance() throws {
-        // This measures how long it takes to launch your application.
-        measure(metrics: [XCTApplicationLaunchMetric()]) {
-            XCUIApplication().launch()
-        }
+    func testTappingPinOpensBodegaDetail() throws {
+        let app = launchWithFixtures()
+
+        let pin = app.buttons[Self.fixtureBodegaName].firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 20), "fixture pin never appeared on the map")
+        pin.tap()
+
+        let detailTitle = app.navigationBars[Self.fixtureBodegaName]
+        XCTAssertTrue(detailTitle.waitForExistence(timeout: 10), "detail title never appeared after tapping the pin")
     }
 }

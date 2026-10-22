@@ -113,7 +113,7 @@ struct RootView: View {
         let streetsWalkedViewModel = Self.makeStreetsWalkedViewModel(locationPermissionClient: locationPermissionClient)
         do {
             let config = try SupabaseConfig(bundle: .main)
-            let supabaseEnvironment = await SupabaseEnvironment(config: config)
+            let supabaseEnvironment = await SupabaseEnvironment(config: config, urlSession: Self.urlSession())
             let environment = AppEnvironment(
                 supabaseEnvironment: supabaseEnvironment,
                 locationPermissionClient: locationPermissionClient,
@@ -123,6 +123,18 @@ struct RootView: View {
         } catch {
             state = .failed(error.localizedDescription)
         }
+    }
+
+    /// `.shared`, except in a DEBUG build launched with `-UITestFixtures`
+    /// (#101), where the Supabase clients get a fixture bodega instead of
+    /// the network.
+    private static func urlSession() -> URLSession {
+        #if DEBUG
+        if UITestFixtures.isEnabled {
+            return UITestFixtures.urlSession()
+        }
+        #endif
+        return .shared
     }
 
     /// `nil` on a `ModelContainer` failure (rare — corrupt/unavailable
