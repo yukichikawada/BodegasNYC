@@ -59,7 +59,10 @@ struct BrowseView: View {
     /// pushed into both view models via `.onChange` below, so switching
     /// Map↔List never loses or desyncs it.
     @State var filter: BodegaFilter = .none
-    @State private var showingFilters = false
+    @State var showingFilters = false
+    /// The list's order (#81), remembered across launches; read through
+    /// `listOrder` (`BrowseView+Filters.swift`), which falls back to nearest.
+    @AppStorage("listOrder") var listOrderRaw = ListOrder.nearest.rawValue
     /// On iOS 26 the trailing toolbar buttons grow with Dynamic Type and
     /// squeeze the principal slot: at `.xLarge` the segmented Map/List
     /// control truncates and from `.xxLarge` up the toolbar drops it
@@ -182,9 +185,7 @@ struct BrowseView: View {
                 .sheet(isPresented: $showingSignIn) {
                     SignInView(sessionStore: sessionStore)
                 }
-                .sheet(isPresented: $showingFilters) {
-                    BodegaFilterSheet(filter: $filter)
-                }
+                .sheet(isPresented: $showingFilters) { filterSheet }
                 .onChange(of: filter) { _, newFilter in
                     mapViewModel.filter = newFilter
                     listViewModel.filter = newFilter
@@ -219,6 +220,7 @@ struct BrowseView: View {
                 .onChange(of: firstRunState.hasAddedFirstBodega) { syncTipParameters() }
                 .task { await addTipState.observe() }
                 .modifier(userLocationRefresh)
+                .modifier(listOrderSync)
                 // Popover tips (the placement tip) inherit this; the inline
                 // tips set their own inline variant.
                 .tipViewStyle(BodegaTipStyle())
@@ -280,28 +282,6 @@ struct BrowseView: View {
                 Label("Add Bodega", systemImage: "plus")
             }
         }
-    }
-
-    /// Filled icon plus a count badge whenever any filter (including a
-    /// search typed on the List tab) is active — the only on-screen signal
-    /// on the Map tab that pins are being hidden. Uses the system `.badge`,
-    /// which iOS 26 draws on toolbar items (a count of 0 hides it). A
-    /// hand-drawn overlay doesn't survive the iOS 26 toolbar: it renders
-    /// only the label's icon, dropping the overlay and leaking its text
-    /// into the button's accessibility label (#43).
-    private var filterButton: some View {
-        Button {
-            showingFilters = true
-        } label: {
-            Label(
-                "Filters",
-                systemImage: filter.isActive
-                    ? "line.3.horizontal.decrease.circle.fill"
-                    : "line.3.horizontal.decrease.circle"
-            )
-        }
-        .badge(filter.activeCount)
-        .accessibilityValue(filter.isActive ? "\(filter.activeCount) active" : "None active")
     }
 
     /// "Use Current Location" toolbar shortcut: skips placement mode

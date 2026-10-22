@@ -4,7 +4,7 @@ import Observation
 
 /// One location fix as the distance code needs it (#68, eng D10): where,
 /// how sure, and when.
-nonisolated struct UserFix: Equatable, Sendable {
+nonisolated struct UserFix: Hashable, Sendable {
     var coordinate: Coordinate
     /// Metres, as `CLLocation.horizontalAccuracy` reports it; negative means
     /// the fix is invalid.

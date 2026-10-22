@@ -202,6 +202,15 @@ struct BrowseMotionTests {
         #expect(effects == [.cancelTimer])
     }
 
+    /// protects: the list order cross-fade runs DESIGN.md's content-swap
+    /// duration (#81 design D4).
+    /// fails_when: the constant drifts from 0.25s.
+    /// no_claim: that BodegaListView applies it, or drops it under Reduce
+    /// Motion (live QA).
+    @Test func listReorderIsAQuarterSecond() {
+        #expect(BrowseMotion.ListOrder.reorderSeconds == 0.25)
+    }
+
     @Test func holdIsAQuarterSecond() {
         #expect(PinMotion.holdSeconds == 0.25)
     }

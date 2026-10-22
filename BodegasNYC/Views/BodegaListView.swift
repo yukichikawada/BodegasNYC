@@ -36,6 +36,17 @@ import UIKit
 /// location is authorized; each row computes its own `BlockDistance`. While
 /// location is not authorized the loaded list opens with `DistancesTip`,
 /// whose Show Map runs `onShowMap`.
+///
+/// Order (#81): rows render in `viewModel.filteredBodegas` order (nearest
+/// first from a pinned fix, else newest first). When the order changes the
+/// rows cross-fade in place, keyed on `viewModel.reorderKey` (design D4):
+/// 0.25s `easeInOut`, instant under Reduce Motion, never a row move. The
+/// scroll phase goes to the view model, which holds an adopted fix until the
+/// list is at rest. An order chosen in the Filters sheet scrolls to the top
+/// (design D7); an automatic re-sort keeps the offset and, under VoiceOver
+/// while `isForeground` (no sheet, no detail), keeps focus on the same
+/// bodega (the new first row if focus was on the first) and announces
+/// "Nearest first now." (design D3).
 struct BodegaListView: View {
     let viewModel: BodegaListViewModel
     @Binding var filter: BodegaFilter
@@ -43,6 +54,7 @@ struct BodegaListView: View {
     var searchFocus: FocusState<Bool>.Binding
     var userFix: UserFix?
     var reservesDistanceSlot = false
+    var isForeground = true
     let onAddBodega: () -> Void
     var onShowMap: () -> Void = {}
 
@@ -54,6 +66,7 @@ struct BodegaListView: View {
     /// Set once the stored row has been scrolled back to.
     @State private var hasRestoredScroll = false
     @AccessibilityFocusState private var focusedRowID: Bodega.ID?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         content
@@ -108,6 +121,7 @@ struct BodegaListView: View {
                         if action.id == DistancesTip.showMapActionID { onShowMap() }
                     }
                     .inlineBodegaTipStyle()
+                    .id(Self.tipRowID)
                     ForEach(viewModel.filteredBodegas) { bodega in
                         NavigationLink(value: bodega) {
                             BodegaRow(
@@ -124,8 +138,16 @@ struct BodegaListView: View {
                         .onDisappear { rowTops.tops[bodega.id] = nil }
                         .accessibilityFocused($focusedRowID, equals: bodega.id)
                     }
+                    // A new order is a new set of rows, faded in where the
+                    // old ones fade out, so nothing slides (design D4).
+                    .id(viewModel.reorderKey)
+                    .transition(.opacity)
                 }
                 .listStyle(.plain)
+                .animation(
+                    reduceMotion ? nil : .easeInOut(duration: BrowseMotion.ListOrder.reorderSeconds),
+                    value: viewModel.reorderKey
+                )
                 // Where content stops hiding under the navigation bar: the
                 // List's own top (its rows scroll on up behind the bar).
                 .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
@@ -136,11 +158,18 @@ struct BodegaListView: View {
                 // Each time a scroll comes to rest, remember the first row
                 // whose top is in view.
                 .onScrollPhaseChange { _, phase in
+                    viewModel.scrollPhaseDidChange(isIdle: phase == .idle)
                     guard phase == .idle, hasRestoredScroll else { return }
                     // At the first row, store nil (the top of the list), so
                     // a round trip does not scroll an open tip off screen.
                     let top = rowTops.topRow(in: viewModel.filteredBodegas)
                     scrollID = top == viewModel.filteredBodegas.first?.id ? nil : top
+                }
+                // A list that leaves mid-scroll must not hold an adoption.
+                .onDisappear { viewModel.scrollPhaseDidChange(isIdle: true) }
+                .onChange(of: viewModel.order) { scrollToTop(proxy) }
+                .onChange(of: viewModel.lastAutomaticReorder) { _, reorder in
+                    if let reorder { announce(reorder) }
                 }
             }
         case .failed:
@@ -174,6 +203,44 @@ struct BodegaListView: View {
         hasRestoredScroll = true
         if UIAccessibility.isVoiceOverRunning {
             focusedRowID = stored ?? viewModel.filteredBodegas.first?.id
+        }
+    }
+
+    /// The inline tip's row, so the top of the list can be scrolled to
+    /// while the tip is showing.
+    private static let tipRowID = "distancesTip"
+
+    /// An order chosen in the Filters sheet (design D7): the top of the
+    /// list, without animation, under the cross-fade.
+    private func scrollToTop(_ proxy: ScrollViewProxy) {
+        var transaction = Transaction()
+        transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            if DistancesTip().shouldDisplay {
+                proxy.scrollTo(Self.tipRowID, anchor: .top)
+            } else if let first = viewModel.filteredBodegas.first?.id {
+                proxy.scrollTo(first, anchor: .top)
+            }
+        }
+    }
+
+    /// An automatic re-sort to nearest (design D3), VoiceOver only and only
+    /// with the list in front. The rows were rebuilt, so focus is put back by
+    /// id once the cross-fade is done (on the new first row if it was on the
+    /// first), then the announcement, at high priority so the focus move
+    /// does not cut it off.
+    private func announce(_ reorder: BodegaListViewModel.AutomaticReorder) {
+        guard isForeground, UIAccessibility.isVoiceOverRunning else { return }
+        let focused = focusedRowID
+        let target = focused == reorder.previousFirstID ? viewModel.filteredBodegas.first?.id : focused
+        Task {
+            try? await Task.sleep(for: .seconds(BrowseMotion.ListOrder.reorderSeconds))
+            if let target {
+                focusedRowID = nil
+                await Task.yield()
+                focusedRowID = target
+            }
+            AddCompletionCoordinator.postHighPriorityAnnouncement(AppCopy.listOrderNearestAnnouncement.copy.text)
         }
     }
 
