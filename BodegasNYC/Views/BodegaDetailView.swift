@@ -114,7 +114,7 @@ struct BodegaDetailView: View {
                 if case .failed(let message) = viewModel.loadState {
                     Text(message)
                         .font(.footnote)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.primary)
                 }
             }
             .padding()
@@ -250,7 +250,7 @@ struct BodegaDetailView: View {
             if let address = viewModel.bodega.address {
                 Text(address)
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textMuted)
             }
             distanceLine
         }
@@ -273,7 +273,7 @@ struct BodegaDetailView: View {
                 alignment: .leading
             )
             .font(.subheadline)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Color.textMuted)
         }
     }
 }
@@ -295,7 +295,7 @@ private struct RatingSummaryView: View {
                     .font(.headline)
                 Text("(\(reviewCount) review\(reviewCount == 1 ? "" : "s"))")
                     .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Color.textMuted)
             }
         }
     }
@@ -312,10 +312,10 @@ private struct SectionEmptyState: View {
         VStack(alignment: .leading, spacing: 2) {
             Text(title.copy.text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Color.textMuted)
             Text(message.copy.text)
                 .font(.footnote)
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(Color.textMuted)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .accessibilityElement(children: .combine)

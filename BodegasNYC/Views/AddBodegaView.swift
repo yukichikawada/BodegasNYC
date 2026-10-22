@@ -205,7 +205,7 @@ private struct DayHoursRow: View {
                     // the collapsed (closed) state needs spelling out.
                     if entry.isClosed {
                         Text("Closed")
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Color.textMuted)
                             .lineLimit(1)
                             .fixedSize(horizontal: true, vertical: false)
                     }

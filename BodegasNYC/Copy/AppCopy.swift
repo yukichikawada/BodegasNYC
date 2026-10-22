@@ -112,7 +112,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     // MARK: Detail data points (#70)
 
     /// VoiceOver values for the detail screen's five data points, which
-    /// otherwise show presence only by the symbol's opacity.
+    /// otherwise show presence only by color and a struck-through caption.
     case dataPointPresentValue
     case dataPointAbsentValue
 
