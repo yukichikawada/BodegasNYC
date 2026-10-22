@@ -166,14 +166,13 @@ nonisolated struct DistancesTip: Tip {
     }
 }
 
-/// The tips' one look (spec D9, design DD13): headline title, secondary
-/// subheadline message, no image, a close button, actions as `.bordered`
-/// buttons. A popover gets a `.thickMaterial` background (#95 D8); inline (the
-/// map card, the form row) gets none, because the container already
-/// supplies it. On an opaque container (the form row, the list row) the
-/// message is `textMuted`, which holds 4.5:1 there; vibrant `.secondary`
-/// measured 4.00:1 on a white form cell (#95 D6). On material it stays
-/// vibrant `.secondary` (D8).
+/// The tips' one look (spec D9, design DD13): headline title, subheadline
+/// message, no image, a close button, actions as `.bordered` buttons. A
+/// popover gets a `.regularMaterial` background; inline (the map card, the
+/// form row) gets none, because the container already supplies it. The
+/// message is `.primary` on material (#95 D11: vibrant `.secondary`
+/// measured 3.3:1 there in light) and `textMuted` on an opaque container,
+/// the form row or the list row (#95 D6).
 struct BodegaTipStyle: TipViewStyle {
     var inline: Bool = false
     var onOpaqueSurface: Bool = false
@@ -192,7 +191,7 @@ struct BodegaTipStyle: TipViewStyle {
                         message
                             .font(.subheadline)
                             .foregroundStyle(
-                                onOpaqueSurface ? AnyShapeStyle(Color.textMuted) : AnyShapeStyle(.secondary)
+                                onOpaqueSurface ? AnyShapeStyle(Color.textMuted) : AnyShapeStyle(.primary)
                             )
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -218,7 +217,7 @@ struct BodegaTipStyle: TipViewStyle {
             // always fits above Use This Location at accessibility sizes.
             content
                 .padding(16)
-                .background(.thickMaterial)
+                .background(.regularMaterial)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
     }

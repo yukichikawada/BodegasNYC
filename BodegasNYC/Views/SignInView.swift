@@ -37,7 +37,7 @@ struct SignInView: View {
                 .fixedSize(horizontal: false, vertical: true)
             Text(AppCopy.signInBody.copy.text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             SignInWithAppleButton(.signIn, onRequest: configure, onCompletion: handle)

@@ -48,7 +48,7 @@ struct DuplicateBodegaSheet: View {
                 .accessibilityFocused($titleIsFocused)
             Text(AppCopy.duplicatePromptBody.copy.text)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(.primary)
             Text(AppCopy.duplicatePromptFootnote.copy.text)
                 .font(.footnote)
                 .foregroundStyle(.primary)
