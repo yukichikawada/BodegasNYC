@@ -218,12 +218,17 @@ private struct DayHoursRow: View {
                     : AnyLayout(HStackLayout())
                 fieldsLayout {
                     TextField("Open", text: $entry.open)
-                    // The dash joins two fields on one line; stacked, the
-                    // two lines already read as open then close.
-                    if !isStacked {
+                    if isStacked {
+                        // Stacked, the dash leads the close line so two bare
+                        // values ("12" over "8") still read as a range.
+                        HStack(spacing: 4) {
+                            Text("–")
+                            TextField("Close", text: $entry.close)
+                        }
+                    } else {
                         Text("–")
+                        TextField("Close", text: $entry.close)
                     }
-                    TextField("Close", text: $entry.close)
                 }
                 .font(.subheadline)
                 .monospacedDigit()
