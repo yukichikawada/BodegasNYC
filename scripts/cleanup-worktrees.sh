@@ -11,8 +11,9 @@
 # Usage: scripts/cleanup-worktrees.sh [--apply]
 #   (no flag)  dry run: report what would be removed and what is kept, and why
 #   --apply    unlock + remove the removable worktrees, delete their local
-#              branches, delete their "BodegasNYC-<branch>" simulators, and
-#              delete worktree-agent-* scratch branches already on main
+#              branches, delete their "BodegasNYC-<branch>" simulators,
+#              delete worktree-agent-* scratch branches already on main, and
+#              delete orphaned DerivedData folders (see below)
 #
 # A worktree is removable only when ALL of these hold:
 #   * its branch has a MERGED or CLOSED PR on GitHub (per `gh pr list`), or
@@ -23,10 +24,23 @@
 # Anything with an open PR, no PR at all, or real uncommitted work is kept
 # and listed. Remote branches are never deleted. Squash merges mean commit
 # ancestry says nothing, which is why PR state is the source of truth.
+#
+# DerivedData: Xcode and MobileBuildMCP key their DerivedData folders by
+# project path, so a build from a worktree leaves a folder under
+# ~/Library/Developer/Xcode/DerivedData or
+# ~/Library/Developer/MobileBuildMCP/workspaces/*/DerivedData that nothing
+# removes when the worktree goes (run-tests.sh now builds into the in-tree
+# build/dd, but MCP builds and raw xcodebuild still land there). A folder is
+# swept only when its info.plist WorkspacePath is inside THIS repo (main
+# checkout or a worktree of it) and that path no longer exists; other
+# projects' folders are never touched.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
 ROOT=$(pwd)
+# The main checkout, even when run from a worktree: DerivedData paths are
+# matched against this so one run covers every worktree of the repo.
+MAIN_ROOT=$(cd "$(git rev-parse --git-common-dir)/.." && pwd)
 
 APPLY=0
 case "${1:-}" in
@@ -123,6 +137,17 @@ while read -r b; do
   if on_main "$b"; then SCRATCH+=("$b"); fi
 done < <(git branch --list 'worktree-agent-*' --format='%(refname:short)')
 
+# DerivedData folders whose project path was inside this repo and is gone.
+DD_ORPHANS=()   # "path|workspace-path|size"
+for d in "$HOME"/Library/Developer/Xcode/DerivedData/*/ \
+         "$HOME"/Library/Developer/MobileBuildMCP/workspaces/*/DerivedData/*/; do
+  [ -f "$d/info.plist" ] || continue
+  wp=$(/usr/libexec/PlistBuddy -c 'Print :WorkspacePath' "$d/info.plist" 2>/dev/null) || continue
+  case "$wp" in "$MAIN_ROOT"/*) ;; *) continue ;; esac
+  [ -e "$wp" ] && continue
+  DD_ORPHANS+=("${d%/}|$wp|$(du -sh "$d" 2>/dev/null | cut -f1)")
+done
+
 echo "== removable worktrees (${#REMOVE[@]}) =="
 for e in "${REMOVE[@]:-}"; do
   [ -n "$e" ] || continue
@@ -137,6 +162,12 @@ for e in "${KEEP[@]:-}"; do
 done
 echo "== stale worktree-agent-* branches already on main (${#SCRATCH[@]}) =="
 for b in "${SCRATCH[@]:-}"; do [ -n "$b" ] && echo "  $b"; done
+echo "== orphaned DerivedData folders (${#DD_ORPHANS[@]}) =="
+for e in "${DD_ORPHANS[@]:-}"; do
+  [ -n "$e" ] || continue
+  IFS='|' read -r p wp size <<<"$e"
+  echo "  ${p/#$HOME/~}  ($size)  for ${wp#"$MAIN_ROOT"/}"
+done
 
 if [ "$APPLY" -eq 0 ]; then
   echo
@@ -162,6 +193,12 @@ for b in "${SCRATCH[@]:-}"; do
   [ -n "$b" ] || continue
   # -D fails if the branch is still checked out somewhere; that's the guard.
   git branch -D "$b" >/dev/null 2>&1 && echo "deleted scratch branch $b" || echo "kept $b (still checked out)"
+done
+
+for e in "${DD_ORPHANS[@]:-}"; do
+  [ -n "$e" ] || continue
+  IFS='|' read -r p wp size <<<"$e"
+  rm -rf "$p" && echo "deleted DerivedData ${p/#$HOME/~} ($size)"
 done
 
 echo
