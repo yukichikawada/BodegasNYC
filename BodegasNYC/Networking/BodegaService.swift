@@ -134,17 +134,23 @@ nonisolated struct BodegaService: Sendable {
     func fetchAll() async throws -> [Bodega] {
         let pageSize = Self.fetchAllPageSize
         var bodegas: [Bodega] = []
+        var seenIDs: Set<UUID> = []
+        var offset = 0
         while true {
-            // `id` breaks `created_at` ties so offset pages can't overlap or skip a row.
+            // `id` breaks `created_at` ties so pages are a stable order.
             let page: [Bodega] = try await postgrest
                 .from("bodegas")
                 .select()
                 .order("created_at", ascending: false)
                 .order("id", ascending: false)
-                .range(from: bodegas.count, to: bodegas.count + pageSize - 1)
+                .range(from: offset, to: offset + pageSize - 1)
                 .execute()
                 .value
-            bodegas += page
+            // A bodega inserted between page requests shifts every offset by
+            // one, repeating the previous page's last row; duplicate ids
+            // would break `ForEach`, so keep only each id's first occurrence.
+            bodegas += page.filter { seenIDs.insert($0.id).inserted }
+            offset += page.count
             if page.count < pageSize { return bodegas }
         }
     }

@@ -120,6 +120,36 @@ struct BodegaServiceTests {
         #expect(Self.queryItems(of: made[1])["offset"] == "1000")
     }
 
+    @Test func fetchAllDropsARowRepeatedByAnInsertBetweenPages() async throws {
+        MockURLProtocol.reset()
+        // An insert between requests shifts the offset, so page 2 starts
+        // with page 1's last row ("Bodega 999") again.
+        MockURLProtocol.stub(body: Self.pageJSON(start: 0, count: 1000))
+        let secondRequest = Captured<URLRequest?>(nil)
+        MockURLProtocol.stub(body: Self.pageJSON(start: 999, count: 2)) { request in
+            secondRequest.set(request)
+        }
+        let service = BodegaService(postgrest: makeTestPostgrestClient())
+
+        let bodegas = try await service.fetchAll()
+
+        #expect(bodegas.map(\.name) == (0..<1001).map { "Bodega \($0)" })
+        #expect(Set(bodegas.map(\.id)).count == 1001)
+        let request = try #require(secondRequest.get())
+        #expect(Self.queryItems(of: request)["offset"] == "1000")
+    }
+
+    @Test func fetchAllThrowsWhenALaterPageFails() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Self.pageJSON(start: 0, count: 1000))
+        MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))
+        let service = BodegaService(postgrest: makeTestPostgrestClient())
+
+        await #expect(throws: (any Error).self) {
+            _ = try await service.fetchAll()
+        }
+    }
+
     @Test func fetchAllMakesOneRequestForAShortFirstPage() async throws {
         MockURLProtocol.reset()
         let requests = Self.stubPages([3])
