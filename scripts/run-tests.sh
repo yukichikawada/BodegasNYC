@@ -17,6 +17,12 @@
 #                          likely hit: the one observed UI-test run never
 #                          completed organically even given 900s)
 #   TEST_TIMEOUT_SECONDS env var overrides the default (180s / 3min) too.
+#
+# DerivedData goes to build/dd inside this checkout (gitignored) rather than
+# ~/Library/Developer/Xcode/DerivedData. Xcode keys the default location by
+# project path, so every builder worktree used to leave a ~550 MB folder
+# there that outlived the worktree; in-tree it dies with the worktree, and
+# scripts/cleanup-worktrees.sh sweeps any older strays.
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
@@ -25,6 +31,7 @@ DEVICE_NAME="iPhone 17 Pro"
 
 PROJECT="BodegasNYC.xcodeproj"
 SCHEME="BodegasNYC"
+DERIVED_DATA="build/dd"
 
 INCLUDE_UI_TESTS=0
 TIMEOUT_ARG=""
@@ -100,6 +107,7 @@ fi
   -scheme "$SCHEME" \
   -destination "platform=iOS Simulator,id=${DEVICE_UDID}" \
   -destination-timeout 60 \
+  -derivedDataPath "$DERIVED_DATA" \
   -skipPackagePluginValidation \
   "${TEST_ARGS[@]}"
 EXIT_CODE=$?

@@ -6,7 +6,7 @@ Always run tests via `scripts/run-tests.sh`, invoked with `run_in_background: tr
 
 By default it only runs `BodegasNYCTests` (fast, seconds, no simulator clone). Pass `--ui` to also run `BodegasNYCUITests` -- xcodebuild reliably clones the destination simulator for that target and can hang trying to launch onto the fresh clone with no internal timeout covering that phase. `--ui` runs share the same 3-minute cap as everything else, so in practice a hung UI test run will reliably get killed rather than complete -- that's a known limitation, not a bug in the script.
 
-The script pins the test destination to a specific simulator UDID (avoids ambiguous-destination clone spam from having 5 runtimes installed), skips SPM package-plugin trust validation (`-skipPackagePluginValidation`, needed for SwiftLintPlugins to run headlessly), sweeps up any stray "Clone N of ..." simulators before and after the run, hard-caps the run via `timeout` (default 180s / 3min; override with `TEST_TIMEOUT_SECONDS` or a trailing argument), and serializes concurrent invocations from other worktrees via a lockfile.
+The script pins the test destination to a specific simulator UDID (avoids ambiguous-destination clone spam from having 5 runtimes installed), skips SPM package-plugin trust validation (`-skipPackagePluginValidation`, needed for SwiftLintPlugins to run headlessly), sweeps up any stray "Clone N of ..." simulators before and after the run, hard-caps the run via `timeout` (default 180s / 3min; override with `TEST_TIMEOUT_SECONDS` or a trailing argument), serializes concurrent invocations from other worktrees via a lockfile, and builds into the checkout's own `build/dd` (gitignored) so a worktree's DerivedData is deleted with the worktree instead of piling up under `~/Library/Developer/Xcode/DerivedData`.
 
 ## Housekeeping
 
@@ -17,7 +17,7 @@ run:
 
 ```sh
 scripts/cleanup-worktrees.sh          # dry run: lists what would be removed and what is kept, and why
-scripts/cleanup-worktrees.sh --apply  # unlocks + removes them, deletes their local branches and simulators
+scripts/cleanup-worktrees.sh --apply  # unlocks + removes them, deletes their local branches, simulators and orphaned DerivedData
 ```
 
 Only worktrees whose branch has a merged or closed PR (per `gh pr list`) are removed; a worktree
@@ -25,8 +25,11 @@ with an open PR, no PR, or uncommitted tracked changes is kept and listed. Untra
 output does not count as uncommitted work. Squash merges mean commit ancestry proves nothing, so
 PR state is the source of truth. The script also deletes `worktree-agent-*` scratch branches that
 point at commits already on `main` and runs `scripts/sim-for-branch.sh delete` for each removed
-branch. It never deletes remote branches. Do not wire `--apply` into a SessionStart hook; the
-dry run is the right thing to automate, the removal stays behind an explicit command.
+branch. It never deletes remote branches. It also sweeps DerivedData folders (under
+`~/Library/Developer/Xcode/DerivedData` and `~/Library/Developer/MobileBuildMCP/workspaces/*/DerivedData`)
+whose recorded project path was a worktree of this repo that no longer exists; folders belonging to
+other projects are left alone. Do not wire `--apply` into a SessionStart hook; the dry run is the
+right thing to automate, the removal stays behind an explicit command.
 
 ## Orchestration and model routing
 
