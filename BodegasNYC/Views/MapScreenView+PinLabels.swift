@@ -78,6 +78,7 @@ extension MapScreenView {
         lastVisibleRegion = context.region
         isCameraMoving = false
         lastSettledCamera = context.camera
+        settleCount += 1
         guard showsToolbar else {
             pendingSettledRegion = context.region
             return

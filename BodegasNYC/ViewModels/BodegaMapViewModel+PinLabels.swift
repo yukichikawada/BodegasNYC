@@ -13,7 +13,8 @@ import UIKit
 final class PinLabelState {
     private(set) var ids: Set<Bodega.ID> = []
     /// The last block-zoom verdict, the hysteresis input (design D2).
-    @ObservationIgnored private(set) var isBlockZoom = false
+    /// Observed: the map's empty card reads it (#84 design D3).
+    private(set) var isBlockZoom = false
     /// The `displayItemsVersion` the last placement used, so a data change
     /// already placed by the settle refresh is not placed twice.
     @ObservationIgnored var placedItemsVersion: Int?
@@ -26,7 +27,7 @@ final class PinLabelState {
     /// Writes only when the set differs, so redundant refreshes never
     /// re-render the pins.
     func update(ids newIDs: Set<Bodega.ID>, isBlockZoom: Bool) {
-        self.isBlockZoom = isBlockZoom
+        if self.isBlockZoom != isBlockZoom { self.isBlockZoom = isBlockZoom }
         if ids != newIDs { ids = newIDs }
     }
 
@@ -89,6 +90,14 @@ nonisolated extension BodegaMapViewModel {
     /// never blinks every label).
     static let blockZoomEnterMeters: Double = 400
     static let blockZoomExitMeters: Double = 440
+
+    /// The `MapCamera.distance` Locate Me lands at (#84 spec D3): about
+    /// 350 m of visible height, inside the 400 m entry with margin for the
+    /// 440 m exit. Calibrated on the iPhone 17 Pro simulator (iOS 26.5,
+    /// pitch 0): the first settle after Locate Me measured 350.2 m by
+    /// `visibleHeightMeters` (700 m measured 288.4 m; the height is 0.412
+    /// times the distance at this screen size).
+    static let locateMeCameraDistance: Double = 850
 
     /// The label sits this far above the circle's top edge (DD3's 4pt).
     static let labelGap: CGFloat = 4

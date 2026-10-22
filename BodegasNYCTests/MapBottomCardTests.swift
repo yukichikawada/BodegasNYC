@@ -75,6 +75,24 @@ struct MapBottomCardTests {
         #expect(state == .noneNearby)
     }
 
+    /// protects: an empty nearby load at block zoom names the block and the
+    /// pinch (#84 design D3); above block zoom it stays `noneNearby`, and
+    /// all-mode keeps `noBodegas` at any zoom.
+    /// fails_when: block zoom shows "Nothing near you yet.", or the block
+    /// card shows above block zoom or in all-mode.
+    /// no_claim: that `MapScreenView` passes the live block-zoom verdict, or
+    /// the slot transition (live QA).
+    @Test func zeroRowLoadInNearbyAtBlockZoomIsNoneOnBlock() {
+        #expect(Card.bodegaEmptyState(browseMode: .nearby, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: true)
+            == .noneOnBlock)
+        #expect(Card.bodegaEmptyState(browseMode: .nearby, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: false)
+            == .noneNearby)
+        #expect(Card.bodegaEmptyState(browseMode: .all, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: true)
+            == .noBodegas)
+        #expect(Card.select(isPlacing: false, firstAdd: nil, emptyState: .noneOnBlock, addTip: true, streets: true)
+            == .emptyState(.noneOnBlock))
+    }
+
     @Test func zeroRowLoadInAllIsNoBodegas() {
         let state = Card.bodegaEmptyState(browseMode: .all, isLoadedEmpty: true, isFilteredEmpty: false)
         #expect(state == .noBodegas)
