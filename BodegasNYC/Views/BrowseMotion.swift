@@ -30,7 +30,7 @@ nonisolated enum BrowseMotion {
         static let fadeSeconds: TimeInterval = 0.25
 
         static func style(reduceMotion: Bool, crossFade: Bool) -> ListStyle {
-            reduceMotion || crossFade ? .fade : .slide
+            reduceMotion || crossFade ? .slide : .fade
         }
 
         /// Also how long placement waits after leaving the List tab, so the
