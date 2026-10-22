@@ -34,6 +34,20 @@
 **Priority:** P2
 **Depends on:** PR 2 merged
 
+## Data
+
+### Paginate `BodegaService.fetchAll` past the 1,000-row PostgREST cap
+
+**What:** Fetch every bodega in pages (a `.range(from, to)` loop over `created_at` descending until a short page) instead of one unpaginated request.
+
+**Why:** PostgREST returns at most `max_rows` rows per request, so past 1,000 bodegas the map's `.all` mode, the list and its nearest-first sort (#81) silently drop the oldest rows. Nearest first would then miss a bodega around the corner just because it was added early.
+
+**Context:** `supabase/config.toml` sets `max_rows = 1000`; `BodegaService.fetchAll()` (`BodegasNYC/Networking/BodegaService.swift`) is one request with no `.range`. Surfaced by the #81 eng review (R3, outside voice). Add a `BodegaServiceTests` case that stubs `MockURLProtocol` with a 1,000-row page then a 1-row page and expects 1,001 bodegas in order and two requests. Revisit before `bodegas` reaches 1,000 rows.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** None
+
 ## Completed
 
 ### Create DESIGN.md with /design-consultation (done 2026-10-20)

@@ -339,6 +339,31 @@ visible addition is the one-time Distances tip inline at the top of the loaded l
 while location has never been asked for (Show Map; never prompts). Denied users get no tip and no
 Settings nudge.
 
+**List order** (#81): the List tab is nearest first by default, sorted by the same straight-line
+distance the rows show, from a fix pinned when the List tab is entered or the order changes, and
+only a fix at most 10 minutes old is pinned. The first usable fix after an unpinned start (a cold
+start, or a pinned fix that was too old) cross-fades the order once: the rows fade in place, 0.25s
+`easeInOut` (`BrowseMotion.ListOrder.reorderSeconds`), with the #68 distance fade in the same
+transaction, instant under Reduce Motion, never a row sliding to its new place; it is applied only
+when the scroll is at rest, never under a moving finger, and keeps the scroll offset. Later fixes
+change the values, never the order; popping back from a detail never re-sorts. A lost fix falls
+back to newest first as the distances fade out. Newest first is the fetch order (`created_at`
+descending) with local additions in front, not a client-side timestamp sort. On a cold start the
+list may open newest-first and cross-fade once to nearest when the first fix lands. The list
+itself never hints at its order (the #68 silent states). The Filters sheet carries the control:
+sections Must Have, List Order, Search; List Order is an inline picker (Nearest First, Newest
+First; Deli Green checkmarks) with exactly one system footer line under Nearest First, updated live:
+"Sorted from where you opened the list." while the list is nearest-ordered; "Nearest first needs
+your location. Tap Locate Me on the map." while the map can still prompt; "Newest first for now.
+Nearest first needs to know where you are." otherwise (denied, restricted, Precise Location off,
+a fix pending or expired); no footer under Newest First, and never a button, symbol or Settings
+link. Choosing an order in the sheet scrolls the list to its top. The order is not a filter:
+Clear Filters (renamed from Clear) and the toolbar badge ignore it. The sheet opens at `.large`
+only at accessibility sizes. VoiceOver: an automatic re-sort while the list is in front (no sheet,
+no detail) announces "Nearest first now." and keeps focus on the same bodega (on the new first row
+if focus was on the first); a loss is silent. The choice is remembered (`UserDefaults` key
+`listOrder`). The list fetches every row in one request, capped at 1,000 by PostgREST (TODOS.md).
+
 **Section empty state** (DD9): title `.subheadline` secondary, body `.footnote` tertiary, 2pt
 apart, leading, no symbol, inside the section's `VStack`. List-tab empty states use
 `ContentUnavailableView` (48pt centered symbol).
@@ -382,7 +407,7 @@ the card; the card supplies the material.
 - **Reduce Motion:** pin fades in at rest (0.2s), cat appears in place, no breathe, onboarding
   exit opacity only, camera pan stays. Bottom slot fades in place (map card and placement card,
   0.25s), held pin keeps its stroke and label without the scale, crosshair fades in (0.2s), list
-  fades (0.25s; also under Prefer Cross-Fade Transitions).
+  fades (0.25s; also under Prefer Cross-Fade Transitions), a list order change is instant (#81).
 - **Transitions (#23):** the map stays mounted through map, list and detail; it is never rebuilt
   on a tab switch. Values live in `BrowseMotion`.
   - List: the page slides up from the bottom over the live map, 0.3s ease-in-out, move only (no
@@ -433,3 +458,6 @@ the card; the card supplies the material.
 | 2026-10-21 | #67 spec D1 to D2: at block zoom every pin shows the existing DD3 capsule label with overlap avoidance, and the circle stays; the display-register name plates were not adopted; block zoom is a zoom threshold only (visible height 400 m), greedy placement, priority then north first, no pin-count rule | D5 keeps the display register to three surfaces; a pin-count rule blinks when the 13th pin pans in |
 | 2026-10-21 | #67 eng D1 to D3 and F1 to F3: data and priority refreshes wait for the camera to settle; label widths and heights are measured with the font (cached per name and text size), not estimated; only items within half a span of the visible region take part; the held stand-in is an item; fixtures isolate the label-label rule; the pan guarantee holds for uniform screen translations only (pitch may change spacing) | `/plan-eng-review` plus a Codex outside voice; owner accepted all. The 8pt-per-character figure was not an upper bound |
 | 2026-10-21 | #67 design D1 to D11: Apple's commercial POIs hidden and the location dot an obstacle; hysteresis 400/440 m; truncation by width (160pt) for every label; visible height measured from the screen, so heading does not change it; the `.xxLarge` cap kept with the List tab as the scaling surface; contrast gate with `.thickMaterial` as the pre-approved fallback; one label style, the priority label alone lifted by the small shadow; obstacles are the drawn circles (32pt, 36pt held or dropping, 24pt location dot), and the 4pt clearance applies between labels only; a pinch clears labels; the first add labels only the dropping pin | `/plan-design-review` with two outside voices; owner accepted all. Two bodegas across a street lost both labels to the 44pt hit square. D1 refined in QA: the location-dot obstacle shrunk from 44pt to the drawn 24pt dot after QA found a user standing on a pin lost both labels |
+| 2026-10-21 | #81 spec D1 to D2: the list is nearest first by default whenever a usable fix exists and newest first otherwise, with a List Order picker (Nearest First / Newest First) in the Filters sheet, remembered across launches; the nearest order is pinned to the fix in hand at List tab entry, re-sorts once if the first usable fix lands after the page is up, and otherwise never reorders under the finger | #68 put the deciding number on every row and then ignored it; the toolbar has no room for a sort control at accessibility sizes |
+| 2026-10-21 | #81 eng R1 to R4 and F1: only a fix at most 10 minutes old is pinned; the pin runs on tab entry, the first attach and an order change, never on a re-appearance; the 1,000-row `fetchAll` cap documented with a TODO; the sheet footer keys on the pinned fix, not on whether a fix exists; newest first is insertion order (local additions in front) | `/plan-eng-review` plus a Codex outside voice; owner accepted all. A stale kept fix must not anchor a visit, and the root view re-appears after every pop |
+| 2026-10-21 | #81 design D1 to D7: List Order sits after Must Have; the footer by state with no Settings nudge; VoiceOver hears the automatic re-sort; a 0.25s cross-fade applied at scroll rest, no animation inside the page slide; Clear Filters, `.large` at accessibility sizes, tinted checkmarks; "Sorted from where you opened the list." while nearest is active; an order change in the sheet scrolls to the top | `/plan-design-review` with two outside voices; owner accepted all. Rows sliding under a reading finger are worse than a fade; Locate Me is a dead tap for denied users |
