@@ -131,6 +131,28 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     /// The tip's one action: switches to the Map tab, where Locate Me is.
     case showMapAction
 
+    // MARK: List order (#81)
+
+    /// The Filters sheet section header; says where the order applies,
+    /// since the sheet opens from the Map tab too.
+    case listOrderSectionLabel
+    case listOrderNearestLabel
+    case listOrderNewestLabel
+    /// Footer while the list is nearest-ordered (design D6).
+    case listOrderActiveFootnote
+    /// Footer while Nearest First is chosen, the list is not nearest-ordered
+    /// and the map's Locate Me can still prompt (design D2).
+    case listOrderNeedsLocationBody
+    /// Footer while Nearest First is chosen and the list is not
+    /// nearest-ordered for any other reason: denied, restricted, Precise
+    /// Location off, a fix pending or expired (design D2). "Newest first" and
+    /// "Nearest first" are in sentence case on purpose: the sentence names
+    /// the orders, it does not quote the picker's Title Case labels.
+    case listOrderFallbackBody
+    /// VoiceOver, on an automatic re-sort to nearest while the list is in
+    /// front (design D3, the DD15 precedent).
+    case listOrderNearestAnnouncement
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -219,6 +241,15 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .distancesTipBody:
             CopyString(kind: .body, text: "Tap Locate Me on the map and the list measures the way you do.")
         case .showMapAction: CopyString(kind: .label, text: "Show Map")
+        case .listOrderSectionLabel: CopyString(kind: .label, text: "List Order")
+        case .listOrderNearestLabel: CopyString(kind: .label, text: "Nearest First")
+        case .listOrderNewestLabel: CopyString(kind: .label, text: "Newest First")
+        case .listOrderActiveFootnote: CopyString(kind: .body, text: "Sorted from where you opened the list.")
+        case .listOrderNeedsLocationBody:
+            CopyString(kind: .body, text: "Nearest first needs your location. Tap Locate Me on the map.")
+        case .listOrderFallbackBody:
+            CopyString(kind: .body, text: "Newest first for now. Nearest first needs to know where you are.")
+        case .listOrderNearestAnnouncement: CopyString(kind: .body, text: "Nearest first now.")
         }
     }
 

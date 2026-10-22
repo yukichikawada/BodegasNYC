@@ -64,6 +64,7 @@ extension BrowseView {
                     searchFocus: $isSearchFocused,
                     userFix: userLocation.usableFix,
                     reservesDistanceSlot: userLocation.reservesDistanceSlot,
+                    isForeground: isListForeground,
                     onAddBodega: requestPlacement,
                     onShowMap: { tabSelection.wrappedValue = .map }
                 )

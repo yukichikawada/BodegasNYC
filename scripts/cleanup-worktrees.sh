@@ -21,7 +21,8 @@
 #     a merged/closed PR
 #   * it has no uncommitted tracked changes and no untracked files other
 #     than build/ output
-# Anything with an open PR, no PR at all, or real uncommitted work is kept
+# Anything with an open PR, no PR at all, real uncommitted work, or git
+# activity in the last two hours (a builder lane that has not committed yet) is kept
 # and listed. Remote branches are never deleted. Squash merges mean commit
 # ancestry says nothing, which is why PR state is the source of truth.
 #
@@ -47,7 +48,7 @@ case "${1:-}" in
   "") ;;
   --apply) APPLY=1 ;;
   *)
-    sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//' >&2
+    sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//' >&2
     exit 2
     ;;
 esac
@@ -84,6 +85,19 @@ landed_branch_containing() {  # prints a merged/closed PR branch containing comm
   return 1
 }
 
+# A worktree that is still being set up or worked in looks exactly like a
+# stale one until its first commit: no PR, tip on main. Treat recent git
+# activity (the worktree's creation, a checkout, an index refresh) in the
+# last IN_FLIGHT_MINUTES as "a builder lane is in flight" and keep it. On
+# 2026-10-21 a fresh builder worktree was removed under the agent minutes
+# after it was created because its branch still pointed at main.
+IN_FLIGHT_MINUTES=120
+in_flight() {  # worktree $1 shows git activity within IN_FLIGHT_MINUTES
+  local gitdir
+  gitdir=$(git -C "$1" rev-parse --absolute-git-dir 2>/dev/null) || return 1
+  [ -n "$(find "$1/.git" "$gitdir/HEAD" "$gitdir/index" -maxdepth 0 -mmin -"$IN_FLIGHT_MINUTES" 2>/dev/null)" ]
+}
+
 real_dirt() {  # uncommitted changes in worktree $1, ignoring untracked build/ output
   git -C "$1" status --porcelain --untracked-files=all | grep -vE '^\?\? build/' || true
 }
@@ -105,11 +119,14 @@ flush() {
     case "$state" in
       MERGED|CLOSED) REMOVE+=("$path|$branch|PR $state") ;;
       OPEN)          KEEP+=("$path|$branch|PR still open") ;;
-      *)             if on_main "$head"; then REMOVE+=("$path|$branch|no PR, but tip is already on main")
-                     else KEEP+=("$path|$branch|no PR for this branch"); fi ;;
+      *)             if ! on_main "$head"; then KEEP+=("$path|$branch|no PR for this branch")
+                     elif in_flight "$path"; then KEEP+=("$path|$branch|no PR, tip on main, but active in the last ${IN_FLIGHT_MINUTES} min (a lane in flight?)")
+                     else REMOVE+=("$path|$branch|no PR, but tip is already on main"); fi ;;
     esac
   else
-    if on_main "$head"; then
+    if on_main "$head" && in_flight "$path"; then
+      KEEP+=("$path|detached|at a commit on main, but active in the last ${IN_FLIGHT_MINUTES} min (a lane in flight?)")
+    elif on_main "$head"; then
       REMOVE+=("$path||detached at a commit on main")
     elif landed=$(landed_branch_containing "$head"); then
       REMOVE+=("$path||detached on $landed, whose PR is $(pr_state "$landed")")

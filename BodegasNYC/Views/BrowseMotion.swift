@@ -100,6 +100,16 @@ nonisolated enum BrowseMotion {
         static let appearSeconds: TimeInterval = 0.2
     }
 
+    // MARK: List order (#81)
+
+    /// The list's order changing (a fix adopted or lost, or the order chosen
+    /// in the Filters sheet) cross-fades the rows in place, `easeInOut`, with
+    /// no row movement (DESIGN.md Motion: content swaps 0.25s; design D4).
+    /// Instant under Reduce Motion.
+    enum ListOrder {
+        static let reorderSeconds: TimeInterval = 0.25
+    }
+
     // MARK: Pin labels (#67)
 
     /// A pin label fades in and out with an opacity-only `easeOut` (DESIGN.md

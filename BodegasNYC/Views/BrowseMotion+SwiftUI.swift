@@ -43,3 +43,13 @@ extension BrowseMotion.Crosshair {
             : .spring(duration: springSeconds, bounce: springBounce)
     }
 }
+
+/// Runs `body` in a transaction with animations disabled, so neither its
+/// changes nor any `.animation(_:value:)` keyed on them animate: the
+/// tab-entry pin inside the page slide (#81 design D4) and the list's
+/// programmatic scrolls (#23, #81 design D7).
+func withoutAnimation<Result>(_ body: () throws -> Result) rethrows -> Result {
+    var transaction = Transaction()
+    transaction.disablesAnimations = true
+    return try withTransaction(transaction, body)
+}
