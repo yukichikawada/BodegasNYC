@@ -178,6 +178,15 @@ private struct DayHoursRow: View {
     /// every Dynamic Type size (a fixed 40 pt was narrower than "Wed" at
     /// accessibility sizes, #77).
     @ScaledMetric(relativeTo: .body) private var dayLabelMinWidth: CGFloat = 40
+    /// At accessibility sizes one row cannot hold both time fields (they
+    /// truncated to "7:00…  – 11:0…") or the day plus "Closed" (it wrapped
+    /// mid-word), so both go vertical (#80). Same threshold as
+    /// `DataPointsSection` and `MapBottomCard.usesStackedLayout(for:)`; an
+    /// explicit switch rather than `ViewThatFits`, whose ideal-width check
+    /// an `HStack`'s equal split then undercuts (#70).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    private var isStacked: Bool { dynamicTypeSize.isAccessibilitySize }
 
     private var isOpen: Binding<Bool> {
         Binding(get: { !entry.isClosed }, set: { entry.isClosed = !$0 })
@@ -186,22 +195,40 @@ private struct DayHoursRow: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             Toggle(isOn: isOpen) {
-                HStack {
+                let labelLayout = isStacked
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 2))
+                    : AnyLayout(HStackLayout())
+                labelLayout {
                     DayLabel(text: entry.label)
                         .frame(minWidth: dayLabelMinWidth, alignment: .leading)
                     // Open rows already show their time fields below; only
                     // the collapsed (closed) state needs spelling out.
                     if entry.isClosed {
-                        Text("Closed").foregroundStyle(.secondary)
+                        Text("Closed")
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .fixedSize(horizontal: true, vertical: false)
                     }
                 }
             }
             .accessibilityLabel("\(entry.label) open")
             if !entry.isClosed {
-                HStack {
+                let fieldsLayout = isStacked
+                    ? AnyLayout(VStackLayout(alignment: .leading, spacing: 4))
+                    : AnyLayout(HStackLayout())
+                fieldsLayout {
                     TextField("Open", text: $entry.open)
-                    Text("–")
-                    TextField("Close", text: $entry.close)
+                    if isStacked {
+                        // Stacked, the dash leads the close line so two bare
+                        // values ("12" over "8") still read as a range.
+                        HStack(spacing: 4) {
+                            Text("–")
+                            TextField("Close", text: $entry.close)
+                        }
+                    } else {
+                        Text("–")
+                        TextField("Close", text: $entry.close)
+                    }
                 }
                 .font(.subheadline)
                 .monospacedDigit()
