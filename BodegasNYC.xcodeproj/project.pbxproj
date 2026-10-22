@@ -106,6 +106,14 @@
 			);
 			sourceTree = "<group>";
 		};
+		D3B6C0A22F0E4A1B00C0FFEE /* Config */ = {
+			isa = PBXGroup;
+			children = (
+				D3B6C0A12F0E4A1B00C0FFEE /* Debug.xcconfig */,
+			);
+			path = Config;
+			sourceTree = "<group>";
+		};
 		893AAB7830105EA5002B0BB2 /* Products */ = {
 			isa = PBXGroup;
 			children = (
@@ -114,14 +122,6 @@
 				893AAB8E30105EA7002B0BB2 /* BodegasNYCUITests.xctest */,
 			);
 			name = Products;
-			sourceTree = "<group>";
-		};
-		D3B6C0A22F0E4A1B00C0FFEE /* Config */ = {
-			isa = PBXGroup;
-			children = (
-				D3B6C0A12F0E4A1B00C0FFEE /* Debug.xcconfig */,
-			);
-			path = Config;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
