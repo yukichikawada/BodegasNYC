@@ -442,7 +442,8 @@ struct BodegaListViewModelTests {
     }
 
     /// protects: only a fix at most `maxFixAge` old is pinned (eng R1), so an
-    /// hour-old kept fix never anchors a visit; nil pins nil.
+    /// hour-old kept fix never anchors a visit; exactly 10 minutes still
+    /// pins; nil pins nil.
     /// fails_when: the age check is removed, inverted or off by minutes.
     /// no_claim: the provider's timing; `now` is injected.
     @Test func pinOrderingFixKeepsANineMinuteFixAndDropsAnElevenMinuteFix() {
@@ -450,6 +451,11 @@ struct BodegaListViewModelTests {
         let nineMinutes = Self.fix(ageSeconds: 9 * 60)
         viewModel.pinOrderingFix(nineMinutes, now: Self.referenceDate)
         #expect(viewModel.orderingFix == nineMinutes)
+
+        // The boundary is inclusive, like the provider's own expiry check.
+        let tenMinutes = Self.fix(ageSeconds: UserLocationProvider.maxFixAge)
+        viewModel.pinOrderingFix(tenMinutes, now: Self.referenceDate)
+        #expect(viewModel.orderingFix == tenMinutes)
 
         viewModel.pinOrderingFix(Self.fix(ageSeconds: 11 * 60), now: Self.referenceDate)
         #expect(viewModel.orderingFix == nil)
@@ -562,6 +568,34 @@ struct BodegaListViewModelTests {
         viewModel.noteFix(Self.fix())
         #expect(viewModel.reorderKey == key, "fix under newest first")
         #expect(viewModel.lastAutomaticReorder == announced, "no announcement under newest first")
+    }
+
+    /// protects: the nearest sort is cached (review item 5): reads, a
+    /// value-only fix and a filter change reuse it; a pin, an order change or
+    /// new rows recompute it.
+    /// fails_when: `filteredBodegas` sorts on every read, or a cached order
+    /// goes stale after the rows or the pin change.
+    /// no_claim: render cost; counts sorts through a DEBUG-only counter.
+    @Test func theNearestSortIsCachedUntilItsInputsChange() throws {
+        let viewModel = makeLoadedViewModel([
+            try Self.bodega("Far", metersNorth: 900, createdMinutesAgo: 1),
+            try Self.bodega("Near", metersNorth: 100, createdMinutesAgo: 2)
+        ])
+        viewModel.pinOrderingFix(Self.fix(), now: Self.referenceDate)
+        let sorts = viewModel.distanceSortCountForTesting
+
+        _ = viewModel.filteredBodegas
+        _ = viewModel.filteredBodegas
+        viewModel.noteFix(Self.fix(latitude: 40.74))
+        viewModel.filter = BodegaFilter(searchText: "ar")
+        #expect(viewModel.filteredBodegas.map(\.name) == ["Near", "Far"])
+        #expect(viewModel.distanceSortCountForTesting == sorts)
+
+        viewModel.bodegaWasAdded(try Self.bodega("Mid", metersNorth: 500, createdMinutesAgo: 0))
+        #expect(viewModel.distanceSortCountForTesting == sorts + 1)
+        #expect(viewModel.filteredBodegas.map(\.name) == ["Near", "Far"])
+        viewModel.filter = .none
+        #expect(viewModel.filteredBodegas.map(\.name) == ["Near", "Mid", "Far"])
     }
 }
 

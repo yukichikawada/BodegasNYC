@@ -32,19 +32,12 @@ extension BrowseView {
     var filterSheet: some View {
         BodegaFilterSheet(
             filter: $filter,
-            order: listOrderBinding,
+            order: $listOrder,
             isNearestOrdered: listViewModel.orderingFix != nil,
             // The tips' mirror (`syncTipParameters()`), read live from the
             // client so the footer follows a grant made while the sheet is up.
             canBePromptedForLocation: locationPermissionClient.authorizationStatus == .notDetermined
         )
-    }
-
-    /// The stored order; an unknown stored value is nearest first.
-    var listOrder: ListOrder { ListOrder(storedValue: listOrderRaw) }
-
-    var listOrderBinding: Binding<ListOrder> {
-        Binding(get: { listOrder }, set: { listOrderRaw = $0.rawValue })
     }
 
     var listOrderSync: ListOrderSync {
@@ -72,6 +65,14 @@ extension BrowseView {
 /// Tab-entry pins run with animations disabled (design D4), so nothing
 /// cross-fades inside the page slide. An order change clears the stored
 /// scroll row: a different order has a different top row.
+///
+/// A pin that lands nil while location is authorized (the kept fix is older
+/// than 10 minutes, or none has arrived yet) asks the provider for a fresh
+/// fix, which `noteFix` then adopts. Tab entry already refreshes through
+/// `UserLocationRefresh` (the provider coalesces the two), but an order
+/// change has no other refresh trigger: without this, choosing Nearest First
+/// after ten minutes on the list would stay newest first until the tab is
+/// left.
 struct ListOrderSync: ViewModifier {
     let viewModel: BodegaListViewModel
     let provider: UserLocationProvider
@@ -90,7 +91,7 @@ struct ListOrderSync: ViewModifier {
             }
             .onChange(of: order) { _, newOrder in
                 viewModel.order = newOrder
-                viewModel.pinOrderingFix(provider.usableFix)
+                pin()
                 scrollID = nil
             }
             .onChange(of: showsList) { _, showsList in
@@ -102,10 +103,13 @@ struct ListOrderSync: ViewModifier {
     }
 
     private func pinWithoutAnimation() {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
-            viewModel.pinOrderingFix(provider.usableFix)
+        withoutAnimation { pin() }
+    }
+
+    private func pin() {
+        viewModel.pinOrderingFix(provider.usableFix)
+        if viewModel.orderingFix == nil, provider.isAuthorized {
+            provider.requestRefresh()
         }
     }
 }

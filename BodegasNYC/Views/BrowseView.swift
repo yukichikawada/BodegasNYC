@@ -60,9 +60,9 @@ struct BrowseView: View {
     /// Map↔List never loses or desyncs it.
     @State var filter: BodegaFilter = .none
     @State var showingFilters = false
-    /// The list's order (#81), remembered across launches; read through
-    /// `listOrder` (`BrowseView+Filters.swift`), which falls back to nearest.
-    @AppStorage("listOrder") var listOrderRaw = ListOrder.nearest.rawValue
+    /// The list's order (#81), remembered across launches; an unreadable
+    /// stored value falls back to nearest.
+    @AppStorage("listOrder") var listOrder: ListOrder = .nearest
     /// On iOS 26 the trailing toolbar buttons grow with Dynamic Type and
     /// squeeze the principal slot: at `.xLarge` the segmented Map/List
     /// control truncates and from `.xxLarge` up the toolbar drops it
@@ -305,6 +305,20 @@ struct BrowseView: View {
             bodegaService: bodegaService,
             sessionStore: sessionStore
         )
+    }
+}
+
+// MARK: - List order (#81)
+
+extension BrowseView {
+    /// Whether the list is the frontmost thing on screen: nothing pushed
+    /// and nothing presented over it (Filters, Sign In, Add Bodega, the
+    /// duplicate prompt, the sign-out confirmation). The automatic re-sort's
+    /// VoiceOver announcement and focus move wait on it (design D3). Here, not
+    /// in `BrowseView+Content.swift`, because the presentation flags are private.
+    var isListForeground: Bool {
+        path.isEmpty && !showingFilters && !showingSignIn && addBodegaViewModel == nil
+            && existingToOpen == nil && !showingSignOutConfirmation
     }
 }
 

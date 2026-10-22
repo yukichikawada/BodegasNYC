@@ -122,6 +122,7 @@ struct BodegaListView: View {
                     }
                     .inlineBodegaTipStyle()
                     .id(Self.tipRowID)
+                    let reorderKey = viewModel.reorderKey
                     ForEach(viewModel.filteredBodegas) { bodega in
                         NavigationLink(value: bodega) {
                             BodegaRow(
@@ -132,10 +133,12 @@ struct BodegaListView: View {
                         }
                         .id(bodega.id)
                         .onGeometryChange(for: CGFloat.self) { $0.frame(in: .global).minY } action: {
-                            rowTops.tops[bodega.id] = $0
+                            rowTops.set($0, for: bodega.id, in: reorderKey)
                         }
-                        // Off screen (or jumped past by a scrollTo): never the top.
-                        .onDisappear { rowTops.tops[bodega.id] = nil }
+                        // Off screen (or jumped past by a scrollTo): never the
+                        // top. Per order, so the old order's rows fading out
+                        // cannot erase the new rows' tops.
+                        .onDisappear { rowTops.clear(bodega.id, in: reorderKey) }
                         .accessibilityFocused($focusedRowID, equals: bodega.id)
                     }
                     // A new order is a new set of rows, faded in where the
@@ -157,17 +160,30 @@ struct BodegaListView: View {
                 .task { await restoreScroll(proxy) }
                 // Each time a scroll comes to rest, remember the first row
                 // whose top is in view.
+                // The row is read before the phase goes to the view model, so
+                // an adoption applied at this rest never mixes the new order
+                // with the old rows' geometry.
                 .onScrollPhaseChange { _, phase in
+                    if phase == .idle, hasRestoredScroll {
+                        // At the first row, store nil (the top of the list),
+                        // so a round trip does not scroll an open tip off
+                        // screen.
+                        let rows = viewModel.filteredBodegas
+                        let top = rowTops.topRow(in: rows, key: viewModel.reorderKey)
+                        scrollID = top == rows.first?.id ? nil : top
+                    }
                     viewModel.scrollPhaseDidChange(isIdle: phase == .idle)
-                    guard phase == .idle, hasRestoredScroll else { return }
-                    // At the first row, store nil (the top of the list), so
-                    // a round trip does not scroll an open tip off screen.
-                    let top = rowTops.topRow(in: viewModel.filteredBodegas)
-                    scrollID = top == viewModel.filteredBodegas.first?.id ? nil : top
+                }
+                // A new order puts other rows at the stored row's place, so
+                // the stored row means nothing; the next rest stores again.
+                // Not before the restore: a tab-entry pin landing during it
+                // keeps the #23 rule (back to the row the user left).
+                .onChange(of: viewModel.reorderKey) {
+                    if hasRestoredScroll { scrollID = nil }
                 }
                 // A list that leaves mid-scroll must not hold an adoption.
                 .onDisappear { viewModel.scrollPhaseDidChange(isIdle: true) }
-                .onChange(of: viewModel.order) { scrollToTop(proxy) }
+                .onChange(of: viewModel.order) { Task { await scrollToTop(proxy) } }
                 .onChange(of: viewModel.lastAutomaticReorder) { _, reorder in
                     if let reorder { announce(reorder) }
                 }
@@ -211,11 +227,19 @@ struct BodegaListView: View {
     private static let tipRowID = "distancesTip"
 
     /// An order chosen in the Filters sheet (design D7): the top of the
-    /// list, without animation, under the cross-fade.
-    private func scrollToTop(_ proxy: ScrollViewProxy) {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) {
+    /// list, without animation, under the cross-fade. The order change swaps
+    /// the rows' identity, so for the length of the fade the old and new
+    /// copies of a row share its id: scroll once the new rows exist, and
+    /// again once the old ones are gone (the `restoreScroll` pattern).
+    private func scrollToTop(_ proxy: ScrollViewProxy) async {
+        await Task.yield()
+        scrollToTopNow(proxy)
+        try? await Task.sleep(for: .seconds(BrowseMotion.ListOrder.reorderSeconds + 0.05))
+        scrollToTopNow(proxy)
+    }
+
+    private func scrollToTopNow(_ proxy: ScrollViewProxy) {
+        withoutAnimation {
             if DistancesTip().shouldDisplay {
                 proxy.scrollTo(Self.tipRowID, anchor: .top)
             } else if let first = viewModel.filteredBodegas.first?.id {
@@ -245,9 +269,7 @@ struct BodegaListView: View {
     }
 
     private func scrollWithoutAnimation(_ proxy: ScrollViewProxy, to id: Bodega.ID) {
-        var transaction = Transaction()
-        transaction.disablesAnimations = true
-        withTransaction(transaction) { proxy.scrollTo(id, anchor: .top) }
+        withoutAnimation { proxy.scrollTo(id, anchor: .top) }
     }
 
     /// Distinct from the nothing-loaded state: there *are* bodegas, the
@@ -280,13 +302,27 @@ struct BodegaListView: View {
     }
 }
 
-/// Row top edges in global coordinates and the list's visible top edge. A
-/// class on purpose: updating it while scrolling must not re-render.
+/// Row top edges in global coordinates, per list order, and the list's
+/// visible top edge. A class on purpose: updating it while scrolling must
+/// not re-render. Keyed by `ReorderKey` because an order change rebuilds
+/// every row (#81): for the cross-fade both copies of a row are on screen,
+/// and the old copy's `onDisappear` must not clear the new copy's top. An
+/// old order's table empties as its rows disappear and is then dropped.
 private final class RowTops {
-    var tops: [Bodega.ID: CGFloat] = [:]
+    private var tops: [BodegaListViewModel.ReorderKey: [Bodega.ID: CGFloat]] = [:]
     var visibleTop: CGFloat = 0
 
-    func topRow(in bodegas: [Bodega]) -> Bodega.ID? {
-        bodegas.first { (tops[$0.id] ?? -.infinity) >= visibleTop - 1 }?.id
+    func set(_ top: CGFloat, for id: Bodega.ID, in key: BodegaListViewModel.ReorderKey) {
+        tops[key, default: [:]][id] = top
+    }
+
+    func clear(_ id: Bodega.ID, in key: BodegaListViewModel.ReorderKey) {
+        tops[key]?[id] = nil
+        if tops[key]?.isEmpty == true { tops[key] = nil }
+    }
+
+    func topRow(in bodegas: [Bodega], key: BodegaListViewModel.ReorderKey) -> Bodega.ID? {
+        let current = tops[key] ?? [:]
+        return bodegas.first { (current[$0.id] ?? -.infinity) >= visibleTop - 1 }?.id
     }
 }

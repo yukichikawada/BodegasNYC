@@ -11,17 +11,12 @@ import Foundation
 /// insertion order, not a client-side timestamp sort (eng F1).
 ///
 /// The raw values are the stored `UserDefaults` values; never rename them.
+/// `@AppStorage` falls back to `.nearest` for any value it cannot read.
 nonisolated enum ListOrder: String, CaseIterable, Identifiable, Sendable {
     case nearest
     case newest
 
     var id: Self { self }
-
-    /// The stored value read back: anything unknown (a renamed case, a
-    /// corrupted default) is nearest first, the default.
-    init(storedValue: String) {
-        self = ListOrder(rawValue: storedValue) ?? .nearest
-    }
 
     /// The picker row's label.
     var label: AppCopy {

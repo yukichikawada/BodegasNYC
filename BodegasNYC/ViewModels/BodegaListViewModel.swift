@@ -27,31 +27,52 @@ final class BodegaListViewModel {
     /// The full, unfiltered fetch result. `BodegaListView` renders
     /// `filteredBodegas`; this stays whole so it can still tell "nothing
     /// loaded" apart from "nothing matches the filter".
-    private(set) var bodegas: [Bodega] = []
+    private(set) var bodegas: [Bodega] = [] {
+        didSet { reorder() }
+    }
     /// Pushed in from `BrowseView`, which owns the shared filter state.
     /// Changing it never refetches — see `filteredBodegas`.
     var filter: BodegaFilter = .none
 
-    /// `bodegas` in `order` (see `ordered(_:by:from:)`), then narrowed by
-    /// `filter`: order first, so a filter change never re-sorts. Recomputed
-    /// on read rather than cached: `@Observable` tracks `bodegas`, `order`,
-    /// `orderingFix` and `filter` through this getter, so the view re-renders
-    /// on any of them changing with no stored copy to keep in sync (e.g.
-    /// through `bodegaWasAdded`'s prepend).
+    /// `orderedBodegas` narrowed by `filter`: order first, so a filter
+    /// change never re-sorts. Filtered on read (cheap, and `@Observable`
+    /// tracks `filter` through this getter); the sort itself is cached.
     var filteredBodegas: [Bodega] {
-        let ordered = Self.ordered(bodegas, by: order, from: orderingFix)
-        return filter.isActive ? ordered.filter(filter.matches) : ordered
+        filter.isActive ? orderedBodegas.filter(filter.matches) : orderedBodegas
+    }
+
+    /// `bodegas` in `order` (see `ordered(_:by:from:)`), recomputed only when
+    /// `bodegas`, `order` or `orderingFix` changes, never on read: at the
+    /// 1,000-row cap a sort is a thousand `CLLocation` distances, and
+    /// `filteredBodegas` is read several times per render. A value-only fix
+    /// changes none of the three, so it never re-sorts.
+    private(set) var orderedBodegas: [Bodega] = []
+
+#if DEBUG
+    /// Test-only: how many distance sorts have run (a cache miss each).
+    @ObservationIgnored private(set) var distanceSortCountForTesting = 0
+#endif
+
+    private func reorder() {
+#if DEBUG
+        if order == .nearest, orderingFix != nil { distanceSortCountForTesting += 1 }
+#endif
+        orderedBodegas = Self.ordered(bodegas, by: order, from: orderingFix)
     }
 
     // MARK: List order (#81)
 
     /// Pushed in from `BrowseView`, which persists it. Not a filter.
-    var order: ListOrder = .nearest
+    var order: ListOrder = .nearest {
+        didSet { if order != oldValue { reorder() } }
+    }
     /// The fix the nearest order is computed from (spec D2): pinned on List
     /// tab entry and on an order change, adopted once when the first usable
     /// fix lands while none is pinned, cleared when the fix is lost. Never
     /// the live fix, so a later fix changes the rows' values, not their order.
-    private(set) var orderingFix: UserFix?
+    private(set) var orderingFix: UserFix? {
+        didSet { if orderingFix != oldValue { reorder() } }
+    }
     /// A fix adopted while the list was scrolling, applied at the next scroll
     /// rest (design D4): rows never cross-fade under a moving finger.
     @ObservationIgnored private var pendingAdoption: UserFix?
