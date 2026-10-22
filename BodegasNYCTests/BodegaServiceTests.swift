@@ -56,6 +56,81 @@ struct BodegaServiceTests {
         #expect(query.contains("order=created_at.desc"))
     }
 
+    /// A JSON array of `count` bodegas named "Bodega <n>" from `start`, so a
+    /// test can check rows across pages arrive in order.
+    private static func pageJSON(start: Int, count: Int) -> Data {
+        let rows = (start..<(start + count)).map { index in
+            Self.bodegaJSON
+                .replacingOccurrences(of: "8f14e45f-ceea-467e-adc9-15476f4eaa15",
+                                      with: String(format: "00000000-0000-4000-8000-%012d", index))
+                .replacingOccurrences(of: "El Sol Deli & Grocery", with: "Bodega \(index)")
+        }
+        return Data("[\(rows.joined(separator: ","))]".utf8)
+    }
+
+    /// Stubs one response per page and returns the requests in the order made.
+    private static func stubPages(_ counts: [Int]) -> Captured<[URLRequest]> {
+        let requests = Captured<[URLRequest]>([])
+        var start = 0
+        for count in counts {
+            MockURLProtocol.stub(body: pageJSON(start: start, count: count)) { request in
+                requests.set(requests.get() + [request])
+            }
+            start += count
+        }
+        return requests
+    }
+
+    private static func queryItems(of request: URLRequest) -> [String: String] {
+        let items = request.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false) }?.queryItems ?? []
+        return Dictionary(items.map { ($0.name, $0.value ?? "") }, uniquingKeysWith: { _, last in last })
+    }
+
+    @Test func fetchAllPagesPastTheRowCap() async throws {
+        MockURLProtocol.reset()
+        let requests = Self.stubPages([1000, 1])
+        let service = BodegaService(postgrest: makeTestPostgrestClient())
+
+        let bodegas = try await service.fetchAll()
+
+        #expect(bodegas.count == 1001)
+        #expect(bodegas.map(\.name) == (0..<1001).map { "Bodega \($0)" })
+        let made = requests.get()
+        try #require(made.count == 2)
+        let first = Self.queryItems(of: made[0])
+        let second = Self.queryItems(of: made[1])
+        #expect(first["offset"] == "0")
+        #expect(first["limit"] == "1000")
+        #expect(second["offset"] == "1000")
+        #expect(second["limit"] == "1000")
+        #expect(first["order"] == "created_at.desc.nullslast,id.desc.nullslast")
+        #expect(second["order"] == first["order"])
+    }
+
+    @Test func fetchAllStopsOnAnEmptyPageAfterAnExactMultiple() async throws {
+        MockURLProtocol.reset()
+        let requests = Self.stubPages([1000, 0])
+        let service = BodegaService(postgrest: makeTestPostgrestClient())
+
+        let bodegas = try await service.fetchAll()
+
+        #expect(bodegas.count == 1000)
+        let made = requests.get()
+        try #require(made.count == 2)
+        #expect(Self.queryItems(of: made[1])["offset"] == "1000")
+    }
+
+    @Test func fetchAllMakesOneRequestForAShortFirstPage() async throws {
+        MockURLProtocol.reset()
+        let requests = Self.stubPages([3])
+        let service = BodegaService(postgrest: makeTestPostgrestClient())
+
+        let bodegas = try await service.fetchAll()
+
+        #expect(bodegas.map(\.name) == ["Bodega 0", "Bodega 1", "Bodega 2"])
+        #expect(requests.get().count == 1)
+    }
+
     @Test func fetchNearbyCallsRPCWithNamedParams() async throws {
         MockURLProtocol.reset()
         let capturedRequest = Captured<URLRequest?>(nil)

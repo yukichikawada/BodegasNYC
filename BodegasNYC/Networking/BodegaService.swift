@@ -127,13 +127,26 @@ nonisolated struct BodegaService: Sendable {
         self.postgrest = postgrest
     }
 
+    /// PostgREST caps every response at `max_rows` (1000, `supabase/config.toml`),
+    /// so `fetchAll()` pages with `.range` until a short page.
+    private static let fetchAllPageSize = 1000
+
     func fetchAll() async throws -> [Bodega] {
-        try await postgrest
-            .from("bodegas")
-            .select()
-            .order("created_at", ascending: false)
-            .execute()
-            .value
+        let pageSize = Self.fetchAllPageSize
+        var bodegas: [Bodega] = []
+        while true {
+            // `id` breaks `created_at` ties so offset pages can't overlap or skip a row.
+            let page: [Bodega] = try await postgrest
+                .from("bodegas")
+                .select()
+                .order("created_at", ascending: false)
+                .order("id", ascending: false)
+                .range(from: bodegas.count, to: bodegas.count + pageSize - 1)
+                .execute()
+                .value
+            bodegas += page
+            if page.count < pageSize { return bodegas }
+        }
     }
 
     /// Proximity search via the `nearby_bodegas` RPC (see
