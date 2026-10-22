@@ -46,7 +46,7 @@ struct AddBodegaView: View {
                 // Edit Bodega never shows it.
                 if !isEditing {
                     TipView(FormTip())
-                        .inlineBodegaTipStyle()
+                        .inlineBodegaTipStyle(onOpaqueSurface: true)
                 }
                 Section("Basics") {
                     TextField("Name", text: $viewModel.name)
@@ -137,7 +137,7 @@ struct AddBodegaView: View {
                 // Design DD10: a half sheet over the form, not a full one.
                 SignInView(sessionStore: sessionStore)
                     .presentationDetents([.medium])
-                    .presentationBackground(.regularMaterial)
+                    .presentationBackground(.thickMaterial)
             }
             // The duplicate prompt (#20), driven off `submissionState` like
             // the sign-in sheet above. Swipe-down resets to `.idle`.
@@ -157,7 +157,7 @@ struct AddBodegaView: View {
                     )
                     .presentationDetents([.medium, .large], selection: $duplicateDetent)
                     .presentationDragIndicator(.visible)
-                    .presentationBackground(.regularMaterial)
+                    .presentationBackground(.thickMaterial)
                 }
             )
         }

@@ -8,7 +8,7 @@ import TipKit
 /// (`MapBottomCardTests`). The placement bar outranks everything and isn't a
 /// card; `select` returns nil while placing so `MapScreenView` shows the bar.
 ///
-/// Visual contract (design DD13): 16pt inset, `.regularMaterial` rounded
+/// Visual contract (design DD13): 16pt inset, `.thickMaterial` (#95 D8) rounded
 /// rectangle, 16pt padding, 28pt symbol column, title/body text column,
 /// optional trailing close, optional action row under the text, max 480pt
 /// wide.
@@ -169,7 +169,7 @@ struct MapBottomCardChrome: ViewModifier {
             // and a clipped card still keeps its shadow.
             .background {
                 RoundedRectangle(cornerRadius: 16)
-                    .fill(.regularMaterial)
+                    .fill(.thickMaterial)
                     .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             }
             .accessibilityElement(children: .contain)

@@ -168,11 +168,15 @@ nonisolated struct DistancesTip: Tip {
 
 /// The tips' one look (spec D9, design DD13): headline title, secondary
 /// subheadline message, no image, a close button, actions as `.bordered`
-/// buttons. A popover gets a `.regularMaterial` background; inline (the
+/// buttons. A popover gets a `.thickMaterial` background (#95 D8); inline (the
 /// map card, the form row) gets none, because the container already
-/// supplies it.
+/// supplies it. On an opaque container (the form row, the list row) the
+/// message is `textMuted`, which holds 4.5:1 there; vibrant `.secondary`
+/// measured 4.00:1 on a white form cell (#95 D6). On material it stays
+/// vibrant `.secondary` (D8).
 struct BodegaTipStyle: TipViewStyle {
     var inline: Bool = false
+    var onOpaqueSurface: Bool = false
 
     func makeBody(configuration: Configuration) -> some View {
         let content = VStack(alignment: .leading, spacing: 12) {
@@ -187,7 +191,9 @@ struct BodegaTipStyle: TipViewStyle {
                     if let message = configuration.message {
                         message
                             .font(.subheadline)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(
+                                onOpaqueSurface ? AnyShapeStyle(Color.textMuted) : AnyShapeStyle(.secondary)
+                            )
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -212,7 +218,7 @@ struct BodegaTipStyle: TipViewStyle {
             // always fits above Use This Location at accessibility sizes.
             content
                 .padding(16)
-                .background(.regularMaterial)
+                .background(.thickMaterial)
                 .dynamicTypeSize(...DynamicTypeSize.accessibility1)
         }
     }
@@ -222,9 +228,10 @@ extension View {
     /// An inline `TipView` in `BodegaTipStyle`. TipKit still draws its own
     /// rounded background behind a custom style (and clips the text to its
     /// corners), so inline tips clear it: the container (the map card's
-    /// material, the form row) is the only background (DD13).
-    func inlineBodegaTipStyle() -> some View {
-        tipViewStyle(BodegaTipStyle(inline: true))
+    /// material, the form row) is the only background (DD13). Pass
+    /// `onOpaqueSurface` for an opaque container (#95 D6).
+    func inlineBodegaTipStyle(onOpaqueSurface: Bool = false) -> some View {
+        tipViewStyle(BodegaTipStyle(inline: true, onOpaqueSurface: onOpaqueSurface))
             .tipBackground(Color.clear)
             .tipCornerRadius(0)
     }
