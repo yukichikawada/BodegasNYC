@@ -71,24 +71,42 @@ struct MapBottomCardTests {
     // MARK: bodegaEmptyState
 
     @Test func zeroRowLoadInNearbyIsNoneNearby() {
-        let state = Card.bodegaEmptyState(browseMode: .nearby, isLoadedEmpty: true, isFilteredEmpty: false)
+        let state = Card.bodegaEmptyState(browseMode: .nearby, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: false)
         #expect(state == .noneNearby)
     }
 
+    /// protects: an empty nearby load at block zoom names the block and the
+    /// pinch (#84 design D3); above block zoom it stays `noneNearby`, and
+    /// all-mode keeps `noBodegas` at any zoom.
+    /// fails_when: block zoom shows "Nothing near you yet.", or the block
+    /// card shows above block zoom or in all-mode.
+    /// no_claim: that `MapScreenView` passes the live block-zoom verdict, or
+    /// the slot transition (live QA).
+    @Test func zeroRowLoadInNearbyAtBlockZoomIsNoneOnBlock() {
+        #expect(Card.bodegaEmptyState(browseMode: .nearby, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: true)
+            == .noneOnBlock)
+        #expect(Card.bodegaEmptyState(browseMode: .nearby, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: false)
+            == .noneNearby)
+        #expect(Card.bodegaEmptyState(browseMode: .all, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: true)
+            == .noBodegas)
+        #expect(Card.select(isPlacing: false, firstAdd: nil, emptyState: .noneOnBlock, addTip: true, streets: true)
+            == .emptyState(.noneOnBlock))
+    }
+
     @Test func zeroRowLoadInAllIsNoBodegas() {
-        let state = Card.bodegaEmptyState(browseMode: .all, isLoadedEmpty: true, isFilteredEmpty: false)
+        let state = Card.bodegaEmptyState(browseMode: .all, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: false)
         #expect(state == .noBodegas)
     }
 
     @Test(arguments: [BrowseMode.all, .nearby])
     func filterHidingEveryPinIsNoFilterMatchesNeverANothingHereBanner(_ mode: BrowseMode) {
-        let state = Card.bodegaEmptyState(browseMode: mode, isLoadedEmpty: false, isFilteredEmpty: true)
+        let state = Card.bodegaEmptyState(browseMode: mode, isLoadedEmpty: false, isFilteredEmpty: true, isBlockZoom: false)
         #expect(state == .noFilterMatches)
     }
 
     @Test(arguments: [BrowseMode.all, .nearby])
     func loadedWithVisiblePinsHasNoBodegaBanner(_ mode: BrowseMode) {
-        let state = Card.bodegaEmptyState(browseMode: mode, isLoadedEmpty: false, isFilteredEmpty: false)
+        let state = Card.bodegaEmptyState(browseMode: mode, isLoadedEmpty: false, isFilteredEmpty: false, isBlockZoom: false)
         #expect(state == nil)
     }
 
@@ -118,7 +136,7 @@ struct MapBottomCardTests {
         let content = Card.select(
             isPlacing: false,
             firstAdd: nil,
-            emptyState: Card.bodegaEmptyState(browseMode: .all, isLoadedEmpty: true, isFilteredEmpty: false),
+            emptyState: Card.bodegaEmptyState(browseMode: .all, isLoadedEmpty: true, isFilteredEmpty: false, isBlockZoom: false),
             addTip: false,
             streets: streets
         )

@@ -18,6 +18,9 @@ struct MapBottomCard: View {
     /// precedence.
     nonisolated enum EmptyState: Hashable, Sendable {
         case noneNearby
+        /// `noneNearby` at block zoom (#84 design D3): the 200 m radius is
+        /// the block, so the copy names it and points at the pinch.
+        case noneOnBlock
         case noBodegas
         case noFilterMatches
         case noStreets
@@ -62,14 +65,17 @@ struct MapBottomCard: View {
 
     /// Which bodega banner the map's data calls for. Nearby and all-mode
     /// banners need a load that came back with zero rows; the filter
-    /// banner needs rows that the filter hides entirely.
+    /// banner needs rows that the filter hides entirely. An empty nearby
+    /// load at block zoom is `noneOnBlock`.
     nonisolated static func bodegaEmptyState(
         browseMode: BrowseMode,
         isLoadedEmpty: Bool,
-        isFilteredEmpty: Bool
+        isFilteredEmpty: Bool,
+        isBlockZoom: Bool
     ) -> EmptyState? {
         if isLoadedEmpty {
-            return browseMode == .nearby ? .noneNearby : .noBodegas
+            guard browseMode == .nearby else { return .noBodegas }
+            return isBlockZoom ? .noneOnBlock : .noneNearby
         }
         if isFilteredEmpty { return .noFilterMatches }
         return nil
@@ -118,6 +124,7 @@ private extension MapBottomCard.EmptyState {
     var title: AppCopy {
         switch self {
         case .noneNearby: .emptyNoneNearbyTitle
+        case .noneOnBlock: .emptyNoneOnBlockTitle
         case .noBodegas: .emptyNoBodegasTitle
         case .noFilterMatches: .emptyNoFilterMatchesTitle
         case .noStreets: .emptyNoStreetsTitle
@@ -127,6 +134,7 @@ private extension MapBottomCard.EmptyState {
     var body: AppCopy {
         switch self {
         case .noneNearby: .emptyNoneNearbyBody
+        case .noneOnBlock: .emptyNoneOnBlockBody
         case .noBodegas: .emptyNoBodegasBody
         case .noFilterMatches: .emptyNoFilterMatchesBody
         case .noStreets: .emptyNoStreetsBody
@@ -135,7 +143,7 @@ private extension MapBottomCard.EmptyState {
 
     var action: AppCopy? {
         switch self {
-        case .noneNearby, .noBodegas: .addBodegaAction
+        case .noneNearby, .noneOnBlock, .noBodegas: .addBodegaAction
         case .noFilterMatches: .clearFiltersAction
         case .noStreets: nil
         }
@@ -280,7 +288,7 @@ private struct EmptyStateCard: View {
         switch state {
         case .noBodegas:
             EmptyStateCatSymbol()
-        case .noneNearby:
+        case .noneNearby, .noneOnBlock:
             Image(systemName: "mappin.slash").foregroundStyle(.secondary)
         case .noFilterMatches:
             Image(systemName: "line.3.horizontal.decrease.circle").foregroundStyle(.secondary)

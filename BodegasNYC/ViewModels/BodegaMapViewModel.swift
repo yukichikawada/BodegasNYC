@@ -149,6 +149,13 @@ final class BodegaMapViewModel {
         refetch(mode: mode, region: lastRegion)
     }
 
+    /// Locate Me's landing (#84): `.nearby` from now on, with no fetch around
+    /// the old centre; the landing's settle (`regionDidSettle`) fetches
+    /// around the block, so the bottom card changes once.
+    func enterNearbyAtNextSettle() {
+        browseMode = .nearby
+    }
+
     private func refetch(mode: BrowseMode, region: MKCoordinateRegion?) {
         fetchTask?.cancel()
         currentFetchGeneration += 1

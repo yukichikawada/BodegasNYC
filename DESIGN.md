@@ -248,7 +248,9 @@ secondary (`.lineLimit(4)`, `.minimumScaleFactor(0.85)`), trailing `xmark.circle
 a 44pt target, `.bordered` action row below the text. Stacks vertically at `.accessibility1` and
 up. Reading order title, body, action, close. Every content change moves from the bottom edge
 with opacity over 0.25s ease-in-out (opacity only under Reduce Motion, #23). States: emptyState (noBodegas cat/catPin with bounded
-breathe; noneNearby `mappin.slash`; noFilterMatches `line.3.horizontal.decrease.circle`;
+breathe; noneNearby `mappin.slash`; noneOnBlock `mappin.slash`, the nearby empty card at block zoom,
+"Nothing on this block yet." / "Pinch out and look around. Or add the one on your corner." with
+Add a Bodega (#84; above block zoom noneNearby keeps "Nothing near you yet."); noFilterMatches `line.3.horizontal.decrease.circle`;
 loadFailed `exclamationmark.triangle`), firstAdd, addTip, streets banner, tracking error.
 
 **Pin** (`BodegaPinView`, DD3): 28pt circle, `.pin` or `.catPin`, white 14pt glyph, 2pt white
@@ -283,7 +285,8 @@ Near Me and Cancel `{components.button-secondary}`, Use This Location
 402pt-wide iPhone they do not, so it stacks there too); stacked: Near Me and Cancel on one row
 while they fit, Use This Location full width below; always stacked from `.xLarge` up. In
 landscape at accessibility sizes the title keeps to one line (scale factor down to 0.5) so the
-crosshair still fits above the card. It is a task panel: the material groups the task
+crosshair still fits above the card. Near Me lands at block zoom and does not follow; a second
+tap re-centres (#84 design D7). It is a task panel: the material groups the task
 and its buttons keep native control styling. This is the one material-under-controls exception
 to the Colors rule. The placement tip is a popover on Use This Location, arrow at the bottom,
 presented 0.3s after the card appears and dismissed before the card leaves. The crosshair
@@ -399,7 +402,23 @@ the card; the card supplies the material.
 - **Easing:** springs for objects (pin drop `spring(duration: 0.5, bounce: 0.35)`, cat entrance
   `spring(duration: 0.4, bounce: 0.3)`); `easeInOut` for content and pages (slot 0.25s, page
   advance 0.3s, onboarding exit 0.35s); `easeOut` 0.15 to 0.2s for small state flips.
-- **Duration:** micro 0.15s, short 0.25s, medium 0.3 to 0.4s, long 0.5 to 0.6s (camera pans).
+- **Duration:** micro 0.15s, short 0.25s, medium 0.3 to 0.4s, long 0.5 to 0.6s (camera pans);
+  camera flights over three zoom levels 0.9s.
+- **Locate Me (#84):** a precise fix (100 m or better) flies the camera to block zoom,
+  `locateMeCameraDistance` 850 m, about 350 m of visible height (measured
+  350.2 m on the iPhone 17 Pro simulator), heading kept, pitch levelled, `easeInOut`
+  0.9s when the flight zooms in more than three levels (a ratio of 8) or moves more than 2 km,
+  0.6s otherwise. A precise fix kept from the last 60s lands at once; otherwise the toolbar
+  symbol pulses while the fix is awaited (no spinner). The landing is one-shot: the camera does not follow the user afterwards and a
+  second tap re-centres (probe P1: handing over to `.userLocation` at the landing's settle made
+  MapKit re-zoom to its own follow distance, 2,425 m of visible height, so the handover was
+  dropped and the toolbar symbol has no follow state). Without a precise fix, Locate
+  Me lands where MapKit lands it, at its zoom, with the accuracy halo; no hint. A fix older than
+  10 minutes never lands block zoom. A result that comes back after a pan (the centre moved over
+  20 m; rotation and layout settles do not count), a newer tap, the List tab, a pushed detail or a
+  change of placement is dropped, and the pulse stops. Ignored during the first add's drop and
+  card. The `.nearby` radius keeps its 200 m floor, so an empty block shows noneOnBlock; the
+  nearby fetch waits for the landing's settle, so the bottom card changes once.
 - **The one authored moment:** the first add. Sheet closes, camera settles, pin drops with a
   spring and a success haptic; at +0.6s the first-add card rises; if the bodega has a cat, the
   cat enters from +24pt with a spring and bounces once; the card auto-dismisses after 8s (never
@@ -461,3 +480,7 @@ the card; the card supplies the material.
 | 2026-10-21 | #81 spec D1 to D2: the list is nearest first by default whenever a usable fix exists and newest first otherwise, with a List Order picker (Nearest First / Newest First) in the Filters sheet, remembered across launches; the nearest order is pinned to the fix in hand at List tab entry, re-sorts once if the first usable fix lands after the page is up, and otherwise never reorders under the finger | #68 put the deciding number on every row and then ignored it; the toolbar has no room for a sort control at accessibility sizes |
 | 2026-10-21 | #81 eng R1 to R4 and F1: only a fix at most 10 minutes old is pinned; the pin runs on tab entry, the first attach and an order change, never on a re-appearance; the 1,000-row `fetchAll` cap documented with a TODO; the sheet footer keys on the pinned fix, not on whether a fix exists; newest first is insertion order (local additions in front) | `/plan-eng-review` plus a Codex outside voice; owner accepted all. A stale kept fix must not anchor a visit, and the root view re-appears after every pop |
 | 2026-10-21 | #81 design D1 to D7: List Order sits after Must Have; the footer by state with no Settings nudge; VoiceOver hears the automatic re-sort; a 0.25s cross-fade applied at scroll rest, no animation inside the page slide; Clear Filters, `.large` at accessibility sizes, tinted checkmarks; "Sorted from where you opened the list." while nearest is active; an order change in the sheet scrolls to the top | `/plan-design-review` with two outside voices; owner accepted all. Rows sliding under a reading finger are worse than a fade; Locate Me is a dead tap for denied users |
+| 2026-10-21 | #84 spec D3: Locate Me lands at block zoom (about 350 m visible height; `locateMeCameraDistance` 850 m measured 350.2 m); the follow handover was dropped by probe P1 (MapKit re-zoomed to 2,425 m on it), so the landing is one-shot and a second tap re-centres | #67's labels never showed on the hero tap, which landed at 2,424 m; `MapCameraPosition` cannot follow at a chosen distance |
+| 2026-10-21 | #84 eng R1 to R4: a late Locate Me result is dropped after a newer tap, a settle, the List tab or a change of placement; only a precise fix (100 m or better) lands block zoom, else MapKit's `.userLocation`; R2 (scene-inactive event) belongs to the peek, which did not ship; R4's landing check went with the handover | `/plan-eng-review` plus a Codex outside voice; owner accepted all |
+| 2026-10-21 | #84 design D1, D3, D5 to D8: a precise fix kept from the last 60s lands at once, else the symbol pulses while waiting; noneOnBlock card at block zoom; D5's follow glyph fell away with the handover; Locate Me ignored during the first add; Near Me lands one-shot; 0.9s flights over three zoom levels or 2 km, 0.6s otherwise | `/plan-design-review` with two outside voices; owner accepted all |
+| 2026-10-21 | #84 spec D4 (long-press peek) not shipped: probe P2 check (e) failed with both gesture forms. With `.onLongPressGesture` on the pin MapKit still reported the touch as a selection about 0.1s into the press, so the pin held and the detail pushed under the finger; with `.simultaneousGesture(LongPressGesture)` the press peeked cleanly but MapKit stopped seeing quick taps at all (check (a)). DD3's recovery stays the tap; #84 stays open for the peek | Design D4's stop rule; a UIKit long-press recognizer hit-testing annotation points is the remaining route, a separate decision |

@@ -25,7 +25,8 @@ extension BrowseView {
                 onClearFilters: { filter = mapViewModel.clearedFilterForMapCard(from: filter) },
                 showsAddTip: showsAddTip,
                 addCompletion: addCompletion,
-                showsToolbar: activeTab == .map
+                showsToolbar: activeTab == .map,
+                hasLeftMap: !path.isEmpty || activeTab == .list
             )
             // Pin → detail (#23 T1): the held pin's state and the zoom's
             // namespace, and the pop / placement / List tab events it reacts to.

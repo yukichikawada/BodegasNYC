@@ -27,8 +27,9 @@ final class PinMotionState {
             case .scheduleHold(let id):
                 startTimer(BrowseMotion.PinToDetail.holdSeconds, then: .holdElapsed(id))
             case .scheduleRelease(let id):
-                // Re-placed for the pop: the camera may have moved while the
-                // detail was up (Locate Me follows the user).
+                // Re-placed for the pop: the camera may have moved after the
+                // anchor was placed (pan inertia that had not settled at the
+                // push); a late Locate Me result is dropped under a detail.
                 placeAnchor()
                 startTimer(BrowseMotion.PinToDetail.releaseSeconds, then: .releaseElapsed(id))
             case .push(let bodega):

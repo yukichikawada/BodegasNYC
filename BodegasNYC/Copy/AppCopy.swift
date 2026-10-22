@@ -35,6 +35,8 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case emptyNoBodegasBody
     case emptyNoneNearbyTitle
     case emptyNoneNearbyBody
+    case emptyNoneOnBlockTitle
+    case emptyNoneOnBlockBody
     case emptyNoReviewsCatTitle
     case emptyNoReviewsCatBody
     case emptyNoReviewsTitle
@@ -157,6 +159,9 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .emptyNoBodegasBody: CopyString(kind: .body, text: "You know a spot. Put it on.")
         case .emptyNoneNearbyTitle: CopyString(kind: .title, text: "Nothing near you yet.")
         case .emptyNoneNearbyBody: CopyString(kind: .body, text: "The one on your corner would be a start.")
+        case .emptyNoneOnBlockTitle: CopyString(kind: .title, text: "Nothing on this block yet.")
+        case .emptyNoneOnBlockBody:
+            CopyString(kind: .body, text: "Pinch out and look around. Or add the one on your corner.")
         case .emptyNoReviewsCatTitle: CopyString(kind: .title, text: "No reviews yet.")
         case .emptyNoReviewsCatBody: CopyString(kind: .body, text: "The cat isn't talking. You go first.")
         case .emptyNoReviewsTitle: CopyString(kind: .title, text: "No reviews yet.")

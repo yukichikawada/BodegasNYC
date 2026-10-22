@@ -27,7 +27,7 @@ struct MapScreenView: View {
     private static let attributionClearance: CGFloat = 24
 
     let viewModel: BodegaMapViewModel
-    @Binding private var cameraPosition: MapCameraPosition
+    @Binding var cameraPosition: MapCameraPosition
     /// The tapped pin or cluster. Both are tagged so MapKit's one tap
     /// recognizer decides every tap; a badge tap gesture used to zoom first,
     /// then MapKit's delayed selection opened a member now under the finger.
@@ -46,13 +46,19 @@ struct MapScreenView: View {
     /// global centre, the space `MapProxy.convert` reads (#23 T3).
     @State private var placementCardHeight: CGFloat = 0
     @State private var crosshairPoint: CGPoint?
+    /// Locate Me (#84, `MapScreenView+LocateMe.swift`): the latest tap, the
+    /// pulse, and the settles that moved the camera's centre.
+    @State var locateRequest: LocateRequest?
+    @State var isLocating = false
+    @State var cameraTakeoverCount = 0
+    @State var mapResizedAt: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(PinMotionState.self) var pinMotion // held pin (#23 T1)
-    private let locationPermissionClient: LocationPermissionClient
+    let locationPermissionClient: LocationPermissionClient
     let userLocation: UserLocationProvider? // the dot, a pin-label obstacle (#67)
     private let streetsWalkedViewModel: StreetsWalkedViewModel?
-    @Binding private var isPlacingBodega: Bool
+    @Binding var isPlacingBodega: Bool
     private let onConfirmPlacement: (CLLocationCoordinate2D) -> Void
     private let onSelectBodega: (Bodega) -> Void
     private let onClearFilters: () -> Void
@@ -64,6 +70,9 @@ struct MapScreenView: View {
     let addCompletion: AddCompletionCoordinator?
     /// False under the List tab: no Locate Me / Streets Walked, settles held.
     let showsToolbar: Bool
+    /// The List tab or a pushed detail is up (live, from `BrowseView`): a
+    /// pending Locate Me is cancelled (#84).
+    let hasLeftMap: Bool
 
     init(
         viewModel: BodegaMapViewModel,
@@ -77,7 +86,8 @@ struct MapScreenView: View {
         onClearFilters: @escaping () -> Void,
         showsAddTip: Bool = false,
         addCompletion: AddCompletionCoordinator? = nil,
-        showsToolbar: Bool = true
+        showsToolbar: Bool = true,
+        hasLeftMap: Bool = false
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -91,6 +101,7 @@ struct MapScreenView: View {
         self.showsAddTip = showsAddTip
         self.addCompletion = addCompletion
         self.showsToolbar = showsToolbar
+        self.hasLeftMap = hasLeftMap
     }
 
     /// The bottom slot's one occupant: the placement card while placing,
@@ -108,7 +119,8 @@ struct MapScreenView: View {
             emptyState: MapBottomCard.bodegaEmptyState(
                 browseMode: viewModel.browseMode,
                 isLoadedEmpty: viewModel.isLoadedEmpty,
-                isFilteredEmpty: viewModel.isFilteredEmpty
+                isFilteredEmpty: viewModel.isFilteredEmpty,
+                isBlockZoom: viewModel.pinLabels.isBlockZoom
             ),
             addTip: showsAddTip,
             streets: streetsWalkedViewModel.map {
@@ -125,7 +137,7 @@ struct MapScreenView: View {
         MapReader { proxy in
             // Back to front (spec layer order): map, bottom slot, crosshair
             // (never covered by the card), tracking-error banner.
-            pinLabelTriggers(map(proxy), proxy: proxy)
+            locateMeEvents(pinLabelTriggers(map(proxy), proxy: proxy))
                 .onChange(of: showsToolbar) { _, isMapTab in
                     if isMapTab { mapTabDidReturn(proxy) }
                 }
@@ -244,7 +256,7 @@ struct MapScreenView: View {
 
     private func performBottomCardAction(for content: MapBottomCard.Content) {
         switch content {
-        case .emptyState(.noneNearby), .emptyState(.noBodegas), .addTip:
+        case .emptyState(.noneNearby), .emptyState(.noneOnBlock), .emptyState(.noBodegas), .addTip:
             isPlacingBodega = true
         case .emptyState(.noFilterMatches):
             onClearFilters()
@@ -266,16 +278,6 @@ struct MapScreenView: View {
             longitudeDelta: max(baseSpan.longitudeDelta / 2, Self.minimumZoomSpan)
         )
         cameraPosition = .region(MKCoordinateRegion(center: cluster.coordinate.clLocationCoordinate, span: span))
-    }
-
-    /// The sole trigger for the core When-In-Use location prompt (PRD
-    /// §4.2: requested on first map interaction, not at launch) — never
-    /// fired by incidental panning/zooming or at app launch.
-    private func locateMe() async {
-        let status = await locationPermissionClient.requestWhenInUseAuthorization()
-        guard status == .authorizedWhenInUse || status == .authorizedAlways else { return }
-        viewModel.browseModeDidChange(.nearby, currentRegion: nil)
-        cameraPosition = .userLocation(followsHeading: false, fallback: .region(Self.newYorkCityDefault))
     }
 
     /// The sole trigger for the separate Always location prompt (PRD §5.2:
@@ -366,7 +368,7 @@ extension MapScreenView {
             Button {
                 Task { await locateMe() }
             } label: {
-                Label("Locate Me", systemImage: "location")
+                locateMeLabel
             }
         }
         if let streetsWalkedViewModel {
