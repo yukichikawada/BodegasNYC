@@ -217,7 +217,6 @@ struct AddPhotoView: View {
                         Button(AppCopy.removeAction.copy.text) { viewModel.remove(itemID: item.id) }
                     }
                 }
-                .accessibilityIdentifier("addPhoto.row.\(index)")
             }
         } footer: {
             footer
