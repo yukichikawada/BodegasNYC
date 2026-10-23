@@ -19,7 +19,12 @@ struct BodegasNYCApp: App {
         if CommandLine.arguments.contains("-ResetTips") {
             try? Tips.resetDatastore()
         }
+        UITestFixtures.registerForSharedSession()
         #endif
+        // Photos are immutable (uuid paths), and the gallery and the viewer
+        // load the same images, so a larger shared cache saves refetching
+        // them on every viewer open (#107 eng C3).
+        URLCache.shared = URLCache(memoryCapacity: 50_000_000, diskCapacity: 300_000_000)
         // `.immediate`: the tutorial's tips are gated by their own rules,
         // not by TipKit's default once-a-day pacing.
         try? Tips.configure([

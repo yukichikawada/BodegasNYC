@@ -153,6 +153,32 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     /// front (design D3, the DD15 precedent).
     case listOrderNearestAnnouncement
 
+    // MARK: Photos (#107)
+
+    /// The detail gallery's section header.
+    case photosSectionLabel
+    /// The gallery's picker button. PR 2 renames it "Add Photos".
+    case addPhotoAction
+    /// The thumbnail context menu item and the viewer's menu item.
+    case flagPhotoAction
+    /// The viewer's `xmark` close button (VoiceOver label).
+    case photoViewerCloseLabel
+    /// The viewer's `ellipsis.circle` menu (VoiceOver label).
+    case photoViewerMoreLabel
+    /// VoiceOver named actions on a viewer page (design D19).
+    case photoZoomInAction
+    case photoResetZoomAction
+    /// A gallery thumbnail's VoiceOver hint.
+    case photoOpensFullScreenHint
+    /// A viewer page whose image did not load (design D17); the button under
+    /// it is `retryAction`.
+    case photoLoadFailedBody
+    /// The alert after a flag is submitted, on the detail screen and over
+    /// the viewer (eng A2).
+    case flagSubmittedTitle
+    case flagSubmittedBody
+    case okAction
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -250,6 +276,18 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .listOrderFallbackBody:
             CopyString(kind: .body, text: "Newest first for now. Nearest first needs to know where you are.")
         case .listOrderNearestAnnouncement: CopyString(kind: .body, text: "Nearest first now.")
+        case .photosSectionLabel: CopyString(kind: .label, text: "Photos")
+        case .addPhotoAction: CopyString(kind: .label, text: "Add a Photo")
+        case .flagPhotoAction: CopyString(kind: .label, text: "Flag Photo")
+        case .photoViewerCloseLabel: CopyString(kind: .label, text: "Close")
+        case .photoViewerMoreLabel: CopyString(kind: .label, text: "More")
+        case .photoZoomInAction: CopyString(kind: .label, text: "Zoom In")
+        case .photoResetZoomAction: CopyString(kind: .label, text: "Reset Zoom")
+        case .photoOpensFullScreenHint: CopyString(kind: .body, text: "Opens full screen.")
+        case .photoLoadFailedBody: CopyString(kind: .body, text: "That one didn't load.")
+        case .flagSubmittedTitle: CopyString(kind: .title, text: "Thanks for the heads-up.")
+        case .flagSubmittedBody: CopyString(kind: .body, text: "Your flag was submitted.")
+        case .okAction: CopyString(kind: .label, text: "OK")
         }
     }
 
@@ -323,5 +361,26 @@ nonisolated extension AppCopy {
                 .grouping(.automatic)
                 .locale(Locale(identifier: "en_US"))
         )
+    }
+}
+
+// MARK: - Photo position (#107)
+
+/// The position is data, so these are templates. `index` is zero-based, the
+/// text one-based; the voice test runs them over a fixture set.
+nonisolated extension AppCopy {
+    /// The viewer's counter (design D5): "3 of 12".
+    static func photoCounter(index: Int, count: Int) -> CopyString {
+        CopyString(kind: .value, text: "\(index + 1) of \(count)")
+    }
+
+    /// A thumbnail's and a viewer page's VoiceOver label: "Photo 3 of 12".
+    static func photoPositionLabel(index: Int, count: Int) -> CopyString {
+        CopyString(kind: .value, text: "Photo \(index + 1) of \(count)")
+    }
+
+    /// Posted when the viewer's page changes (design D19): "Photo 3 of 12.".
+    static func photoPageAnnouncement(index: Int, count: Int) -> CopyString {
+        CopyString(kind: .body, text: "Photo \(index + 1) of \(count).")
     }
 }
