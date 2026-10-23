@@ -249,6 +249,35 @@ struct StreetsWalkedViewModelTests {
         #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .fullAccuracy) == false)
     }
 
+    // MARK: Map content churn (#108 R3 device check)
+
+    /// protects: a catch-up that finds nothing new publishes nothing (same
+    /// `walkedRunsVersion`, same run values), and new blocks elsewhere leave
+    /// an unchanged run's `MKPolyline` object in place, so MapKit keeps its
+    /// overlay instead of removing and re-adding every run.
+    /// fails_when: every refresh republishes the runs, or a data change
+    /// rebuilds every run's polyline.
+    /// no_claim: MapKit's own diffing (on-device check).
+    @Test func unchangedRunsKeepTheirPolylinesAcrossRefreshes() async throws {
+        let harness = try makeHarness()
+        try F.seed(Self.blockWalk, in: harness.context)
+        await harness.viewModel.refreshWalkedBlocks()
+        let version = harness.viewModel.walkedRunsVersion
+        let polyline = try #require(harness.viewModel.walkedRuns.first?.polyline)
+
+        await harness.viewModel.refreshWalkedBlocks()
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        await waitForRefresh(harness.viewModel)
+        #expect(harness.viewModel.walkedRunsVersion == version)
+        #expect(harness.viewModel.walkedRuns.first?.polyline === polyline)
+
+        try F.seed(F.walk(from: (0, 68), to: (100, 68), startTime: 3_600), in: harness.context)
+        await harness.viewModel.refreshWalkedBlocks()
+        #expect(harness.viewModel.walkedBlockIDs == [100, 300])
+        #expect(harness.viewModel.walkedRunsVersion != version)
+        #expect(harness.viewModel.walkedRuns.first { $0.id == 100 }?.polyline === polyline)
+    }
+
     // MARK: When matching runs (eng R2, A2)
 
     /// protects: a background delivery only persists raw fixes: no match

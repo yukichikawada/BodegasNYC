@@ -54,8 +54,7 @@ struct MapScreenView: View {
     @State var mapResizedAt: Date?
     /// Walked blocks (#108, `MapScreenView+WalkedBlocks.swift`): what the
     /// map draws, changed only at camera rest (design D10), and its width.
-    @State var walkedVisible: WalkedOverlay.Visible = .runs([])
-    @State var walkedLineWidth = WalkedOverlay.widestBeyond
+    @State var walkedDisplay = WalkedOverlayDisplay()
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize

@@ -24,6 +24,10 @@ nonisolated final class WalkedBlockStore {
     let grid: StreetGrid
     /// The saved masks, mirrored after every successful save.
     private var masks: [UInt32: UInt16]?
+    /// The summary of `masks`, until they change.
+    private var cachedSummary: WalkedSummary?
+    /// The last summary handed out, which the next one reconciles with.
+    private var lastSummary = WalkedSummary.empty
     /// Full rebuilds saved so far (for tests: a stamp change rebuilds once).
     private(set) var rebuildCount = 0
 
@@ -117,6 +121,7 @@ nonisolated final class WalkedBlockStore {
             context.rollback()
             throw error
         }
+        if updated != masks { cachedSummary = nil }
         masks = updated
         if plan.kind == .rebuild { rebuildCount += 1 }
         return true
@@ -164,9 +169,17 @@ nonisolated final class WalkedBlockStore {
         return updated
     }
 
-    /// The saved masks as walked blocks, counts and runs.
+    /// The saved masks as walked blocks, counts and runs. Built once per
+    /// mask change and reconciled with the last one here, off the main
+    /// actor: unchanged runs keep their `MKPolyline` objects and the same
+    /// `runsVersion`, so a catch-up that found nothing new costs the view
+    /// model an integer compare and the map nothing.
     func summary() throws -> WalkedSummary {
-        WalkedSummary(masks: try loadMasks(), grid: grid)
+        if let cachedSummary { return cachedSummary }
+        let fresh = WalkedSummary(masks: try loadMasks(), grid: grid).reconciled(with: lastSummary)
+        cachedSummary = fresh
+        lastSummary = fresh
+        return fresh
     }
 
     /// Deletes every mask and the stamp (Clear History). Raw history is the
@@ -174,6 +187,7 @@ nonisolated final class WalkedBlockStore {
     func clear() throws {
         try Self.clearCache(in: container)
         masks = [:]
+        cachedSummary = nil
     }
 
     static func clearCache(in container: ModelContainer) throws {

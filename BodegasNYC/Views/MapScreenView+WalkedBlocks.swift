@@ -6,16 +6,18 @@ import UIKit
 // indigo (design D1), above the roads but under the labels, pins and the
 // location dot (D4), width by visible height (D2). What is drawn changes only
 // at camera rest, with a 0.2s fade or none under Reduce Motion (D10), and past
-// 2,000 visible runs nothing is drawn and the bottom card says to zoom in (D3).
+// 1,000 visible runs nothing is drawn and the bottom card says to zoom in (D3).
 extension MapScreenView {
     @MapContentBuilder
     var walkedBlockOverlay: some MapContent {
-        if case .runs(let runs) = walkedVisible {
+        if case .runs(let runs) = walkedDisplay.visible {
             ForEach(runs) { run in
-                MapPolyline(coordinates: run.coordinates.map(\.clLocationCoordinate))
+                // The run's cached `MKPolyline`: a reference in the content
+                // list, not a coordinate array copied on every graph update.
+                MapPolyline(run.polyline)
                     .stroke(
                         Color.walked,
-                        style: StrokeStyle(lineWidth: walkedLineWidth, lineCap: .round, lineJoin: .round)
+                        style: StrokeStyle(lineWidth: walkedDisplay.lineWidth, lineCap: .round, lineJoin: .round)
                     )
                     .mapOverlayLevel(level: .aboveRoads)
             }
@@ -25,7 +27,7 @@ extension MapScreenView {
     /// The "Zoom in to see your blocks." card: only while the layer would
     /// show (history, Show on Map on) and the cap hid it.
     var showsZoomInForBlocks: Bool {
-        (streetsWalkedViewModel?.showsWalkedOverlay ?? false) && walkedVisible == .overCap
+        (streetsWalkedViewModel?.showsWalkedOverlay ?? false) && walkedDisplay.visible == .overCap
     }
 
     /// Data changes wait for the camera to rest; the settle itself refreshes
@@ -33,34 +35,44 @@ extension MapScreenView {
     /// (eng A2).
     func walkedBlockTriggers(_ content: some View, proxy: MapProxy) -> some View {
         content
-            .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) {
-                guard !isCameraMoving else { return }
-                refreshWalkedOverlay(proxy)
-            }
-            .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) {
-                guard !isCameraMoving else { return }
-                refreshWalkedOverlay(proxy)
-            }
+            .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy, fades: true) }
+            .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy, fades: true) }
             .onChange(of: scenePhase, initial: true) { _, phase in
                 streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active)
             }
     }
 
-    /// Recomputes what the walked layer draws for the settled region.
-    func refreshWalkedOverlay(_ proxy: MapProxy) {
+    /// Recomputes what the walked layer draws for the settled region; a
+    /// no-op while the camera moves (`WalkedOverlayDisplay.refresh`), so the
+    /// Map's content is untouched mid-gesture, and no state write at all
+    /// when nothing it draws changed. Culling reads the spatial index, so a
+    /// settle costs what is in view, not the whole history.
+    ///
+    /// - Parameter fades: a data or Show on Map change fades in over 0.2s
+    ///   (design D10); a settle's culling (runs entering from the margin)
+    ///   swaps without an animated transaction.
+    func refreshWalkedOverlay(_ proxy: MapProxy, fades: Bool = false) {
         guard let streetsWalkedViewModel else { return }
+        var height: Double?
         if mapSize.height > 0,
-           let bottom = proxy.convert(CGPoint(x: mapSize.width / 2, y: mapSize.height), from: .local),
-           let height = visibleHeightMeters(proxy, bottom: bottom) {
-            walkedLineWidth = WalkedOverlay.lineWidth(visibleHeightMeters: height, current: walkedLineWidth)
+           let bottom = proxy.convert(CGPoint(x: mapSize.width / 2, y: mapSize.height), from: .local) {
+            height = visibleHeightMeters(proxy, bottom: bottom)
         }
-        var next = WalkedOverlay.Visible.runs([])
-        if streetsWalkedViewModel.showsWalkedOverlay, let region = lastVisibleRegion {
-            next = WalkedOverlay.visible(streetsWalkedViewModel.walkedRuns, in: WalkedRegion(region))
+        var next = walkedDisplay
+        let changed = next.refresh(
+            index: streetsWalkedViewModel.walkedRunIndex,
+            showsOverlay: streetsWalkedViewModel.showsWalkedOverlay,
+            region: lastVisibleRegion.map(WalkedRegion.init),
+            visibleHeightMeters: height,
+            isCameraMoving: isCameraMoving
+        )
+        guard changed else { return }
+        guard fades, !reduceMotion else {
+            walkedDisplay = next
+            return
         }
-        guard next != walkedVisible else { return }
-        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.2)) {
-            walkedVisible = next
+        withAnimation(.easeOut(duration: 0.2)) {
+            walkedDisplay = next
         }
     }
 

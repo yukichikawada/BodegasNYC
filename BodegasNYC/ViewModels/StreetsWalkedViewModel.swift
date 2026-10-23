@@ -47,11 +47,15 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     private(set) var walkedBlockIDs: Set<UInt32> = []
     /// Walked and total blocks per borough, in `Borough.displayOrder`.
     private(set) var boroughProgress: [BoroughProgress] = []
-    /// The walked blocks chained for drawing (eng R3).
-    private(set) var walkedRuns: [WalkedRun] = []
-    /// Bumped whenever `walkedRuns` is replaced: a cheap change signal for
-    /// the map, which redraws only at camera rest (design D10).
+    /// The walked blocks chained for drawing (eng R3), with their spatial
+    /// index, built off the main actor.
+    private(set) var walkedRunIndex = WalkedRunIndex.empty
+    var walkedRuns: [WalkedRun] { walkedRunIndex.runs }
+    /// Bumped whenever the runs are replaced: a cheap change signal for the
+    /// map, which redraws only at camera rest (design D10).
     private(set) var walkedRunsVersion = 0
+    /// The matcher's `runsVersion` last applied; `nil` after a clear.
+    private var appliedRunsVersion: Int?
     /// Whether any raw fix is stored.
     private(set) var hasHistory = false
     private(set) var countState: CountState = .idle
@@ -237,7 +241,11 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         if case .failed(let message) = await matcher.clearCache() {
             lastTrackingError = message
         }
-        apply(.empty)
+        walkedBlockIDs = []
+        walkedRunIndex = .empty
+        walkedRunsVersion += 1
+        appliedRunsVersion = nil
+        boroughProgress = boroughProgress.map { BoroughProgress(borough: $0.borough, walked: 0, total: $0.total) }
         hasHistory = storedPointCount() > 0
         if hasHistory { scheduleRefresh() }
     }
@@ -310,17 +318,18 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         }
     }
 
+    /// Publishes a summary only when its runs changed: the matcher's
+    /// `runsVersion` (an integer compare on the main actor, never the arrays)
+    /// moves exactly when they do, and the walked set and counts move with
+    /// them. A catch-up that found nothing new writes no state, so the map's
+    /// content is not touched (R3 device check).
     private func apply(_ summary: WalkedSummary) {
+        guard summary.runsVersion != appliedRunsVersion else { return }
+        appliedRunsVersion = summary.runsVersion
         walkedBlockIDs = summary.walkedIDs
-        if walkedRuns != summary.runs {
-            walkedRuns = summary.runs
-            walkedRunsVersion += 1
-        }
-        if summary.progress.isEmpty {
-            boroughProgress = boroughProgress.map { BoroughProgress(borough: $0.borough, walked: 0, total: $0.total) }
-        } else {
-            boroughProgress = summary.progress
-        }
+        walkedRunIndex = summary.runIndex
+        walkedRunsVersion += 1
+        boroughProgress = summary.progress
     }
 
     private func storedPointCount() -> Int {
