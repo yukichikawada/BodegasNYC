@@ -203,7 +203,10 @@ final class AddPhotoViewModel: Identifiable {
     /// field wraps visually, and Return moves to the next field (design D14).
     func setCaption(_ caption: String, for itemID: Item.ID) {
         guard let index = items.firstIndex(where: { $0.id == itemID }), items[index].isCaptionEditable else { return }
-        items[index].caption = caption.components(separatedBy: .newlines).joined(separator: " ")
+        // By Character, so "\r\n" is one break, not two.
+        items[index].caption = caption
+            .split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+            .joined(separator: " ")
     }
 
     // MARK: Loading (eng C1)
