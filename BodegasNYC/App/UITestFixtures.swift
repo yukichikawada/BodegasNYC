@@ -31,6 +31,20 @@ nonisolated enum UITestFixtures {
     /// Called at launch (#107 eng T1): registers `FixtureURLProtocol` for
     /// `URLSession.shared` too, which `AsyncImage` and the photo viewer use,
     /// so photo bytes come from the fixture and not the network.
+    /// `-UITestPhotoFailures N`: the first N requests for the last fixture
+    /// photo's image answer 404, later ones succeed (#107 design D17). The
+    /// gallery thumbnail makes the first request, so N = 2 fails the
+    /// viewer's first load of that page and lets its Retry succeed.
+    static let photoFailuresArgument = "-UITestPhotoFailures"
+
+    static var photoFailureCount: Int {
+        let arguments = CommandLine.arguments
+        guard let flag = arguments.firstIndex(of: photoFailuresArgument), flag + 1 < arguments.count else {
+            return 0
+        }
+        return Int(arguments[flag + 1]) ?? 0
+    }
+
     static func registerForSharedSession() {
         guard isEnabled else { return }
         URLProtocol.registerClass(FixtureURLProtocol.self)
@@ -44,6 +58,7 @@ nonisolated enum UITestFixtures {
 nonisolated final class FixtureURLProtocol: URLProtocol {
     static let bodegaID = "6E1C7A52-4B0B-4C8F-9C61-0F2E8E5A1B01"
     static let photoCount = 3
+    static let failingPhotoRequests = RequestBudget(failures: UITestFixtures.photoFailureCount)
 
     /// Newest first, as `PhotoService.fetchAll` orders them; no `caption`
     /// column yet (PR 2).
@@ -127,8 +142,14 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
         } else if method == "GET" && path.hasSuffix("/rest/v1/photos") {
             body = Data(Self.photosJSON.utf8)
         } else if method == "GET" && path.contains("/storage/v1/object/public/photos/") {
-            body = Self.photoJPEG(for: path)
-            contentType = "image/jpeg"
+            if path.hasSuffix("fixture-\(Self.photoCount).jpg"), Self.failingPhotoRequests.nextFails() {
+                statusCode = 404
+                contentType = "text/plain"
+                body = Data("UITestFixtures: forced 404".utf8)
+            } else {
+                body = Self.photoJPEG(for: path)
+                contentType = "image/jpeg"
+            }
         } else if method == "GET" {
             body = Data("[]".utf8)
         } else {
@@ -151,5 +172,24 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+}
+
+/// Counts requests across `URLProtocol` instances (which start on any
+/// thread): the first `failures` calls to `nextFails()` return true.
+nonisolated final class RequestBudget: @unchecked Sendable {
+    private let lock = NSLock()
+    private var remaining: Int
+
+    init(failures: Int) {
+        remaining = failures
+    }
+
+    func nextFails() -> Bool {
+        lock.withLock {
+            guard remaining > 0 else { return false }
+            remaining -= 1
+            return true
+        }
+    }
 }
 #endif

@@ -29,9 +29,12 @@ struct PhotoViewer: View {
 
     @Environment(\.dismiss) private var dismiss
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
+    /// The app's scheme, read above the viewer's own forced-dark
+    /// environment: the flag sheet is a standard form and keeps it.
+    @Environment(\.colorScheme) private var systemColorScheme
     @State private var controlsVisible = true
     @State private var groundOpacity: Double = 1
-    @State private var zoomCommand: PhotoZoomCommand?
+    @State private var zoomRequests = PhotoZoomRequests()
     @State private var flagIssueViewModel: FlagIssueViewModel?
     /// Same hand-off as `BodegaDetailView`: the alert is shown from the
     /// sheet's `onDismiss`, never while the sheet is still leaving.
@@ -52,6 +55,7 @@ struct PhotoViewer: View {
                     .ignoresSafeArea()
                 pager
             }
+            .ignoresSafeArea()
             .containerBackground(.clear, for: .navigation)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { controls }
@@ -65,6 +69,7 @@ struct PhotoViewer: View {
         .presentationBackground(.clear)
         .accessibilityAction(.escape) { dismiss() }
         .onChange(of: currentID) {
+            zoomRequests.pageChanged()
             AccessibilityNotification.Announcement(position.announcement.text).post()
         }
         .sheet(item: $flagIssueViewModel, onDismiss: {
@@ -77,6 +82,7 @@ struct PhotoViewer: View {
                 flagSubmittedPendingConfirmation = true
                 self.flagIssueViewModel = nil
             }
+            .environment(\.colorScheme, systemColorScheme)
         })
         .alert(AppCopy.flagSubmittedTitle.copy.text, isPresented: $showingFlagConfirmation) {
             Button(AppCopy.okAction.copy.text, role: .cancel) {}
@@ -92,14 +98,13 @@ struct PhotoViewer: View {
                     url: urlFor(photo),
                     isCurrent: photo.id == currentID,
                     label: AppCopy.photoPositionLabel(index: index, count: photos.count).text,
-                    zoomCommand: zoomCommand?.photoID == photo.id ? zoomCommand : nil,
+                    zoomCommand: zoomRequests.command(for: photo.id),
                     onSingleTap: toggleControls,
                     onZoomAction: { action in
-                        zoomCommand = PhotoZoomCommand(
-                            serial: (zoomCommand?.serial ?? 0) + 1,
-                            photoID: photo.id,
-                            action: action
-                        )
+                        zoomRequests.request(action, for: photo.id)
+                    },
+                    onZoomCommandApplied: { serial in
+                        zoomRequests.consume(serial: serial)
                     },
                     onSwipeDownChanged: { translation in
                         groundOpacity = PhotoMotion.SwipeDown.groundOpacity(translation: translation)
@@ -108,7 +113,7 @@ struct PhotoViewer: View {
                         if dismissed {
                             dismiss()
                         } else {
-                            withAnimation(.easeOut(duration: PhotoMotion.SwipeDown.snapBackSeconds)) {
+                            withAnimation(PhotoMotion.SwipeDown.snapBackAnimation) {
                                 groundOpacity = 1
                             }
                         }
@@ -160,8 +165,8 @@ struct PhotoViewer: View {
 
 /// A VoiceOver zoom request for one page. `serial` makes a repeat of the
 /// same action a new request; `photoID` keeps it off every other page.
-struct PhotoZoomCommand: Equatable {
-    enum Action: Equatable {
+nonisolated struct PhotoZoomCommand: Equatable, Sendable {
+    enum Action: Equatable, Sendable {
         case zoomIn
         case reset
     }
@@ -169,6 +174,32 @@ struct PhotoZoomCommand: Equatable {
     let serial: Int
     let photoID: Photo.ID
     let action: Action
+}
+
+/// The viewer's one pending VoiceOver zoom request. A page consumes it once
+/// applied and a page change drops it, so a page view that TabView
+/// recreates (its last-applied serial forgotten) never replays it.
+nonisolated struct PhotoZoomRequests: Equatable, Sendable {
+    private(set) var pending: PhotoZoomCommand?
+    private var nextSerial = 1
+
+    mutating func request(_ action: PhotoZoomCommand.Action, for photoID: Photo.ID) {
+        pending = PhotoZoomCommand(serial: nextSerial, photoID: photoID, action: action)
+        nextSerial += 1
+    }
+
+    /// Clears the request `serial` names; a newer one stays pending.
+    mutating func consume(serial: Int) {
+        if pending?.serial == serial { pending = nil }
+    }
+
+    mutating func pageChanged() {
+        pending = nil
+    }
+
+    func command(for photoID: Photo.ID) -> PhotoZoomCommand? {
+        pending?.photoID == photoID ? pending : nil
+    }
 }
 
 // MARK: - Page
@@ -182,6 +213,7 @@ private struct PhotoPage: View {
     let zoomCommand: PhotoZoomCommand?
     let onSingleTap: () -> Void
     let onZoomAction: (PhotoZoomCommand.Action) -> Void
+    let onZoomCommandApplied: (Int) -> Void
     let onSwipeDownChanged: (CGFloat) -> Void
     let onSwipeDownEnded: (Bool) -> Void
 
@@ -207,6 +239,7 @@ private struct PhotoPage: View {
                     image: image,
                     isCurrent: isCurrent,
                     zoomCommand: zoomCommand,
+                    onZoomCommandApplied: onZoomCommandApplied,
                     onSingleTap: onSingleTap,
                     onSwipeDownChanged: onSwipeDownChanged,
                     onSwipeDownEnded: onSwipeDownEnded
@@ -220,6 +253,10 @@ private struct PhotoPage: View {
                 failure
             }
         }
+        // The page is the whole screen whether or not the bars show, so
+        // the photo is centred on the screen and never moves when the
+        // controls toggle (QA P2).
+        .ignoresSafeArea()
         .task(id: attempt) { await load() }
     }
 
@@ -280,6 +317,7 @@ private struct ZoomableImagePage: UIViewRepresentable {
     let image: UIImage
     let isCurrent: Bool
     let zoomCommand: PhotoZoomCommand?
+    let onZoomCommandApplied: (Int) -> Void
     let onSingleTap: () -> Void
     let onSwipeDownChanged: (CGFloat) -> Void
     let onSwipeDownEnded: (Bool) -> Void
@@ -299,6 +337,10 @@ private struct ZoomableImagePage: UIViewRepresentable {
         }
         if let zoomCommand {
             view.apply(zoomCommand)
+            // Consumed after this update pass (state can't change inside
+            // it), so a recreated page never replays it (QA P3).
+            let serial = zoomCommand.serial
+            Task { @MainActor in onZoomCommandApplied(serial) }
         }
     }
 }
@@ -320,6 +362,7 @@ final class ZoomablePhotoView: UIView, UIScrollViewDelegate {
         super.init(frame: frame)
         backgroundColor = .clear
         isAccessibilityElement = false
+        insetsLayoutMarginsFromSafeArea = false
 
         scrollView.delegate = self
         scrollView.minimumZoomScale = PhotoMotion.Zoom.minimumScale
@@ -355,6 +398,24 @@ final class ZoomablePhotoView: UIView, UIScrollViewDelegate {
     @available(*, unavailable)
     required init?(coder: NSCoder) {
         fatalError("init(coder:) is not used")
+    }
+
+    /// `TabView(.page)`'s own UIKit scroll view still adjusts its insets for
+    /// the safe area, which `.ignoresSafeArea()` does not reach: hiding the
+    /// status bar with the controls changes the top inset (62 to 48pt on a
+    /// Dynamic Island iPhone) and the page moved 14pt down (QA P2, caught
+    /// by `testThumbnailOpensPagingPhotoViewer`). The pager pages
+    /// horizontally only, so it never needs a vertical inset.
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        var ancestor = superview
+        while let view = ancestor {
+            if let pager = view as? UIScrollView, pager.contentInsetAdjustmentBehavior != .never {
+                pager.contentInsetAdjustmentBehavior = .never
+                pager.contentOffset.y = 0
+            }
+            ancestor = view.superview
+        }
     }
 
     func display(_ image: UIImage) {

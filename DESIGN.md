@@ -403,7 +403,8 @@ a snapshot of the gallery (`TabView(.page)`), always dark as in Photos, on the d
 to 4x, double tap 1x / 2.5x at the tap, paging only at 1x. Controls are system Liquid Glass
 toolbar buttons with 44pt targets: close (`xmark`) leading, the counter ("3 of 12", `.subheadline`,
 monospaced digits) as the principal item, an `ellipsis.circle` menu with Flag Photo trailing, whose
-flag sheet and thanks alert open over the viewer. Controls show on open and never auto-hide; a
+flag sheet and thanks alert open over the viewer. The flag sheet is a standard form and keeps the
+system appearance (light in Light Mode); only the viewer itself is forced dark. Controls show on open and never auto-hide; a
 single tap (once a double tap has failed) toggles them with the status bar and home indicator
 (0.2s `easeOut`, opacity only; `PhotoMotion`); under VoiceOver they stay. At 1x a downward drag
 moves the photo and fades the ground; past 100pt or a fast flick it closes, else it snaps back.

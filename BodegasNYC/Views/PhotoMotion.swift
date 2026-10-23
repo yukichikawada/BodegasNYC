@@ -48,6 +48,7 @@ nonisolated enum PhotoMotion {
         static let minimumGroundOpacity: Double = 0.2
         /// The snap back when a release does not close.
         static let snapBackSeconds: TimeInterval = 0.25
+        static var snapBackAnimation: Animation { .easeOut(duration: snapBackSeconds) }
 
         static func shouldDismiss(translation: CGFloat, velocity: CGFloat) -> Bool {
             translation > dismissDistance || velocity > flickVelocity

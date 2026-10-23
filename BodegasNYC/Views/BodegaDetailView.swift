@@ -30,9 +30,13 @@ struct BodegaDetailView: View {
     @State private var editBodegaViewModel: AddBodegaViewModel?
     /// The open photo viewer's snapshot (eng O3), `nil` while it is closed.
     @State private var photoViewerSession: PhotoViewerSession?
-    /// The viewer's current photo. Also the gallery's scroll target, so the
-    /// thumbnail the return zoom lands on is on screen before it runs.
+    /// The viewer's current photo, the return zoom's source.
     @State private var viewerPhotoID: Photo.ID?
+    /// The gallery's scroll target: set only when the page changes inside
+    /// the viewer, never at open (the tapped thumbnail is already on screen,
+    /// and a scroll there would move the opening zoom's source; QA P3), so
+    /// the thumbnail the return zoom lands on is on screen before it runs.
+    @State private var galleryScrollTarget: Photo.ID?
     @Namespace private var photoNamespace
     /// VoiceOver focus goes back to the current photo's thumbnail when the
     /// viewer closes (design D19).
@@ -104,7 +108,7 @@ struct BodegaDetailView: View {
                     urlFor: viewModel.photoURL(for:),
                     pickedItem: $pickedPhotoItem,
                     namespace: photoNamespace,
-                    scrollTarget: viewerPhotoID,
+                    scrollTarget: galleryScrollTarget,
                     focusedPhotoID: $focusedPhotoID,
                     onOpen: openPhotoViewer(at:)
                 ) { photo in
@@ -207,7 +211,11 @@ struct BodegaDetailView: View {
                 photos: session.photos,
                 currentID: Binding(
                     get: { viewerPhotoID ?? session.initialID },
-                    set: { viewerPhotoID = $0 }
+                    set: { newID in
+                        guard newID != viewerPhotoID else { return }
+                        viewerPhotoID = newID
+                        galleryScrollTarget = newID
+                    }
                 ),
                 urlFor: viewModel.photoURL(for:),
                 makeFlagViewModel: { photoID in
@@ -224,6 +232,9 @@ struct BodegaDetailView: View {
 
     private func openPhotoViewer(at photo: Photo) {
         viewerPhotoID = photo.id
+        // Cleared (the gallery ignores nil) so a page change back to the
+        // last session's target still registers as a change.
+        galleryScrollTarget = nil
         photoViewerSession = PhotoViewerSession(photos: viewModel.photos, initialID: photo.id)
     }
 

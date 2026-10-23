@@ -108,6 +108,33 @@ struct PhotoMotionTests {
         #expect(rect.midY == 200)
     }
 
+    // MARK: VoiceOver zoom requests (QA P3)
+
+    /// protects: a VoiceOver zoom request reaches only its page, once; a page change drops it.
+    /// fails_when: a consumed request is still pending (a recreated page would zoom again), another
+    /// page sees it, consuming a stale serial drops a newer request, or paging keeps it.
+    /// no_claim: that PhotoViewer calls consume after the page applies it (code path, live QA).
+    @Test func zoomRequestIsConsumedOnceAndDroppedOnPageChange() throws {
+        var requests = PhotoZoomRequests()
+        requests.request(.zoomIn, for: ids[0])
+        let first = requests.command(for: ids[0])
+        #expect(first?.action == .zoomIn)
+        #expect(requests.command(for: ids[1]) == nil)
+
+        requests.consume(serial: try #require(first).serial)
+        #expect(requests.pending == nil)
+
+        requests.request(.zoomIn, for: ids[0])
+        let second = try #require(requests.command(for: ids[0]))
+        requests.request(.reset, for: ids[0])
+        requests.consume(serial: second.serial)
+        #expect(requests.command(for: ids[0])?.action == .reset)
+        #expect(requests.command(for: ids[0])?.serial != second.serial)
+
+        requests.pageChanged()
+        #expect(requests.pending == nil)
+    }
+
     // MARK: Motion tokens
 
     /// protects: the PhotoMotion timings match design D21 and DESIGN.md.
