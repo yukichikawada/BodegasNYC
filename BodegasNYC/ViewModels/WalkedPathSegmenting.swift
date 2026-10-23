@@ -8,9 +8,23 @@ import Foundation
 nonisolated struct WalkedPointSnapshot: Sendable, Equatable {
     var coordinate: Coordinate
     var recordedAt: Date
+    /// The `WalkedPoint`'s id: the tie-break when two fixes share a
+    /// timestamp, so every pass orders history the same way (#108).
+    var id = UUID()
+
+    /// History order (#108): `recordedAt`, then `id`.
+    static func sortsBefore(_ lhs: WalkedPointSnapshot, _ rhs: WalkedPointSnapshot) -> Bool {
+        lhs.recordedAt != rhs.recordedAt ? lhs.recordedAt < rhs.recordedAt : lhs.id < rhs.id
+    }
 }
 
 extension StreetsWalkedViewModel {
+    /// The walk-gap rule: consecutive fixes further apart than this in time
+    /// or distance belong to different walks. `BlockMatcher` breaks legs on
+    /// the same thresholds (#108).
+    nonisolated static let walkGapSeconds: TimeInterval = 20 * 60
+    nonisolated static let walkGapMeters: Double = 250
+
     /// Splits `points` (must already be sorted chronologically) into
     /// separate polylines wherever the gap to the next point exceeds
     /// `maxGapSeconds` or `maxGapMeters` — otherwise a single flat polyline
@@ -23,8 +37,8 @@ extension StreetsWalkedViewModel {
     /// point isn't a renderable `MapPolyline`.
     nonisolated static func segments(
         from points: [WalkedPointSnapshot],
-        maxGapSeconds: TimeInterval = 20 * 60,
-        maxGapMeters: Double = 250
+        maxGapSeconds: TimeInterval = walkGapSeconds,
+        maxGapMeters: Double = walkGapMeters
     ) -> [[Coordinate]] {
         guard let first = points.first else { return [] }
 

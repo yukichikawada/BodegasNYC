@@ -124,15 +124,47 @@ struct MapBottomCardTests {
 
     // MARK: showsStreetsBanner
 
-    @Test func streetsBannerNeedsTrackingOnNoPolylinesAndNotDismissed() {
-        #expect(Card.showsStreetsBanner(isTrackingEnabled: true, hasPolylines: false, isDismissed: false))
-        #expect(!Card.showsStreetsBanner(isTrackingEnabled: false, hasPolylines: false, isDismissed: false))
-        #expect(!Card.showsStreetsBanner(isTrackingEnabled: true, hasPolylines: true, isDismissed: false))
-        #expect(!Card.showsStreetsBanner(isTrackingEnabled: true, hasPolylines: false, isDismissed: true))
+    /// protects: "No streets yet." keys on walked blocks, not raw fixes
+    /// (#108 spec 8), and never shows while the first count runs (design D8).
+    /// fails_when: it shows with walked blocks, with recording off, once
+    /// closed, or before any count has finished.
+    /// no_claim: that the view model reports `hasCounted` at the right time
+    /// (StreetsWalkedViewModelTests).
+    @Test func streetsBannerNeedsTrackingOnACountedZeroAndNotDismissed() {
+        #expect(Card.showsStreetsBanner(isTrackingEnabled: true, hasCounted: true, hasWalkedBlocks: false, isDismissed: false))
+        #expect(!Card.showsStreetsBanner(isTrackingEnabled: false, hasCounted: true, hasWalkedBlocks: false, isDismissed: false))
+        #expect(!Card.showsStreetsBanner(isTrackingEnabled: true, hasCounted: true, hasWalkedBlocks: true, isDismissed: false))
+        #expect(!Card.showsStreetsBanner(isTrackingEnabled: true, hasCounted: true, hasWalkedBlocks: false, isDismissed: true))
+        #expect(!Card.showsStreetsBanner(isTrackingEnabled: true, hasCounted: false, hasWalkedBlocks: false, isDismissed: false))
+    }
+
+    /// protects: "Zoom in to see your blocks." is the lowest card (#108
+    /// design D3): it yields to every other card and shows alone otherwise.
+    /// fails_when: it outranks the streets banner or the add tip.
+    /// no_claim: when the overlay is over its cap (WalkedOverlayTests).
+    @Test func zoomInForBlocksIsTheLowestCard() {
+        #expect(
+            Card.select(isPlacing: false, firstAdd: nil, emptyState: nil, addTip: false, streets: false, zoomInForBlocks: true)
+                == .emptyState(.zoomInForBlocks)
+        )
+        #expect(
+            Card.select(isPlacing: false, firstAdd: nil, emptyState: nil, addTip: false, streets: true, zoomInForBlocks: true)
+                == .emptyState(.noStreets)
+        )
+        #expect(
+            Card.select(isPlacing: false, firstAdd: nil, emptyState: nil, addTip: true, streets: false, zoomInForBlocks: true)
+                == .addTip
+        )
+        #expect(
+            Card.select(isPlacing: true, firstAdd: nil, emptyState: nil, addTip: false, streets: false, zoomInForBlocks: true)
+                == nil
+        )
     }
 
     @Test func streetsBannerYieldsToABodegaBanner() {
-        let streets = Card.showsStreetsBanner(isTrackingEnabled: true, hasPolylines: false, isDismissed: false)
+        let streets = Card.showsStreetsBanner(
+            isTrackingEnabled: true, hasCounted: true, hasWalkedBlocks: false, isDismissed: false
+        )
         let content = Card.select(
             isPlacing: false,
             firstAdd: nil,

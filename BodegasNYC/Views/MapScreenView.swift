@@ -52,12 +52,16 @@ struct MapScreenView: View {
     @State var isLocating = false
     @State var cameraTakeoverCount = 0
     @State var mapResizedAt: Date?
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Walked blocks (#108, `MapScreenView+WalkedBlocks.swift`): what the
+    /// map draws, changed only at camera rest (design D10), and its width.
+    @State var walkedDisplay = WalkedOverlayDisplay()
+    @Environment(\.scenePhase) var scenePhase
+    @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(PinMotionState.self) var pinMotion // held pin (#23 T1)
     let locationPermissionClient: LocationPermissionClient
     let userLocation: UserLocationProvider? // the dot, a pin-label obstacle (#67)
-    private let streetsWalkedViewModel: StreetsWalkedViewModel?
+    let streetsWalkedViewModel: StreetsWalkedViewModel?
     @Binding var isPlacingBodega: Bool
     private let onConfirmPlacement: (CLLocationCoordinate2D) -> Void
     private let onSelectBodega: (Bodega) -> Void
@@ -126,10 +130,12 @@ struct MapScreenView: View {
             streets: streetsWalkedViewModel.map {
                 MapBottomCard.showsStreetsBanner(
                     isTrackingEnabled: $0.isTrackingEnabled,
-                    hasPolylines: !$0.polylines.isEmpty,
+                    hasCounted: $0.hasCounted && $0.countState != .unavailable,
+                    hasWalkedBlocks: !$0.walkedBlockIDs.isEmpty,
                     isDismissed: $0.isEmptyBannerDismissed
                 )
-            } ?? false
+            } ?? false,
+            zoomInForBlocks: showsZoomInForBlocks
         )
     }
 
@@ -137,7 +143,7 @@ struct MapScreenView: View {
         MapReader { proxy in
             // Back to front (spec layer order): map, bottom slot, crosshair
             // (never covered by the card), tracking-error banner.
-            locateMeEvents(pinLabelTriggers(map(proxy), proxy: proxy))
+            walkedBlockTriggers(locateMeEvents(pinLabelTriggers(map(proxy), proxy: proxy)), proxy: proxy)
                 .onChange(of: showsToolbar) { _, isMapTab in
                     if isMapTab { mapTabDidReturn(proxy) }
                 }
@@ -175,7 +181,8 @@ struct MapScreenView: View {
         }
         .task {
             viewModel.loadInitialIfNeeded(region: Self.newYorkCityDefault)
-            streetsWalkedViewModel?.loadPolylinesIfNeeded()
+            // The map showing is one of the times matching runs (eng R2).
+            await streetsWalkedViewModel?.refreshWalkedBlocks()
         }
         .toolbar {
             // Map-only items, innermost in the trailing group so Account and
@@ -185,14 +192,18 @@ struct MapScreenView: View {
             }
         }
         .confirmationDialog(
-            "Delete all walked-street history? This can't be undone.",
+            AppCopy.clearHistoryConfirmTitle.copy.text,
             isPresented: $showingClearConfirmation,
             titleVisibility: .visible
         ) {
-            Button("Delete All", role: .destructive) {
-                Task { await clearStreetsWalkedHistory() }
+            Button(AppCopy.deleteHistoryAction.copy.text, role: .destructive) {
+                // The cutoff is this tap (design D5, eng R9).
+                let tapTime = Date()
+                Task { await clearStreetsWalkedHistory(at: tapTime) }
             }
-            Button("Cancel", role: .cancel) {}
+            Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
+        } message: {
+            Text(AppCopy.clearHistoryConfirmBody.copy.text)
         }
     }
 
@@ -224,12 +235,7 @@ struct MapScreenView: View {
                 }
             }
             pinMotion.standInAnnotation(among: viewModel.displayItems)
-            if let streetsWalkedViewModel, streetsWalkedViewModel.isTrackingEnabled {
-                ForEach(Array(streetsWalkedViewModel.polylines.enumerated()), id: \.offset) { _, path in
-                    MapPolyline(coordinates: path.map(\.clLocationCoordinate))
-                        .stroke(.orange.opacity(0.55), lineWidth: 4)
-                }
-            }
+            walkedBlockOverlay
             // The standard blue dot + heading cone, same as Apple/Google
             // Maps. Silently renders nothing until When-In-Use is granted
             // and a fix arrives — no separate gating needed here.
@@ -262,7 +268,7 @@ struct MapScreenView: View {
             onClearFilters()
         case .firstAdd:
             addCompletion?.dismissFirstAddCard()
-        case .emptyState(.noStreets):
+        case .emptyState(.noStreets), .emptyState(.zoomInForBlocks):
             break
         }
     }
@@ -278,37 +284,6 @@ struct MapScreenView: View {
             longitudeDelta: max(baseSpan.longitudeDelta / 2, Self.minimumZoomSpan)
         )
         cameraPosition = .region(MKCoordinateRegion(center: cluster.coordinate.clLocationCoordinate, span: span))
-    }
-
-    /// The sole trigger for the separate Always location prompt (PRD §5.2:
-    /// never bundled with the core When-In-Use ask above). Requesting
-    /// Always from `.notDetermined` typically only yields
-    /// `.authorizedWhenInUse` from the system's first prompt — full
-    /// "Always" needs either a later just-in-time prompt or Settings, so
-    /// that case gets a nudge there rather than silently doing nothing.
-    private func toggleStreetsWalked() async {
-        guard let streetsWalkedViewModel else { return }
-        guard !streetsWalkedViewModel.isTrackingEnabled else {
-            streetsWalkedViewModel.disableTracking()
-            return
-        }
-        switch await streetsWalkedViewModel.requestTrackingPermission() {
-        case .authorizedAlways:
-            try? await streetsWalkedViewModel.enableTracking()
-        case .authorizedWhenInUse:
-            openSettings()
-        default:
-            break
-        }
-    }
-
-    private func clearStreetsWalkedHistory() async {
-        try? await streetsWalkedViewModel?.clearHistory()
-    }
-
-    private func openSettings() {
-        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
-        UIApplication.shared.open(url)
     }
 }
 
@@ -373,15 +348,35 @@ extension MapScreenView {
         }
         if let streetsWalkedViewModel {
             ToolbarItem(placement: .topBarTrailing) {
+                // Design D5, less Your Blocks, which arrives with its sheet
+                // (#108 PR 2).
                 Menu {
-                    Button(streetsWalkedViewModel.isTrackingEnabled ? "Turn Off" : "Turn On") {
-                        Task { await toggleStreetsWalked() }
+                    Section {
+                        Toggle(
+                            AppCopy.showOnMapToggle.copy.text,
+                            isOn: Binding(
+                                get: { streetsWalkedViewModel.isOverlayVisible },
+                                set: { streetsWalkedViewModel.isOverlayVisible = $0 }
+                            )
+                        )
+                        .disabled(!streetsWalkedViewModel.hasHistory)
                     }
-                    Button("Clear History…", role: .destructive) {
-                        showingClearConfirmation = true
+                    Section {
+                        Button(
+                            streetsWalkedViewModel.isTrackingEnabled
+                                ? AppCopy.stopRecordingAction.copy.text
+                                : AppCopy.startRecordingAction.copy.text
+                        ) {
+                            Task { await toggleStreetsWalked() }
+                        }
+                    }
+                    Section {
+                        Button(AppCopy.clearHistoryMenuItem.menuItemWithEllipsis, role: .destructive) {
+                            showingClearConfirmation = true
+                        }
                     }
                 } label: {
-                    Label("Streets Walked", systemImage: "figure.walk")
+                    Label(AppCopy.streetsWalkedMenuLabel.copy.text, systemImage: "figure.walk")
                 }
             }
         }

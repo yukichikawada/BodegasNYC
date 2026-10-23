@@ -2,9 +2,14 @@ import CoreLocation
 import Observation
 import SwiftData
 
-/// Streets-walked heatmap (`docs/PRD.md` §5): opt-in, off-by-default
+/// Streets Walked (`docs/PRD.md` §5, #108): opt-in, off-by-default
 /// continuous background location tracking, persisted locally to SwiftData
-/// and rendered as a polyline overlay (`MapScreenView`).
+/// as raw fixes, map-matched into walked street blocks
+/// (`BlockMatchingActor`) and drawn as a block overlay (`MapScreenView`).
+///
+/// Background deliveries only persist raw fixes (eng R2): matching, and the
+/// street data load it needs, run when the scene becomes active, when the
+/// map shows, and per delivery only while the scene is active.
 ///
 /// Owns its own dedicated `CLLocationManager`, separate from
 /// `LocationPermissionClient`'s — a `CLLocationManager` only supports one
@@ -25,14 +30,57 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         case authorizationNotGranted
     }
 
+    /// Where the block counts stand (design D8).
+    enum CountState: Equatable {
+        /// Nothing asked yet (no history, recording off: the street data
+        /// never loads).
+        case idle
+        /// A pass is running; the last overlay and counts stay up.
+        case counting
+        case ready
+        /// The bundled street data did not load (eng R5).
+        case unavailable
+    }
+
     private(set) var isTrackingEnabled = false
-    private(set) var polylines: [[Coordinate]] = []
+    /// Blocks with at least 6 of 10 tenths walked, by `physicalid`.
+    private(set) var walkedBlockIDs: Set<UInt32> = []
+    /// Walked and total blocks per borough, in `Borough.displayOrder`.
+    private(set) var boroughProgress: [BoroughProgress] = []
+    /// The walked blocks chained for drawing (eng R3), with their spatial
+    /// index, built off the main actor.
+    private(set) var walkedRunIndex = WalkedRunIndex.empty
+    var walkedRuns: [WalkedRun] { walkedRunIndex.runs }
+    /// Bumped whenever the runs are replaced: a cheap change signal for the
+    /// map, which redraws only at camera rest (design D10).
+    private(set) var walkedRunsVersion = 0
+    /// The matcher's `runsVersion` last applied; `nil` after a clear.
+    private var appliedRunsVersion: Int?
+    /// Whether any raw fix is stored.
+    private(set) var hasHistory = false
+    private(set) var countState: CountState = .idle
+    /// A count has saved since launch, so zero walked blocks is a fact, not
+    /// a count in progress (design D8: no "No streets yet." while counting
+    /// with no prior blocks).
+    private(set) var hasCounted = false
+    /// Show on Map (eng R11): persisted, on by default, independent of
+    /// recording and Clear History.
+    var isOverlayVisible: Bool {
+        didSet { userDefaults.set(isOverlayVisible, forKey: Self.overlayVisibleDefaultsKey) }
+    }
     private(set) var lastTrackingError: String?
     /// The map's "No streets yet." card was closed. Deliberately not
     /// persisted: it lives here rather than on `MapScreenView` so it
     /// survives the Map/List tab switch that rebuilds that view, and resets
     /// on relaunch (spec #24, eng review).
     var isEmptyBannerDismissed = false
+    /// Whether the scene is in the foreground; deliveries match only then.
+    private(set) var isSceneActive = false
+    /// The map draws walked blocks while history exists and Show on Map is
+    /// on, recording or not (eng R11).
+    var showsWalkedOverlay: Bool { isOverlayVisible && hasHistory }
+    /// Whether a refresh is running or queued.
+    var isRefreshing: Bool { refreshTask != nil }
 
     private let locationPermissionClient: LocationPermissionClient
     /// Held explicitly (not just its `.mainContext`) so the container's
@@ -42,23 +90,38 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     private let modelContext: ModelContext
     private let userDefaults: UserDefaults
     private let manager: CLLocationManager
+    private let matcher: BlockMatchingActor
+    private let motion: any MotionActivityProviding
+    private var refreshTask: Task<Void, Never>?
+    private var refreshQueued = false
 
     private static let trackingEnabledDefaultsKey = "streetsWalked.isTrackingEnabled"
+    private static let overlayVisibleDefaultsKey = "streetsWalked.isOverlayVisible"
+    private static let motionAskedDefaultsKey = "streetsWalked.hasAskedForMotion"
     /// Must match a key in `Info.plist`'s
     /// `NSLocationTemporaryUsageDescriptionDictionary` — calling
     /// `requestTemporaryFullAccuracyAuthorization` with an unregistered key
     /// is a hard runtime crash, not a catchable error.
     private static let fullAccuracyPurposeKey = "StreetsWalkedTracking"
 
+    /// - Parameters:
+    ///   - matcher: the matching actor; by default one over `modelContainer`
+    ///     with the bundled street data and CoreMotion.
+    ///   - motion: Motion & Fitness, for the one-time ask (design D6).
     init(
         locationPermissionClient: LocationPermissionClient,
         modelContainer: ModelContainer,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        motion: any MotionActivityProviding = CoreMotionActivityProvider(),
+        matcher: BlockMatchingActor? = nil
     ) {
         self.locationPermissionClient = locationPermissionClient
         self.modelContainer = modelContainer
         self.modelContext = modelContainer.mainContext
         self.userDefaults = userDefaults
+        self.motion = motion
+        self.matcher = matcher ?? BlockMatchingActor(container: modelContainer, activityProvider: motion)
+        isOverlayVisible = userDefaults.object(forKey: Self.overlayVisibleDefaultsKey) as? Bool ?? true
         let manager = CLLocationManager()
         self.manager = manager
         super.init()
@@ -69,6 +132,7 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         manager.activityType = .fitness
         manager.distanceFilter = 15
         manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+        hasHistory = storedPointCount() > 0
     }
 
     /// Forwards to the shared `LocationPermissionClient` rather than
@@ -123,7 +187,7 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         manager.startUpdatingLocation()
         isTrackingEnabled = true
         userDefaults.set(true, forKey: Self.trackingEnabledDefaultsKey)
-        loadPolylinesIfNeeded()
+        scheduleRefresh()
     }
 
     /// Pauses collection only — never deletes history. Clearing history is
@@ -134,6 +198,17 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         userDefaults.set(false, forKey: Self.trackingEnabledDefaultsKey)
     }
 
+    /// Asks for Motion & Fitness once, ever (design D6): right after Start
+    /// Recording succeeds and the location dialogs have closed. Never on map
+    /// open, rebuild or resume; the matcher's queries never prompt.
+    func requestMotionAccessIfNeeded() async {
+        guard motion.authorization == .notDetermined,
+              !userDefaults.bool(forKey: Self.motionAskedDefaultsKey)
+        else { return }
+        userDefaults.set(true, forKey: Self.motionAskedDefaultsKey)
+        await motion.requestAuthorization()
+    }
+
     /// Called once from the composition root on every launch. Per Apple's
     /// documented contract, iOS can relaunch a terminated app in the
     /// background for a new location event, and the app is expected to
@@ -141,26 +216,45 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     /// — without this, background tracking would silently stop working the
     /// first time the app is ever killed, defeating the feature's purpose.
     /// Resumes silently (no prompt) only if both the persisted flag and
-    /// current authorization already hold.
+    /// current authorization already hold. Does not match: a background
+    /// relaunch only records (eng R2).
     func resumeTrackingIfPreviouslyEnabled() {
         guard userDefaults.bool(forKey: Self.trackingEnabledDefaultsKey),
               alwaysAuthorizationStatus == .authorizedAlways
         else { return }
         manager.startUpdatingLocation()
         isTrackingEnabled = true
-        loadPolylinesIfNeeded()
         // Fire-and-forget: this method is called synchronously from the
         // composition root's launch-time factory, which isn't async.
         Task { await requestFullAccuracyIfNeeded() }
     }
 
-    /// Deletes all persisted walked-street history (PRD §5.1: users must be
-    /// able to fully clear it). Does not affect whether tracking is
-    /// currently enabled.
-    func clearHistory() async throws {
-        try modelContext.delete(model: WalkedPoint.self)
+    /// Clear History (PRD §5.1, eng R9): deletes every fix recorded up to
+    /// `tapTime` (the confirm tap) at once, makes any pass in flight drop its
+    /// work, then clears the block cache after it. A fix saved after the
+    /// tap survives and starts the new history. Does not affect whether
+    /// tracking is enabled.
+    func clearHistory(at tapTime: Date = Date()) async throws {
+        try modelContext.delete(model: WalkedPoint.self, where: #Predicate { $0.recordedAt <= tapTime })
         try modelContext.save()
-        polylines = []
+        matcher.invalidate()
+        if case .failed(let message) = await matcher.clearCache() {
+            lastTrackingError = message
+        }
+        walkedBlockIDs = []
+        walkedRunIndex = .empty
+        walkedRunsVersion += 1
+        appliedRunsVersion = nil
+        boroughProgress = boroughProgress.map { BoroughProgress(borough: $0.borough, walked: 0, total: $0.total) }
+        hasHistory = storedPointCount() > 0
+        if hasHistory { scheduleRefresh() }
+    }
+
+    /// The scene came to the foreground (or left it). Coming back runs a
+    /// catch-up pass even when no fix arrives (eng A2).
+    func sceneActivityChanged(isActive: Bool) {
+        isSceneActive = isActive
+        if isActive { scheduleRefresh() }
     }
 
     /// Acknowledges/clears the current error so the UI can dismiss whatever
@@ -171,27 +265,75 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         lastTrackingError = nil
     }
 
-    /// Refetches and resegments the persisted history. Cheap and idempotent
-    /// at this feature's scale, so callers (a view's `.task`, right after
-    /// enabling tracking, right after clearing history) can call it
-    /// whenever a refresh might matter rather than needing a separate
-    /// invalidation signal.
-    func loadPolylinesIfNeeded() {
-        do {
-            let descriptor = FetchDescriptor<WalkedPoint>()
-            let points = try modelContext.fetch(descriptor)
-            let snapshots = points
-                .sorted { $0.recordedAt < $1.recordedAt }
-                .map {
-                    WalkedPointSnapshot(
-                        coordinate: Coordinate(latitude: $0.latitude, longitude: $0.longitude),
-                        recordedAt: $0.recordedAt
-                    )
-                }
-            polylines = Self.segments(from: snapshots)
-        } catch {
-            lastTrackingError = error.localizedDescription
+    /// Brings the walked blocks up to date with history and waits for it.
+    /// Requests that land while a pass runs are folded into one more pass.
+    /// Without history and with recording off it does nothing, so the
+    /// street data never loads for people who never opted in.
+    func refreshWalkedBlocks() async {
+        scheduleRefresh()
+        await refreshTask?.value
+    }
+
+    private func scheduleRefresh() {
+        hasHistory = storedPointCount() > 0
+        guard hasHistory || isTrackingEnabled else { return }
+        guard refreshTask == nil else {
+            refreshQueued = true
+            return
         }
+        refreshTask = Task { [weak self] in
+            await self?.runRefreshes()
+        }
+    }
+
+    private func runRefreshes() async {
+        repeat {
+            refreshQueued = false
+            await refreshOnce()
+        } while refreshQueued
+        refreshTask = nil
+    }
+
+    private func refreshOnce() async {
+        let generation = matcher.generation
+        if countState != .unavailable { countState = .counting }
+        let outcome = await matcher.catchUp()
+        // A Clear History that landed meanwhile owns the state now.
+        guard matcher.generation == generation else {
+            countState = hasCounted ? .ready : .idle
+            return
+        }
+        switch outcome {
+        case .updated(let summary, _):
+            apply(summary)
+            hasCounted = true
+            countState = .ready
+        case .unavailable:
+            countState = .unavailable
+        case .cancelled:
+            countState = hasCounted ? .ready : .idle
+        case .failed(let message):
+            lastTrackingError = message
+            countState = hasCounted ? .ready : .idle
+        }
+    }
+
+    /// Publishes a summary only when its runs changed: the matcher's
+    /// `runsVersion` (an integer compare on the main actor, never the arrays)
+    /// moves exactly when they do, and the walked set and counts move with
+    /// them. A catch-up that found nothing new writes no state, so the map's
+    /// content is not touched (R3 device check).
+    private func apply(_ summary: WalkedSummary) {
+        guard summary.runsVersion != appliedRunsVersion else { return }
+        appliedRunsVersion = summary.runsVersion
+        walkedBlockIDs = summary.walkedIDs
+        walkedRunIndex = summary.runIndex
+        walkedRunsVersion += 1
+        boroughProgress = summary.progress
+    }
+
+    private func storedPointCount() -> Int {
+        (try? modelContext.fetchCount(FetchDescriptor<WalkedPoint>())) ?? 0
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
@@ -202,11 +344,11 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
 
     /// The main-actor body of `didUpdateLocations`, split out so tests can
     /// drive it synchronously instead of racing the delegate's `Task`.
-    /// Persists every fix accurate and fresh enough to trust, then refreshes
-    /// `polylines` (eng review R8) so the overlay — and the "No streets
-    /// yet." card's "This fills in on its own" — update while walking
-    /// rather than only the next time the map appears.
+    /// Persists every fix accurate and fresh enough to trust. In the
+    /// background that is all (eng R2); in the foreground it also queues a
+    /// match pass, so the overlay and the cards update while walking.
     func recordLocations(_ locations: [CLLocation]) {
+        var inserted = 0
         for location in locations {
             guard location.horizontalAccuracy >= 0, location.horizontalAccuracy <= 50,
                   abs(location.timestamp.timeIntervalSinceNow) <= 30
@@ -218,7 +360,9 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
                     recordedAt: location.timestamp
                 )
             )
+            inserted += 1
         }
+        guard inserted > 0 else { return }
         // Explicit, immediate save rather than relying on autosave
         // timing — the process can be suspended moments after a
         // background delivery.
@@ -228,7 +372,8 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
             lastTrackingError = error.localizedDescription
             return
         }
-        loadPolylinesIfNeeded()
+        hasHistory = true
+        if isSceneActive { scheduleRefresh() }
     }
 
     nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {

@@ -197,6 +197,25 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     /// The single-photo preview's VoiceOver label; the no-loadable-picks body.
     case selectedPhotoLabel, photoUnreadableBody
 
+    // MARK: Streets Walked (#108, design D3, D5, D11)
+
+    case streetsWalkedMenuLabel
+    case showOnMapToggle
+    case startRecordingAction
+    case stopRecordingAction
+    /// The menu shows it with a trailing ellipsis (`menuItemWithEllipsis`):
+    /// it opens a confirmation, the HIG's rule for "…".
+    case clearHistoryMenuItem
+    case clearHistoryConfirmTitle
+    /// The cutoff is the confirm tap (design D5, eng R9).
+    case clearHistoryConfirmBody
+    case deleteHistoryAction
+    /// The bottom card when more walked runs are in view than the map draws
+    /// (design D3): the whole layer hides instead of drawing a subset.
+    case zoomInForBlocksTitle
+    /// VoiceOver, once Clear History is done (design D11).
+    case historyClearedAnnouncement
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -320,7 +339,24 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .photoUploadedValue: CopyString(kind: .value, text: "Went up")
         case .selectedPhotoLabel: CopyString(kind: .value, text: "Selected photo")
         case .photoUnreadableBody: CopyString(kind: .body, text: "Try a different photo.")
+        case .streetsWalkedMenuLabel: CopyString(kind: .label, text: "Streets Walked")
+        case .showOnMapToggle: CopyString(kind: .label, text: "Show on Map")
+        case .startRecordingAction: CopyString(kind: .label, text: "Start Recording")
+        case .stopRecordingAction: CopyString(kind: .label, text: "Stop Recording")
+        case .clearHistoryMenuItem: CopyString(kind: .label, text: "Clear History")
+        case .clearHistoryConfirmTitle: CopyString(kind: .title, text: "Delete your walked history?")
+        case .clearHistoryConfirmBody:
+            CopyString(kind: .body, text: "Your saved walks and block counts go. This can't be undone.")
+        case .deleteHistoryAction: CopyString(kind: .label, text: "Delete History")
+        case .zoomInForBlocksTitle: CopyString(kind: .title, text: "Zoom in to see your blocks.")
+        case .historyClearedAnnouncement: CopyString(kind: .body, text: "History cleared.")
         }
+    }
+
+    /// A menu item that opens a confirmation, with the HIG's trailing "…".
+    /// The voice rules check the label without it.
+    var menuItemWithEllipsis: String {
+        copy.text + "\u{2026}"
     }
 
     /// The list's search-only no-matches title. `query` is user-typed and

@@ -143,7 +143,9 @@ struct RootView: View {
     private static func makeStreetsWalkedViewModel(
         locationPermissionClient: LocationPermissionClient
     ) -> StreetsWalkedViewModel? {
-        guard let container = try? ModelContainer(for: WalkedPoint.self) else { return nil }
+        // Walked blocks and the match state (#108) live beside the raw fixes,
+        // so one `save()` can move masks and `isMatched` flips together.
+        guard let container = try? ModelContainer(for: Schema(StreetsWalkedSchema.models)) else { return nil }
         let viewModel = StreetsWalkedViewModel(
             locationPermissionClient: locationPermissionClient,
             modelContainer: container

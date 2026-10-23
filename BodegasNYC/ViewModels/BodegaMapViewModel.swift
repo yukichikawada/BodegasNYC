@@ -215,6 +215,11 @@ final class BodegaMapViewModel {
         if let highlighted {
             items.append(.pin(highlighted))
         }
+        // An unchanged result writes nothing: every write is a synchronous
+        // whole-Map content update through Observation, and a settle that
+        // reclusters to the same pins (most pans) paid for one each time
+        // (#108 R3 device trace: 1,278 main-thread samples under this line).
+        guard items != displayItems else { return }
         displayItems = items
         displayItemsVersion &+= 1
     }

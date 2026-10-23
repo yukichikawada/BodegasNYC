@@ -61,6 +61,8 @@
 		<key>StreetsWalkedTracking</key>
 		<string>Full accuracy location produces a more useful map of the streets you've walked.</string>
 	</dict>
+	<key>NSMotionUsageDescription</key>
+	<string>Tells a walk from a ride, so the cab home doesn't count as blocks walked.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>location</string>
