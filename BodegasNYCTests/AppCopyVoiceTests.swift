@@ -91,6 +91,16 @@ struct AppCopyVoiceTests {
             AppCopy.noSearchMatchesTitle("Deli"),
             AppCopy.addedAnnouncement(name: "Deli")
         ] + distanceFixtures.flatMap { [AppCopy.distanceValue($0), AppCopy.distanceFromYou($0)] }
+        + photoPositionFixtures.flatMap { index, count in
+            [
+                AppCopy.photoCounter(index: index, count: count),
+                AppCopy.photoPositionLabel(index: index, count: count),
+                AppCopy.photoPageAnnouncement(index: index, count: count)
+            ]
+        }
+
+    /// (zero-based index, count): a lone photo, both ends, and two digits (#107).
+    static let photoPositionFixtures: [(Int, Int)] = [(0, 1), (0, 3), (2, 3), (11, 12), (99, 120)]
 
     /// One per template branch (#68: spec, design D5/D6/D7): the corner,
     /// singular and plural blocks up to the 20-block cap, and miles with and
@@ -196,6 +206,29 @@ struct AppCopyVoiceTests {
                 == CopyString(kind: .body, text: "Tap Locate Me on the map and the list measures the way you do.")
         )
         #expect(AppCopy.showMapAction.copy == CopyString(kind: .label, text: "Show Map"))
+    }
+
+    // MARK: Photos (#107)
+
+    /// protects: the viewer's counter, VoiceOver label and announcement text and kinds (design D5, D19).
+    /// fails_when: zero-based numbers, a period on a value, or no period on the announcement.
+    /// no_claim: where the views place them (UI test).
+    @Test func photoPositionTexts() {
+        #expect(AppCopy.photoCounter(index: 2, count: 12) == CopyString(kind: .value, text: "3 of 12"))
+        #expect(AppCopy.photoPositionLabel(index: 0, count: 3) == CopyString(kind: .value, text: "Photo 1 of 3"))
+        #expect(AppCopy.photoPageAnnouncement(index: 3, count: 12) == CopyString(kind: .body, text: "Photo 4 of 12."))
+    }
+
+    /// protects: the gallery and viewer strings PR 1 moved into AppCopy keep their words and kinds (design D8).
+    /// fails_when: "Add a Photo" is renamed early (PR 2 does that), or a button text becomes a sentence.
+    /// no_claim: that no literal is left in the views (code review).
+    @Test func photoGalleryAndViewerCopy() {
+        #expect(AppCopy.addPhotoAction.copy == CopyString(kind: .label, text: "Add a Photo"))
+        #expect(AppCopy.flagPhotoAction.copy == CopyString(kind: .label, text: "Flag Photo"))
+        #expect(AppCopy.photoZoomInAction.copy == CopyString(kind: .label, text: "Zoom In"))
+        #expect(AppCopy.photoResetZoomAction.copy == CopyString(kind: .label, text: "Reset Zoom"))
+        #expect(AppCopy.photoLoadFailedBody.copy.kind == .body)
+        #expect(AppCopy.retryAction.copy == CopyString(kind: .label, text: "Retry"))
     }
 
     // MARK: Planted violations: each must fail exactly the rule it targets.

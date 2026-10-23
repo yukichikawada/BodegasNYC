@@ -225,7 +225,8 @@ fragments in a data position, 1 to 4 words, no period, not Title Case, never sta
 Grouping 12pt, title-to-body 4pt, section change 20 to 24pt, major break 32pt. Leading alignment
 everywhere, except a trailing data value on a list row, which sits at the row's trailing edge when
 the whole row fits on one line. Nothing is centered except the system `ContentUnavailableView` on
-the list tab and the page dots.
+the list tab, the page dots, the photo viewer counter (#107), and a viewer page's content (the
+photo, or its load failure standing in its place).
 
 **Widths:** floating overlays `maxWidth: 480pt` centered (iPad, landscape); onboarding content
 `maxWidth: 560pt`, top-aligned at 25% of the height.
@@ -394,6 +395,24 @@ no detail) announces "Nearest first now." and keeps focus on the same bodega (on
 if focus was on the first); a loss is silent. The choice is remembered (`UserDefaults` key
 `listOrder`). The list fetches every row in one request, capped at 1,000 by PostgREST (TODOS.md).
 
+**Photo viewer** (`PhotoViewer`, #107): gallery thumbnails are 120pt buttons, 12pt radius, each
+the source of a `.fullScreenCover` that zooms out of it (a crossfade under Reduce Motion) and back
+into the current photo's thumbnail, which the gallery scrolls into view first. The viewer pages
+a snapshot of the gallery (`TabView(.page)`), always dark as in Photos, on the dark
+`systemBackground` with semantic colors only. Each page is a `UIScrollView` zoom page: pinch 1x
+to 4x, double tap 1x / 2.5x at the tap, paging only at 1x. Controls are system Liquid Glass
+toolbar buttons with 44pt targets: close (`xmark`) leading, the counter ("3 of 12", `.subheadline`,
+monospaced digits) as the principal item, an `ellipsis.circle` menu with Flag Photo trailing, whose
+flag sheet and thanks alert open over the viewer. Controls show on open and never auto-hide; a
+single tap (once a double tap has failed) toggles them with the status bar and home indicator
+(0.2s `easeOut`, opacity only; `PhotoMotion`); under VoiceOver they stay. At 1x a downward drag
+moves the photo and fades the ground; past 100pt or a fast flick it closes, else it snaps back.
+Loading is a `ProgressView`; a failure is the `photo` symbol `.secondary`, "That one didn't load."
+`.primary`, and a `.bordered` Retry that reloads that page only. VoiceOver: thumbnails read
+"Photo N of M" with the hint "Opens full screen."; a page is an image with the same label and the
+actions Zoom In and Reset Zoom; a page change announces "Photo N of M."; escape closes, and focus
+returns to the current photo's thumbnail.
+
 **Section empty state** (DD9, amended by #95 D7): title `.subheadline` `textMuted`, body
 `.footnote` `textMuted` (never `.tertiary`), 2pt
 apart, leading, no symbol, inside the section's `VStack`. List-tab empty states use
@@ -476,6 +495,9 @@ on the card and in the popover it is `.primary` (#95 D11).
     0.1s, rounded to 0.05s). The detail's spinner waits 0.5s, so the page grows out of the pin
     with its content. Under Reduce Motion the system zoom becomes a crossfade.
   - No haptic on pin tap; the first add keeps the app's one haptic.
+- **Photos (#107):** values live in `PhotoMotion`. Viewer controls 0.2s `easeOut`, opacity only;
+  upload row status 0.15s `easeOut`; new gallery thumbnails 0.25s `easeInOut`. Under Reduce
+  Motion everything is opacity only and the thumbnail zoom becomes a crossfade.
 
 ## Follow-ups
 
@@ -516,3 +538,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-21 | #84 spec D4 (long-press peek) not shipped: probe P2 check (e) failed with both gesture forms. With `.onLongPressGesture` on the pin MapKit still reported the touch as a selection about 0.1s into the press, so the pin held and the detail pushed under the finger; with `.simultaneousGesture(LongPressGesture)` the press peeked cleanly but MapKit stopped seeing quick taps at all (check (a)). DD3's recovery stays the tap; #84 stays open for the peek | Design D4's stop rule; a UIKit long-press recognizer hit-testing annotation points is the remaining route, a separate decision |
 | 2026-10-21 | #84 long-press peek shelved (owner D10). Probe P4 tried the single-owner route (D5: no `selection:`, no `.tag`, annotation gestures own the tap). Taps, cluster zoom and VoiceOver buttons worked, but no SwiftUI long press both recognises inside an annotation and lets a pan that starts on a pin move the map: `.onLongPressGesture` never fired, and the `simultaneousGesture` forms blocked the pan (0/9). The window-observer route was rejected in eng review (a MapKit selection carries no touch identity). DD3 recovery stays the tap or a zoom; main keeps MapKit selection | Evidence under `~/.gstack/projects/yukichikawada-BodegasNYC/qa/84-peek-probe/` (P2, `p4/`); reopen only with a UIKit route that keeps map pans |
 | 2026-10-21 | #95 design D6 to D9 and D11: a `textMuted` asset (#636366 / #98989F, Increase Contrast #545458 / #AEAEB2) for muted text on opaque surfaces, a scoped exception to the system-neutrals rule; `.tertiary` never on text (empty-state bodies `textMuted`, the duplicate footnote `.primary`, page dots `.secondary` (3:1 non-text, kept a step lighter than the current dot), the decorative chevron kept); error and consequence copy `.primary`, the onboarding body `textMuted`, system `Form` headers and footers keep `.secondary`; data points carry presence by shape plus contrast (absent: struck-through caption in `textMuted`, no opacity; none of the five symbols has a `.slash` variant); inline tips on opaque rows take `textMuted`. D11 (owner): body text on material (map card bodies, tip messages on the card and in the popover, the sign-in and duplicate sheet bodies) is `.primary`, as in iOS notification banners, titles keep `.headline`, symbols on material stay `.secondary`, and the materials stay `.regularMaterial` (`.thickMaterial` is not used) | `/plan-design-review` with a Codex design voice and an independent Claude pass; owner accepted all. Flattened `secondaryLabel` measured 3.44:1 on white and 3.29:1 on grouped, `.tertiary` 1.74:1, under WCAG AA for body text. D11: live, vibrant `.secondary` on material held 3.3 to 4.0:1 in light on both regular and thick material, so thickening could not meet the 4.5:1 gate |
+| 2026-10-23 | #107 design D3: the photo viewer is always dark, as in Photos; semantic `.primary`/`.secondary` on the dark `systemBackground`, no `.white` literals. Its counter is a centered principal toolbar item, an exception to the leading-alignment rule | `/plan-design-review` with two outside voices; owner accepted all. A bright photo on a light ground loses its edges, and every photo app the user knows is dark here |

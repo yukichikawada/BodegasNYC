@@ -28,6 +28,15 @@ struct BodegaDetailView: View {
     @State private var flagSubmittedPendingConfirmation = false
     @State private var showingFlagConfirmation = false
     @State private var editBodegaViewModel: AddBodegaViewModel?
+    /// The open photo viewer's snapshot (eng O3), `nil` while it is closed.
+    @State private var photoViewerSession: PhotoViewerSession?
+    /// The viewer's current photo. Also the gallery's scroll target, so the
+    /// thumbnail the return zoom lands on is on screen before it runs.
+    @State private var viewerPhotoID: Photo.ID?
+    @Namespace private var photoNamespace
+    /// VoiceOver focus goes back to the current photo's thumbnail when the
+    /// viewer closes (design D19).
+    @AccessibilityFocusState private var focusedPhotoID: Photo.ID?
     /// Set once the load has run `spinnerDelaySeconds`; see the overlay.
     @State private var showsSpinner = false
     private static let spinnerDelaySeconds: TimeInterval = 0.5
@@ -93,7 +102,11 @@ struct BodegaDetailView: View {
                 PhotoGallerySection(
                     photos: viewModel.photos,
                     urlFor: viewModel.photoURL(for:),
-                    pickedItem: $pickedPhotoItem
+                    pickedItem: $pickedPhotoItem,
+                    namespace: photoNamespace,
+                    scrollTarget: viewerPhotoID,
+                    focusedPhotoID: $focusedPhotoID,
+                    onOpen: openPhotoViewer(at:)
                 ) { photo in
                     presentFlagSheet(for: .photo(photo.id))
                 }
@@ -182,11 +195,36 @@ struct BodegaDetailView: View {
                 self.flagIssueViewModel = nil
             }
         })
-        .alert("Thanks for the heads-up", isPresented: $showingFlagConfirmation) {
-            Button("OK", role: .cancel) {}
+        .alert(AppCopy.flagSubmittedTitle.copy.text, isPresented: $showingFlagConfirmation) {
+            Button(AppCopy.okAction.copy.text, role: .cancel) {}
         } message: {
-            Text("Your flag was submitted.")
+            Text(AppCopy.flagSubmittedBody.copy.text)
         }
+        .fullScreenCover(item: $photoViewerSession, onDismiss: {
+            focusedPhotoID = viewerPhotoID
+        }, content: { session in
+            PhotoViewer(
+                photos: session.photos,
+                currentID: Binding(
+                    get: { viewerPhotoID ?? session.initialID },
+                    set: { viewerPhotoID = $0 }
+                ),
+                urlFor: viewModel.photoURL(for:),
+                makeFlagViewModel: { photoID in
+                    FlagIssueViewModel(target: .photo(photoID), flagService: flagService, sessionStore: sessionStore)
+                },
+                sessionStore: sessionStore
+            )
+            // The source follows the page, so closing zooms back into the
+            // current photo's thumbnail. Under Reduce Motion the system
+            // zoom is a crossfade.
+            .navigationTransition(.zoom(sourceID: viewerPhotoID ?? session.initialID, in: photoNamespace))
+        })
+    }
+
+    private func openPhotoViewer(at photo: Photo) {
+        viewerPhotoID = photo.id
+        photoViewerSession = PhotoViewerSession(photos: viewModel.photos, initialID: photo.id)
     }
 
     /// Loads the picked library item's raw bytes and hands them to a fresh
@@ -322,45 +360,86 @@ private struct SectionEmptyState: View {
     }
 }
 
+/// The open photo viewer's input (eng O3): the gallery as it was when a
+/// thumbnail was tapped, and that thumbnail's photo.
+private struct PhotoViewerSession: Identifiable {
+    let id = UUID()
+    let photos: [Photo]
+    let initialID: Photo.ID
+}
+
 /// Always rendered (unlike before Add-a-Photo existed, when it hid itself
 /// with no photos) so the "Add a Photo" picker is reachable on a bodega
-/// with an empty gallery.
+/// with an empty gallery. Each thumbnail opens the full-screen viewer and
+/// is its zoom transition's source (#107).
 private struct PhotoGallerySection: View {
+    /// DESIGN.md Shapes: `{rounded.md}` for photo thumbnails (design D20).
+    private static let thumbnailRadius: CGFloat = 12
+    private static let thumbnailSize: CGFloat = 120
+
     let photos: [Photo]
     let urlFor: (Photo) -> URL?
     @Binding var pickedItem: PhotosPickerItem?
+    let namespace: Namespace.ID
+    /// The viewer's current photo, kept scrolled into view (no animation:
+    /// the gallery is under the cover while it changes).
+    let scrollTarget: Photo.ID?
+    var focusedPhotoID: AccessibilityFocusState<Photo.ID?>.Binding
+    let onOpen: (Photo) -> Void
     let onFlag: (Photo) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             DetailButtonRow {
-                Text("Photos").font(.headline)
+                Text(AppCopy.photosSectionLabel.copy.text).font(.headline)
             } buttons: {
                 PhotosPicker(selection: $pickedItem, matching: .images) {
-                    Label("Add a Photo", systemImage: "photo.badge.plus")
+                    Label(AppCopy.addPhotoAction.copy.text, systemImage: "photo.badge.plus")
                 }
                 .buttonStyle(.bordered)
             }
             if photos.isEmpty {
                 SectionEmptyState(title: .emptyNoPhotosTitle, message: .emptyNoPhotosBody)
             } else {
-                ScrollView(.horizontal) {
-                    HStack(spacing: 8) {
-                        ForEach(photos) { photo in
-                            AsyncImage(url: urlFor(photo)) { image in
-                                image.resizable().aspectRatio(contentMode: .fill)
-                            } placeholder: {
-                                Color.secondary.opacity(0.2)
-                            }
-                            .frame(width: 120, height: 120)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .contextMenu {
-                                Button("Flag Photo", systemImage: "flag") { onFlag(photo) }
+                ScrollViewReader { proxy in
+                    ScrollView(.horizontal) {
+                        HStack(spacing: 8) {
+                            ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
+                                thumbnail(photo, index: index)
                             }
                         }
                     }
+                    .onChange(of: scrollTarget) { _, target in
+                        guard let target else { return }
+                        withoutAnimation { proxy.scrollTo(target, anchor: .center) }
+                    }
                 }
             }
+        }
+    }
+
+    private func thumbnail(_ photo: Photo, index: Int) -> some View {
+        let shape = RoundedRectangle(cornerRadius: Self.thumbnailRadius)
+        return Button { onOpen(photo) } label: {
+            AsyncImage(url: urlFor(photo)) { image in
+                image.resizable().aspectRatio(contentMode: .fill)
+            } placeholder: {
+                Color.secondary.opacity(0.2)
+            }
+            .frame(width: Self.thumbnailSize, height: Self.thumbnailSize)
+            .clipShape(shape)
+            .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .matchedTransitionSource(id: photo.id, in: namespace) { source in
+            source.clipShape(shape)
+        }
+        .id(photo.id)
+        .accessibilityLabel(AppCopy.photoPositionLabel(index: index, count: photos.count).text)
+        .accessibilityHint(AppCopy.photoOpensFullScreenHint.copy.text)
+        .accessibilityFocused(focusedPhotoID, equals: photo.id)
+        .contextMenu {
+            Button(AppCopy.flagPhotoAction.copy.text, systemImage: "flag") { onFlag(photo) }
         }
     }
 }
