@@ -205,16 +205,13 @@ struct AddPhotoView: View {
                     onOpen: { openPreview(at: item.id) }
                 )
                 .animation(PhotoMotion.rowStatusAnimation, value: item.state)
+                // The swipe action is also the row's VoiceOver Remove action
+                // (design D15); adding `.accessibilityActions` announced it twice.
                 .swipeActions(edge: .trailing) {
                     if canRemove(item) {
                         Button(role: .destructive) { viewModel.remove(itemID: item.id) } label: {
                             Label(AppCopy.removeAction.copy.text, systemImage: "trash")
                         }
-                    }
-                }
-                .accessibilityActions {
-                    if canRemove(item) {
-                        Button(AppCopy.removeAction.copy.text) { viewModel.remove(itemID: item.id) }
                     }
                 }
             }
@@ -258,20 +255,20 @@ struct AddPhotoView: View {
 
     // MARK: Captions and focus (design D14)
 
-    /// Return (a typed newline) moves to the next editable caption, or
-    /// closes the keyboard on the last one; the newline itself is dropped.
+    /// A Return keystroke moves to the next editable caption, or closes the
+    /// keyboard on the last one, and its newline is dropped; pasted text
+    /// with newlines is joined with spaces and keeps focus
+    /// (`AddPhotoViewModel.captionEdit(from:to:)`).
     private func captionBinding(for item: AddPhotoViewModel.Item) -> Binding<String> {
         Binding(
             get: { viewModel.items.first { $0.id == item.id }?.caption ?? "" },
             set: { newValue in
-                guard newValue.contains(where: \.isNewline) else {
-                    viewModel.setCaption(newValue, for: item.id)
-                    return
+                let old = viewModel.items.first { $0.id == item.id }?.caption ?? ""
+                let edit = AddPhotoViewModel.captionEdit(from: old, to: newValue)
+                viewModel.setCaption(edit.caption, for: item.id)
+                if edit.isReturnKey {
+                    focusedItemID = nextEditableID(after: item.id)
                 }
-                var stripped = newValue
-                while stripped.last?.isNewline == true { stripped.removeLast() }
-                viewModel.setCaption(stripped, for: item.id)
-                focusedItemID = nextEditableID(after: item.id)
             }
         )
     }

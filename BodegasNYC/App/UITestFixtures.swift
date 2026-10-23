@@ -138,16 +138,22 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
     static let fixtureUserID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
     /// The first fixture photo's caption (eng T1: one captioned row).
     static let captionedPhotoCaption = "The cat runs the counter."
+    /// The third fixture photo's caption: 138 scalars (under the 140 limit)
+    /// that run to four lines in the 370pt band at the default 17pt body
+    /// size, so the band shows "More" (measured with CoreText at 355-385pt;
+    /// each break has slack).
+    static let longPhotoCaption = "The menu board is handwritten, mostly trustworthy. "
+        + "Chopped cheese, unadvertised, is available anyway. Hot sauce lives behind the register."
 
     /// Newest first, as `PhotoService.fetchAll` orders them; the first has
-    /// a caption, the others have none (one with the key null, one without
-    /// it).
+    /// a short caption, the second a null one, the third one long enough
+    /// for "More".
     static let photosJSON: String = {
         let rows = (1...photoCount).map { number in
             let caption = switch number {
             case 1: "\n  \"caption\": \"\(captionedPhotoCaption)\","
             case 2: "\n  \"caption\": null,"
-            default: ""
+            default: "\n  \"caption\": \"\(longPhotoCaption)\","
             }
             return """
             {\(caption)

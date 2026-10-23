@@ -32,6 +32,7 @@ struct PhotoCaptionBand: View {
     @Binding var isExpanded: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
     @State private var fullHeight: CGFloat = 0
     @State private var collapsedHeight: CGFloat = 0
 
@@ -44,6 +45,7 @@ struct PhotoCaptionBand: View {
                     text.fixedSize(horizontal: false, vertical: true)
                 }
                 .frame(height: min(fullHeight, max(maxExpandedHeight, 0)))
+                .accessibilityIdentifier("photoViewer.captionScroll")
             } else {
                 text
                     .lineLimit(PhotoMotion.captionCollapsedLines)
@@ -75,10 +77,16 @@ struct PhotoCaptionBand: View {
         .onTapGesture {}
     }
 
+    /// Hidden from VoiceOver, which already reads the caption as the page
+    /// image's value ("Photo N of M", caption; design D19), so it is spoken
+    /// once. Keyed to VoiceOver rather than always hidden so the band's text
+    /// stays inspectable (UI tests, accessibility dumps) without it.
     private var text: some View {
         Text(caption)
             .font(.body)
             .foregroundStyle(.primary)
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityHidden(voiceOverEnabled)
+            .accessibilityIdentifier("photoViewer.captionText")
     }
 }

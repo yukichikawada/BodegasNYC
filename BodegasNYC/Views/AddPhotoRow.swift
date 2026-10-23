@@ -112,12 +112,36 @@ struct AddPhotoCaptionArea: View {
     @ViewBuilder
     private var captionContent: some View {
         if item.isCaptionEditable {
-            TextField(AppCopy.captionPlaceholder.copy.text, text: $caption, axis: .vertical)
+            // A vertical field's prompt stays on one line and truncates at
+            // accessibility sizes, so the visible placeholder is a wrapping
+            // Text in the system placeholder colour; the real prompt stays
+            // (clear) so VoiceOver still reads it.
+            ZStack(alignment: .topLeading) {
+                if caption.isEmpty {
+                    Text(AppCopy.captionPlaceholder.copy.text)
+                        .font(.body)
+                        .foregroundStyle(Color(uiColor: .placeholderText))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                }
+                TextField(
+                    text: $caption,
+                    prompt: Text(AppCopy.captionPlaceholder.copy.text).foregroundStyle(.clear),
+                    axis: .vertical
+                ) {
+                    Text(AppCopy.captionFieldLabel(index: index).text)
+                }
                 .font(.body)
                 .submitLabel(.next)
                 .focused(focusedItemID, equals: item.id)
                 .accessibilityLabel(AppCopy.captionFieldLabel(index: index).text)
                 .accessibilityIdentifier("addPhoto.caption.\(index)")
+            }
+            // A tap on a wrapped placeholder line below the field still edits.
+            .contentShape(Rectangle())
+            .onTapGesture { focusedItemID.wrappedValue = item.id }
         } else if let locked = AddPhotoViewModel.normalizedCaption(item.caption) {
             Text(locked)
                 .font(.body)
@@ -129,9 +153,11 @@ struct AddPhotoCaptionArea: View {
     @ViewBuilder
     private var status: some View {
         switch item.state {
-        case .idle:
+        case .idle, .preparing:
+            // While preparing, the placeholder tile (or the single-photo
+            // preview) carries the one spinner (design D11).
             EmptyView()
-        case .preparing, .uploading:
+        case .uploading:
             ProgressView()
         case .uploaded:
             Image(systemName: "checkmark.circle")

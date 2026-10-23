@@ -199,6 +199,21 @@ final class AddPhotoViewModel: Identifiable {
         captionLength(caption) > captionLimit
     }
 
+    /// Classifies a caption field edit (design D14): a single Return
+    /// keystroke (exactly one newline inserted, nothing else changed) keeps
+    /// the old text and asks the sheet to move focus on; anything else,
+    /// including a paste with newlines, passes through (`setCaption` joins
+    /// its newlines with spaces) and keeps focus.
+    nonisolated static func captionEdit(from old: String, to new: String) -> (caption: String, isReturnKey: Bool) {
+        guard new.contains(where: \.isNewline) else { return (new, false) }
+        if new.count == old.count + 1, let newline = new.firstIndex(where: \.isNewline) {
+            var withoutNewline = new
+            withoutNewline.remove(at: newline)
+            if withoutNewline == old { return (old, true) }
+        }
+        return (new, false)
+    }
+
     /// Ignored for a locked caption (eng O1). Newlines become spaces: the
     /// field wraps visually, and Return moves to the next field (design D14).
     func setCaption(_ caption: String, for itemID: Item.ID) {

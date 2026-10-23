@@ -336,9 +336,12 @@ extension BodegaDetailView {
         }
     }
 
-    /// Photos join the gallery front in upload order (reverse selection
-    /// order), so the batch reads in selection order; then the row scrolls
-    /// to its leading edge (design D16). Opacity only under Reduce Motion.
+    /// Photos join the gallery front in upload order, matching the server's
+    /// `created_at desc`. A first pass uploads in reverse selection order,
+    /// so the batch reads in selection order, unless a retry reorders it: a
+    /// retried photo gets a newer `created_at` and comes first (accepted in
+    /// the eng review). Then the row scrolls to its leading edge (design
+    /// D16). Opacity only under Reduce Motion.
     private func insertUploadedPhotos() {
         let photos = uploadedWhileSheetOpen
         uploadedWhileSheetOpen = []

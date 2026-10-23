@@ -14,6 +14,9 @@ final class BodegasNYCUITests: XCTestCase {
     private static let fixtureBodegaName = "Fixture Deli"
     /// Must match `FixtureURLProtocol.captionedPhotoCaption`.
     private static let fixtureCaption = "The cat runs the counter."
+    /// Must match `FixtureURLProtocol.longPhotoCaption`.
+    private static let fixtureLongCaption = "The menu board is handwritten, mostly trustworthy. "
+        + "Chopped cheese, unadvertised, is available anyway. Hot sauce lives behind the register."
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -83,6 +86,23 @@ final class BodegasNYCUITests: XCTestCase {
 
         app.swipeLeft()
         XCTAssertTrue(waitForLabel(counter, "3 of 3"), "swipe left did not page forward")
+
+        // PR 2: photo 3's caption runs past three lines, so the band offers
+        // More; expanded, the whole caption shows in a scroll capped at half
+        // the screen (design D2).
+        let more = app.buttons["photoViewer.captionMore"]
+        XCTAssertTrue(more.waitForExistence(timeout: 5), "a long caption shows no More")
+        more.tap()
+        XCTAssertTrue(more.waitForNonExistence(timeout: 5), "More stayed after expanding")
+        let expandedScroll = app.scrollViews["photoViewer.captionScroll"]
+        XCTAssertTrue(expandedScroll.waitForExistence(timeout: 5), "the caption did not expand")
+        let expandedText = app.staticTexts.matching(identifier: "photoViewer.captionText").firstMatch
+        XCTAssertEqual(expandedText.label, Self.fixtureLongCaption, "the expanded caption is not the whole caption")
+        let expandedFrame = settledFrame(of: expandedScroll)
+        XCTAssertTrue(screen.contains(expandedFrame), "the expanded caption runs off the screen")
+        XCTAssertTrue(expandedFrame.contains(expandedText.frame), "the expanded caption is clipped")
+        XCTAssertLessThanOrEqual(expandedFrame.height, screen.height * 0.5, "the expanded caption is over half the screen")
+
         app.swipeLeft()
         XCTAssertTrue(waitForLabel(counter, "3 of 3"), "paged past the last photo")
         app.swipeRight()
@@ -177,6 +197,9 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(firstCaption.waitForExistence(timeout: 15), "upload sheet never filled in its rows")
         let thirdCaption = app.descendants(matching: .any)["addPhoto.caption.2"]
         XCTAssertTrue(thirdCaption.waitForExistence(timeout: 10), "third row never filled in")
+        // The visible placeholder is a wrapping overlay; the field's own
+        // (clear) prompt keeps the placeholder for VoiceOver (QA round 1).
+        XCTAssertEqual(firstCaption.placeholderValue, "What's in the shot?")
 
         app.cells.element(boundBy: 2).swipeLeft()
         let remove = app.buttons["Remove"]

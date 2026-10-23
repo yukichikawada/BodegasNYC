@@ -214,6 +214,32 @@ struct AddPhotoViewModelTests {
         #expect(viewModel.items[0].caption == "Cat on the counter")
     }
 
+    /// protects: only a single Return keystroke moves focus on (and its newline is dropped); a paste with
+    /// newlines keeps focus and passes through to be joined with spaces (design D14, QA round 1).
+    /// fails_when: a pasted multi-line caption jumps focus, or Return (at the end or mid-text) stays in the field
+    /// or leaves a newline.
+    /// no_claim: the keyboard and FocusState wiring (live QA).
+    @Test func captionEditMovesFocusOnlyForAReturnKeystroke() {
+        let returnAtEnd = AddPhotoViewModel.captionEdit(from: "Cat", to: "Cat\n")
+        #expect(returnAtEnd.caption == "Cat")
+        #expect(returnAtEnd.isReturnKey)
+
+        let returnMidText = AddPhotoViewModel.captionEdit(from: "Cat counter", to: "Cat\n counter")
+        #expect(returnMidText.caption == "Cat counter")
+        #expect(returnMidText.isReturnKey)
+
+        let paste = AddPhotoViewModel.captionEdit(from: "Cat", to: "Cat on the\ncounter\n")
+        #expect(paste.caption == "Cat on the\ncounter\n")
+        #expect(!paste.isReturnKey)
+
+        let pasteOfOneNewline = AddPhotoViewModel.captionEdit(from: "", to: "a\n")
+        #expect(!pasteOfOneNewline.isReturnKey)
+
+        let typing = AddPhotoViewModel.captionEdit(from: "Ca", to: "Cat")
+        #expect(typing.caption == "Cat")
+        #expect(!typing.isReturnKey)
+    }
+
     // MARK: Sign-in gate (regression contract, design D22)
 
     /// protects: signed out, Upload asks for sign-in and sends nothing; items and captions survive the sign-in sheet,
