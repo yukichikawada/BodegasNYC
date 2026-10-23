@@ -145,13 +145,25 @@ struct RootView: View {
     ) -> StreetsWalkedViewModel? {
         // Walked blocks and the match state (#108) live beside the raw fixes,
         // so one `save()` can move masks and `isMatched` flips together.
-        guard let container = try? ModelContainer(for: Schema(StreetsWalkedSchema.models)) else { return nil }
+        guard let container = makeStreetsWalkedContainer() else { return nil }
         let viewModel = StreetsWalkedViewModel(
             locationPermissionClient: locationPermissionClient,
             modelContainer: container
         )
         viewModel.resumeTrackingIfPreviouslyEnabled()
         return viewModel
+    }
+
+    /// The on-disk store, except in a DEBUG build launched with
+    /// `-UITestFixtures -UITestWalkedBlocks`, where it is an in-memory store
+    /// holding the fixture walk (#108 PR 2).
+    private static func makeStreetsWalkedContainer() -> ModelContainer? {
+        #if DEBUG
+        if UITestFixtures.seedsWalkedBlocks {
+            return UITestFixtures.makeWalkedBlocksContainer()
+        }
+        #endif
+        return try? ModelContainer(for: Schema(StreetsWalkedSchema.models))
     }
 }
 

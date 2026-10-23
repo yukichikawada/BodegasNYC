@@ -40,6 +40,11 @@ extension MapScreenView {
             .onChange(of: scenePhase, initial: true) { _, phase in
                 streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active)
             }
+            .sheet(isPresented: $showingYourBlocks) {
+                if let streetsWalkedViewModel {
+                    YourBlocksSheet(viewModel: streetsWalkedViewModel)
+                }
+            }
     }
 
     /// Recomputes what the walked layer draws for the settled region; a

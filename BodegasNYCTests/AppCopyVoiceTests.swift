@@ -112,6 +112,27 @@ struct AppCopyVoiceTests {
             ]
         }
         + [120, 140, 141].map { AppCopy.captionCount($0, limit: 140) }
+        + AppCopy.YourBlocks.allCases.map(\.copy)
+        + yourBlocksFixtures.flatMap { walked, total in
+            [
+                AppCopy.boroughBlockCount(walked: walked, total: total),
+                AppCopy.citywideBlockCount(walked: walked, total: total)
+            ] + yourBlocksPlaces.flatMap { borough in
+                [
+                    AppCopy.yourBlocksRowLabel(borough, walked: walked, total: total),
+                    AppCopy.yourBlocksRowLabel(borough, walked: nil, total: nil)
+                ]
+            }
+        }
+
+    /// (walked, total) for Your Blocks (#108 PR 2): zero, one, the "<1%"
+    /// band, a whole percent, grouped thousands, a full borough.
+    static let yourBlocksFixtures: [(Int, Int)] = [
+        (0, 9_300), (1, 9_300), (412, 9_300), (12_345, 99_360), (9_300, 9_300)
+    ]
+
+    /// The city (`nil`), then every borough.
+    static let yourBlocksPlaces: [Borough?] = [nil, .manhattan, .brooklyn, .queens, .bronx, .statenIsland]
 
     /// Counts in the upload sheet (#107 PR 2): one, a few, the 10-photo cap.
     static let uploadCountFixtures = [1, 2, 9, 10]

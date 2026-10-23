@@ -55,6 +55,8 @@ struct MapScreenView: View {
     /// Walked blocks (#108, `MapScreenView+WalkedBlocks.swift`): what the
     /// map draws, changed only at camera rest (design D10), and its width.
     @State var walkedDisplay = WalkedOverlayDisplay()
+    /// The Your Blocks sheet (#108 PR 2, design D7).
+    @State var showingYourBlocks = false
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
@@ -348,9 +350,13 @@ extension MapScreenView {
         }
         if let streetsWalkedViewModel {
             ToolbarItem(placement: .topBarTrailing) {
-                // Design D5, less Your Blocks, which arrives with its sheet
-                // (#108 PR 2).
+                // Design D5: Your Blocks, Show on Map, Start/Stop Recording,
+                // Clear History…, each in its own section.
                 Menu {
+                    Section {
+                        Button(AppCopy.YourBlocks.title.copy.text) { showingYourBlocks = true }
+                            .accessibilityHint(AppCopy.YourBlocks.menuHint.copy.text)
+                    }
                     Section {
                         Toggle(
                             AppCopy.showOnMapToggle.copy.text,

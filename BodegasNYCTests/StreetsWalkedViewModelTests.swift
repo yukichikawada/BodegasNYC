@@ -460,4 +460,89 @@ struct StreetsWalkedViewModelTests {
         await denied.viewModel.requestMotionAccessIfNeeded()
         #expect(denied.motion.requests == 0)
     }
+
+    // MARK: Your Blocks (#108 PR 2, design D6, D8, eng R2)
+
+    /// protects: opening Your Blocks loads the street data for the totals
+    /// even with no history and recording off, and lands on the zero state
+    /// with real totals (eng R2, design D8).
+    /// fails_when: the sheet stays counting forever without history, or
+    /// shows no totals.
+    /// no_claim: that the map or launch load nothing (the no-history test
+    /// above).
+    @Test func openingYourBlocksCountsWithoutHistory() async throws {
+        let harness = try makeHarness()
+        #expect(harness.viewModel.yourBlocks.phase == .counting)
+
+        harness.viewModel.yourBlocksDidOpen()
+        await waitForRefresh(harness.viewModel)
+
+        #expect(harness.loads.loads == 1)
+        let content = harness.viewModel.yourBlocks
+        #expect(content.phase == .zero)
+        #expect(content.boroughs.first?.borough == .manhattan)
+        #expect(content.boroughs.first?.total == F.cornerSegments.count)
+        #expect(content.boroughs.first?.walked == 0)
+    }
+
+    /// protects: a street map that fails to load shows the failure state in
+    /// Your Blocks, over counting (design D8, eng R5).
+    /// fails_when: the sheet shows "\u{2014}" or zero counts after the load
+    /// failed.
+    /// no_claim: the copy's color (`.primary`; screenshots).
+    @Test func yourBlocksShowsTheStreetMapFailure() async throws {
+        let harness = try makeHarness(gridLoads: false)
+        try F.seed(Self.blockWalk, in: harness.context)
+
+        harness.viewModel.yourBlocksDidOpen()
+        await waitForRefresh(harness.viewModel)
+
+        #expect(harness.loads.failures == 1)
+        #expect(harness.viewModel.yourBlocks.phase == .unavailable)
+    }
+
+    /// protects: counts walked before opening show in the sheet, and Clear
+    /// History zeroes them without blanking the totals.
+    /// fails_when: the sheet's Manhattan row misses the walked block, or a
+    /// clear leaves the counting placeholder.
+    /// no_claim: the rendered row (UI test).
+    @Test func yourBlocksReflectsWalkedBlocksAndClear() async throws {
+        let harness = try makeHarness()
+        try F.seed(Self.blockWalk, in: harness.context)
+        harness.viewModel.yourBlocksDidOpen()
+        await waitForRefresh(harness.viewModel)
+
+        let manhattan = try #require(harness.viewModel.yourBlocks.boroughs.first)
+        #expect(manhattan.walked == 1)
+        #expect(harness.viewModel.yourBlocks.phase == .counted)
+
+        try await harness.viewModel.clearHistory(at: Self.afterHistory)
+        #expect(harness.viewModel.yourBlocks.phase == .zero)
+        #expect(harness.viewModel.yourBlocks.boroughs.first?.total == F.cornerSegments.count)
+    }
+
+    /// protects: the Allow Motion Access row asks even after the one-time
+    /// ask was spent (an explicit tap), and the sheet sees the answer:
+    /// allowed hides the row, denied turns it into Open Settings (design D6).
+    /// fails_when: the row's tap is swallowed by the once-ever flag, or the
+    /// published authorization stays stale after the answer.
+    /// no_claim: the system prompt itself (CoreMotion; live device).
+    @Test func motionRowAsksAndFollowsTheAnswer() async throws {
+        typealias Content = YourBlocksContent
+        let allows = try makeHarness(motion: FakeMotionProvider(authorization: .notDetermined))
+        allows.defaults.set(true, forKey: "streetsWalked.hasAskedForMotion")
+        #expect(Content.motionRow(authorization: allows.viewModel.motionAuthorization, isRecording: true) == .allowAccess)
+        await allows.viewModel.requestMotionAccess()
+        #expect(allows.motion.requests == 1)
+        #expect(allows.viewModel.motionAuthorization == .authorized)
+        #expect(Content.motionRow(authorization: allows.viewModel.motionAuthorization, isRecording: true) == .hidden)
+
+        let denies = try makeHarness(motion: FakeMotionProvider(authorization: .notDetermined, grantsOnRequest: false))
+        await denies.viewModel.requestMotionAccess()
+        #expect(denies.viewModel.motionAuthorization == .denied)
+        #expect(Content.motionRow(authorization: denies.viewModel.motionAuthorization, isRecording: true) == .openSettings)
+        // Once denied, a tap never re-asks (the row opens Settings instead).
+        await denies.viewModel.requestMotionAccess()
+        #expect(denies.motion.requests == 1)
+    }
 }
