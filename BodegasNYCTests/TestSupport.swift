@@ -76,12 +76,13 @@ func makeTestBodega(
     return try PostgRESTDecoding.makeDecoder().decode(Bodega.self, from: data)
 }
 
-/// An in-memory `ModelContainer` for `WalkedPoint` — isolated per test,
-/// never touches disk.
+/// An in-memory `ModelContainer` for the Streets Walked models
+/// (`WalkedPoint`, plus `WalkedBlock` and `WalkedMatchState` since #108) —
+/// isolated per test, never touches disk.
 @MainActor
 func makeInMemoryModelContainer() throws -> ModelContainer {
     try ModelContainer(
-        for: WalkedPoint.self,
+        for: Schema(StreetsWalkedSchema.models),
         configurations: ModelConfiguration(isStoredInMemoryOnly: true)
     )
 }
