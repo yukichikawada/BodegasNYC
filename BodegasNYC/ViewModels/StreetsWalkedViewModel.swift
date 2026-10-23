@@ -69,6 +69,10 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         didSet { userDefaults.set(isOverlayVisible, forKey: Self.overlayVisibleDefaultsKey) }
     }
     private(set) var lastTrackingError: String?
+    /// Motion & Fitness as last read: at launch, when the scene comes
+    /// forward (back from Settings), when Your Blocks opens and after an
+    /// ask (design D6).
+    private(set) var motionAuthorization: MotionAuthorization
     /// The map's "No streets yet." card was closed. Deliberately not
     /// persisted: it lives here rather than on `MapScreenView` so it
     /// survives the Map/List tab switch that rebuilds that view, and resets
@@ -88,16 +92,16 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     /// relying on `ModelContext` retaining its container internally.
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
-    private let userDefaults: UserDefaults
+    let userDefaults: UserDefaults
     private let manager: CLLocationManager
     private let matcher: BlockMatchingActor
-    private let motion: any MotionActivityProviding
+    let motion: any MotionActivityProviding
     private var refreshTask: Task<Void, Never>?
     private var refreshQueued = false
 
     private static let trackingEnabledDefaultsKey = "streetsWalked.isTrackingEnabled"
     private static let overlayVisibleDefaultsKey = "streetsWalked.isOverlayVisible"
-    private static let motionAskedDefaultsKey = "streetsWalked.hasAskedForMotion"
+    static let motionAskedDefaultsKey = "streetsWalked.hasAskedForMotion"
     /// Must match a key in `Info.plist`'s
     /// `NSLocationTemporaryUsageDescriptionDictionary` — calling
     /// `requestTemporaryFullAccuracyAuthorization` with an unregistered key
@@ -122,6 +126,7 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         self.motion = motion
         self.matcher = matcher ?? BlockMatchingActor(container: modelContainer, activityProvider: motion)
         isOverlayVisible = userDefaults.object(forKey: Self.overlayVisibleDefaultsKey) as? Bool ?? true
+        motionAuthorization = motion.authorization
         let manager = CLLocationManager()
         self.manager = manager
         super.init()
@@ -198,15 +203,11 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         userDefaults.set(false, forKey: Self.trackingEnabledDefaultsKey)
     }
 
-    /// Asks for Motion & Fitness once, ever (design D6): right after Start
-    /// Recording succeeds and the location dialogs have closed. Never on map
-    /// open, rebuild or resume; the matcher's queries never prompt.
-    func requestMotionAccessIfNeeded() async {
-        guard motion.authorization == .notDetermined,
-              !userDefaults.bool(forKey: Self.motionAskedDefaultsKey)
-        else { return }
-        userDefaults.set(true, forKey: Self.motionAskedDefaultsKey)
-        await motion.requestAuthorization()
+    /// Re-reads Motion & Fitness; writes only on a change. The asks are in
+    /// `StreetsWalkedViewModel+YourBlocks.swift`.
+    func refreshMotionAuthorization() {
+        let current = motion.authorization
+        if current != motionAuthorization { motionAuthorization = current }
     }
 
     /// Called once from the composition root on every launch. Per Apple's
@@ -254,7 +255,9 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     /// catch-up pass even when no fix arrives (eng A2).
     func sceneActivityChanged(isActive: Bool) {
         isSceneActive = isActive
-        if isActive { scheduleRefresh() }
+        guard isActive else { return }
+        refreshMotionAuthorization()
+        scheduleRefresh()
     }
 
     /// Acknowledges/clears the current error so the UI can dismiss whatever
@@ -274,9 +277,10 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         await refreshTask?.value
     }
 
-    private func scheduleRefresh() {
+    /// `evenWithoutHistory`: Your Blocks asked (`yourBlocksDidOpen`).
+    func scheduleRefresh(evenWithoutHistory: Bool = false) {
         hasHistory = storedPointCount() > 0
-        guard hasHistory || isTrackingEnabled else { return }
+        guard hasHistory || isTrackingEnabled || evenWithoutHistory else { return }
         guard refreshTask == nil else {
             refreshQueued = true
             return

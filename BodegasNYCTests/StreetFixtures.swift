@@ -136,10 +136,13 @@ final class FakeMotionProvider: MotionActivityProviding, @unchecked Sendable {
     private var entered: CheckedContinuation<Void, Never>?
     private var hasEntered = false
     let activity: VehicleActivity
+    /// What the person answers when asked: allow (the default) or deny.
+    let grantsOnRequest: Bool
 
-    init(authorization: MotionAuthorization = .denied, activity: VehicleActivity = .unavailable) {
+    init(authorization: MotionAuthorization = .denied, activity: VehicleActivity = .unavailable, grantsOnRequest: Bool = true) {
         _authorization = authorization
         self.activity = activity
+        self.grantsOnRequest = grantsOnRequest
     }
 
     var authorization: MotionAuthorization { lock.withLock { _authorization } }
@@ -149,7 +152,7 @@ final class FakeMotionProvider: MotionActivityProviding, @unchecked Sendable {
     func requestAuthorization() async {
         lock.withLock {
             _requests += 1
-            _authorization = .authorized
+            _authorization = grantsOnRequest ? .authorized : .denied
         }
     }
 

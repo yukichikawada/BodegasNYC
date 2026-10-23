@@ -162,6 +162,38 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertFalse(failureBody.exists, "failure body stayed after a successful retry")
     }
 
+    /// protects: Streets Walked → Your Blocks opens the sheet, and a walk seeded by `-UITestWalkedBlocks` (one
+    /// real Manhattan block from the bundle, in an in-memory store) is counted, matched and shown as one VoiceOver
+    /// element per row: "Manhattan, 1 of 9,300 blocks, less than 1 percent." and the city row likewise (#108
+    /// PR 2, design D5, D7, D11).
+    /// fails_when: the menu has no Your Blocks, the sheet never opens, the count never lands, the row is not a
+    /// single element with that label, or Done leaves the sheet up.
+    /// no_claim: the layout, colors, detents or the 0.5s counting line (screenshots, live QA); the bundle's
+    /// totals (StreetGridTests); that the fixture walks one block (YourBlocksTests).
+    @MainActor
+    func testYourBlocksShowsTheSeededManhattanBlock() throws {
+        let app = launchWithFixtures(["-UITestWalkedBlocks"])
+
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 20), "Streets Walked menu never appeared")
+        menu.tap()
+        let yourBlocks = app.buttons["Your Blocks"].firstMatch
+        XCTAssertTrue(yourBlocks.waitForExistence(timeout: 5), "the menu has no Your Blocks")
+        yourBlocks.tap()
+
+        let manhattan = app.descendants(matching: .any)["yourBlocks.row.1"]
+        XCTAssertTrue(manhattan.waitForExistence(timeout: 10), "the sheet never showed a Manhattan row")
+        XCTAssertTrue(
+            waitForLabel(manhattan, "Manhattan, 1 of 9,300 blocks, less than 1 percent.", timeout: 20),
+            "Manhattan row reads \"\(manhattan.label)\""
+        )
+        let city = app.descendants(matching: .any)["yourBlocks.row.0"]
+        XCTAssertEqual(city.label, "New York City, 1 of 99,360 blocks, less than 1 percent.")
+
+        app.buttons["Done"].tap()
+        XCTAssertTrue(manhattan.waitForNonExistence(timeout: 5), "Done left the sheet up")
+    }
+
     /// The element's frame once it has stopped changing (the controls fade
     /// over 0.2s), polled every 0.25s for up to 2s.
     @MainActor
