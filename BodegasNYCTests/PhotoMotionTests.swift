@@ -15,6 +15,7 @@
 
 import CoreGraphics
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import BodegasNYC
@@ -146,5 +147,17 @@ struct PhotoMotionTests {
         #expect(PhotoMotion.insertSeconds == 0.25)
         #expect(PhotoMotion.insertStyle(reduceMotion: true) == .fade)
         #expect(PhotoMotion.insertStyle(reduceMotion: false) == .scaleAndFade)
+    }
+
+    /// protects: the caption band's tokens (design D2/D21): 3 collapsed lines, expanded scroll capped at half the
+    /// viewer, 0.25s expand that becomes instant under Reduce Motion.
+    /// fails_when: a token drifts, or Reduce Motion still animates the height.
+    /// no_claim: the band's rendering at AX5 (live QA).
+    @Test func captionBandTokensMatchTheDesign() {
+        #expect(PhotoMotion.captionCollapsedLines == 3)
+        #expect(PhotoMotion.captionMaxHeightFraction == 0.5)
+        #expect(PhotoMotion.captionExpandSeconds == 0.25)
+        #expect(PhotoMotion.captionExpandAnimation(reduceMotion: true) == nil)
+        #expect(PhotoMotion.captionExpandAnimation(reduceMotion: false) != nil)
     }
 }

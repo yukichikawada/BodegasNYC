@@ -71,7 +71,8 @@ enum VoiceRule: CaseIterable, CustomTestStringConvertible {
             guard let last = text.last, last.isLetter || last.isNumber else { return false }
             return words.enumerated().allSatisfy { index, word in
                 if index > 0, Self.minorWords.contains(String(word)) { return true }
-                return word.first?.isUppercase == true
+                // A numeral has no case: "Retry 2" is Title Case (#107).
+                return word.first?.isUppercase == true || word.first?.isNumber == true
             }
         case .valueShape:
             // A data fragment (#68): 1 to 4 words, ends in a letter or digit
@@ -98,6 +99,22 @@ struct AppCopyVoiceTests {
                 AppCopy.photoPageAnnouncement(index: index, count: count)
             ]
         }
+        + uploadCountFixtures.flatMap { count in
+            [
+                AppCopy.retryCountLabel(count),
+                AppCopy.captionFieldLabel(index: count - 1),
+                AppCopy.uploadProgress(index: count - 1, count: 10),
+                AppCopy.photosUnloadable(count),
+                AppCopy.photosUnloadableTitle(count),
+                AppCopy.discardPhotosTitle(count),
+                AppCopy.uploadPassFailed(uploaded: count, failed: 1),
+                AppCopy.uploadPassFailed(uploaded: 0, failed: count)
+            ]
+        }
+        + [120, 140, 141].map { AppCopy.captionCount($0, limit: 140) }
+
+    /// Counts in the upload sheet (#107 PR 2): one, a few, the 10-photo cap.
+    static let uploadCountFixtures = [1, 2, 9, 10]
 
     /// (zero-based index, count): a lone photo, both ends, and two digits (#107).
     static let photoPositionFixtures: [(Int, Int)] = [(0, 1), (0, 3), (2, 3), (11, 12), (99, 120)]
@@ -219,11 +236,12 @@ struct AppCopyVoiceTests {
         #expect(AppCopy.photoPageAnnouncement(index: 3, count: 12) == CopyString(kind: .body, text: "Photo 4 of 12."))
     }
 
-    /// protects: the gallery and viewer strings PR 1 moved into AppCopy keep their words and kinds (design D8).
-    /// fails_when: "Add a Photo" is renamed early (PR 2 does that), or a button text becomes a sentence.
+    /// protects: the gallery and viewer strings keep their words and kinds; PR 2 renames the gallery button
+    /// "Add Photos" (design D8).
+    /// fails_when: the button still says "Add a Photo", or a button text becomes a sentence.
     /// no_claim: that no literal is left in the views (code review).
     @Test func photoGalleryAndViewerCopy() {
-        #expect(AppCopy.addPhotoAction.copy == CopyString(kind: .label, text: "Add a Photo"))
+        #expect(AppCopy.addPhotoAction.copy == CopyString(kind: .label, text: "Add Photos"))
         #expect(AppCopy.flagPhotoAction.copy == CopyString(kind: .label, text: "Flag Photo"))
         #expect(AppCopy.photoZoomInAction.copy == CopyString(kind: .label, text: "Zoom In"))
         #expect(AppCopy.photoResetZoomAction.copy == CopyString(kind: .label, text: "Reset Zoom"))
@@ -231,7 +249,45 @@ struct AppCopyVoiceTests {
         #expect(AppCopy.retryAction.copy == CopyString(kind: .label, text: "Retry"))
     }
 
+    /// protects: the upload sheet's words, kinds and plural helpers (design D8-D14): singular at one, the count
+    /// in Retry, the "N went up" footer, and a placeholder that never says "optional".
+    /// fails_when: "1 photos", "Retry" without its count, a zero-based counter, a caption field label without the
+    /// photo number, or "optional" in the placeholder.
+    /// no_claim: where the sheet shows them (UI test, live QA).
+    @Test func uploadSheetCopy() {
+        #expect(AppCopy.retryCountLabel(1) == CopyString(kind: .label, text: "Retry 1"))
+        #expect(AppCopy.uploadProgress(index: 2, count: 8) == CopyString(kind: .body, text: "Uploading 3 of 8."))
+        #expect(AppCopy.uploadPassFailed(uploaded: 2, failed: 1).text == "2 went up. 1 didn't. Try again.")
+        #expect(AppCopy.uploadPassFailed(uploaded: 0, failed: 3).text == "None went up. Try again.")
+        #expect(AppCopy.photosUnloadable(1).text == "1 photo couldn't be loaded.")
+        #expect(AppCopy.photosUnloadable(3).text == "3 photos couldn't be loaded.")
+        #expect(AppCopy.discardPhotosTitle(1) == CopyString(kind: .title, text: "Discard 1 photo?"))
+        #expect(AppCopy.discardPhotosTitle(4).text == "Discard 4 photos?")
+        #expect(AppCopy.photosUnloadableTitle(1).text == "Couldn't load that photo.")
+        #expect(AppCopy.photosUnloadableTitle(2).text == "Couldn't load those photos.")
+        #expect(AppCopy.captionCount(128, limit: 140) == CopyString(kind: .value, text: "128/140"))
+        #expect(AppCopy.captionFieldLabel(index: 1).text == "Caption for photo 2")
+        #expect(!AppCopy.captionPlaceholder.copy.text.localizedCaseInsensitiveContains("optional"))
+        #expect(AppCopy.captionsOptionalFooter.copy.text.localizedCaseInsensitiveContains("optional"))
+        #expect(AppCopy.photoUploadFailedValue.copy == CopyString(kind: .value, text: "Didn't go through"))
+        #expect(AppCopy.addOnePhotoTitle.copy.text == "Add a Photo")
+        #expect(AppCopy.captionMoreAction.copy == CopyString(kind: .label, text: "More"))
+        #expect(
+            [AppCopy.uploadAction, .stopAction, .doneAction, .cancelAction, .removeAction, .discardAction]
+                .allSatisfy { $0.copy.kind == .label }
+        )
+    }
+
     // MARK: Planted violations: each must fail exactly the rule it targets.
+
+    /// protects: the label rule accepts a numeral word ("Retry 2") but still rejects a lowercase word.
+    /// fails_when: numerals fail Title Case, or the numeral allowance lets "retry 2" through.
+    /// no_claim: none beyond the rule.
+    @Test func plantedLabelNumeralRules() {
+        #expect(VoiceRule.labelShape.passes(CopyString(kind: .label, text: "Retry 2")))
+        #expect(!VoiceRule.labelShape.passes(CopyString(kind: .label, text: "retry 2")))
+        #expect(!VoiceRule.labelShape.passes(CopyString(kind: .label, text: "Retry again 2")))
+    }
 
     @Test func plantedExclamationFailsRuleOne() {
         let planted = CopyString(kind: .body, text: "Put it on the map!")

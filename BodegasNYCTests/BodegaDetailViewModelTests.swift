@@ -216,6 +216,38 @@ struct BodegaDetailViewModelTests {
         #expect(viewModel.photos.map(\.id) == [newPhoto.id, existingID])
     }
 
+    /// protects: a photo uploaded while the initial load is in flight survives the load landing, ahead of the
+    /// fetched photos (#107 eng O2).
+    /// fails_when: the fetch overwrites `photos` and the local upload vanishes, or it is duplicated when the
+    /// fetch already has it.
+    /// no_claim: the gallery's insert animation (live QA).
+    @Test func loadIfNeededKeepsPhotosAddedLocallyWhileItWasLoading() async throws {
+        MockURLProtocol.reset()
+        let gate = StubGate()
+        let photosRequested = Captured(false)
+        MockURLProtocol.stub(body: Data("[]".utf8))
+        MockURLProtocol.stub(body: Data("[\(Self.photoJSON())]".utf8), gate: gate) { _ in photosRequested.set(true) }
+        let viewModel = try makeViewModel()
+        viewModel.loadIfNeeded()
+        while !photosRequested.get() { await Task.yield() }
+
+        let uploaded = Photo(
+            id: UUID(),
+            bodegaId: Self.bodegaID,
+            uploadedBy: Self.authorID,
+            storagePath: "\(Self.bodegaID.uuidString)/new.jpg",
+            isHidden: false,
+            createdAt: Date(),
+            caption: "New"
+        )
+        viewModel.photoWasAdded(uploaded)
+        gate.open()
+        await viewModel.waitForPendingLoadForTesting()
+
+        #expect(viewModel.photos.count == 2)
+        #expect(viewModel.photos.first?.id == uploaded.id)
+    }
+
     @Test func bodegaWasUpdatedReplacesTheBodegaWithTheSameID() throws {
         let viewModel = try makeViewModel()
         var edited = viewModel.bodega
@@ -280,5 +312,26 @@ struct BodegaDetailViewModelAverageRatingTests {
         )
 
         #expect(BodegaDetailViewModel.computeAverageRating(from: [hidden]) == 1.0)
+    }
+}
+
+struct BodegaDetailPhotoMergeTests {
+    private static func photo() -> Photo {
+        Photo(id: UUID(), bodegaId: UUID(), uploadedBy: UUID(), storagePath: "a/b.jpg", isHidden: false, createdAt: Date())
+    }
+
+    /// protects: the O2 merge keeps local photos the fetch lacks, ahead of the fetch, and never duplicates one the
+    /// fetch has (#107 eng O2).
+    /// fails_when: a local photo is dropped, placed after the fetched ones, or appears twice.
+    /// no_claim: the load timing itself (BodegaDetailViewModelTests).
+    @Test func mergeKeepsMissingLocalPhotosFirstWithoutDuplicates() {
+        let shared = Self.photo()
+        let localOnly = Self.photo()
+        let fetchedOnly = Self.photo()
+
+        let merged = BodegaDetailViewModel.mergingLocalPhotos([localOnly, shared], into: [shared, fetchedOnly])
+
+        #expect(merged.map(\.id) == [localOnly.id, shared.id, fetchedOnly.id])
+        #expect(BodegaDetailViewModel.mergingLocalPhotos([], into: [fetchedOnly]).map(\.id) == [fetchedOnly.id])
     }
 }

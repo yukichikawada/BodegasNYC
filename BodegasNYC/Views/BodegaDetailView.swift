@@ -16,11 +16,18 @@ struct BodegaDetailView: View {
     @State private var addReviewViewModel: AddReviewViewModel?
     @State private var flagIssueViewModel: FlagIssueViewModel?
     @State private var addPhotoViewModel: AddPhotoViewModel?
-    /// The gallery's `PhotosPicker` selection. Only a hand-off slot: the
-    /// `.task(id:)` below loads its bytes into an `AddPhotoViewModel`, then
-    /// clears it so picking the same photo again still registers as a change.
-    @State private var pickedPhotoItem: PhotosPickerItem?
-    @State private var photoLoadErrorMessage: String?
+    /// The gallery's `PhotosPicker` selection (up to 10, in selection
+    /// order). Only a hand-off slot: `.onChange` below turns it into an
+    /// `AddPhotoViewModel`, which loads the picks, then clears it so picking
+    /// the same photos again still registers as a change.
+    @State private var pickedPhotoItems: [PhotosPickerItem] = []
+    /// Photos that went up while the sheet is open. They join the gallery
+    /// when it closes, so the insert is seen (design D16).
+    @State private var uploadedWhileSheetOpen: [Photo] = []
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    #if DEBUG
+    @State private var openedFixtureUploadSheet = false
+    #endif
     /// Set by `FlagIssueView`'s `onSubmitted`, but only turned into the
     /// visible confirmation alert from the flag sheet's `onDismiss` —
     /// presenting an alert while the sheet is still animating away is
@@ -106,9 +113,10 @@ struct BodegaDetailView: View {
                 PhotoGallerySection(
                     photos: viewModel.photos,
                     urlFor: viewModel.photoURL(for:),
-                    pickedItem: $pickedPhotoItem,
+                    pickedItems: $pickedPhotoItems,
                     namespace: photoNamespace,
                     scrollTarget: galleryScrollTarget,
+                    insertTransition: PhotoMotion.insertStyle(reduceMotion: reduceMotion).transition,
                     focusedPhotoID: $focusedPhotoID,
                     onOpen: openPhotoViewer(at:)
                 ) { photo in
@@ -170,23 +178,18 @@ struct BodegaDetailView: View {
                 self.editBodegaViewModel = nil
             } onOpenExisting: { _ in }
         }
-        .task(id: pickedPhotoItem) { await loadPickedPhoto() }
-        .sheet(item: $addPhotoViewModel) { addPhotoViewModel in
-            AddPhotoView(viewModel: addPhotoViewModel, sessionStore: sessionStore) { photo in
-                viewModel.photoWasAdded(photo)
+        .onChange(of: pickedPhotoItems) { _, items in presentAddPhotos(for: items) }
+        #if DEBUG
+        .task { openFixtureUploadSheetIfRequested() }
+        #endif
+        .sheet(item: $addPhotoViewModel, onDismiss: insertUploadedPhotos) { addPhotoViewModel in
+            AddPhotoView(
+                viewModel: addPhotoViewModel,
+                bodegaName: viewModel.bodega.name,
+                sessionStore: addPhotoViewModel.sessionStore
+            ) { _ in
                 self.addPhotoViewModel = nil
             }
-        }
-        .alert(
-            "Couldn't Load Photo",
-            isPresented: Binding(
-                get: { photoLoadErrorMessage != nil },
-                set: { if !$0 { photoLoadErrorMessage = nil } }
-            )
-        ) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(photoLoadErrorMessage ?? "")
         }
         .sheet(item: $flagIssueViewModel, onDismiss: {
             if flagSubmittedPendingConfirmation {
@@ -208,7 +211,7 @@ struct BodegaDetailView: View {
             focusedPhotoID = viewerPhotoID
         }, content: { session in
             PhotoViewer(
-                photos: session.photos,
+                items: PhotoViewerItem.gallery(session.photos, urlFor: viewModel.photoURL(for:)),
                 currentID: Binding(
                     get: { viewerPhotoID ?? session.initialID },
                     set: { newID in
@@ -217,7 +220,6 @@ struct BodegaDetailView: View {
                         galleryScrollTarget = newID
                     }
                 ),
-                urlFor: viewModel.photoURL(for:),
                 makeFlagViewModel: { photoID in
                     FlagIssueViewModel(target: .photo(photoID), flagService: flagService, sessionStore: sessionStore)
                 },
@@ -236,33 +238,6 @@ struct BodegaDetailView: View {
         // last session's target still registers as a change.
         galleryScrollTarget = nil
         photoViewerSession = PhotoViewerSession(photos: viewModel.photos, initialID: photo.id)
-    }
-
-    /// Loads the picked library item's raw bytes and hands them to a fresh
-    /// `AddPhotoViewModel`, which presents the confirm-and-upload sheet. No
-    /// sign-in check here — that happens on Upload, same as Submit in the
-    /// review/flag flows. `loadTransferable` does its work out of process,
-    /// so awaiting it here doesn't block the main actor.
-    private func loadPickedPhoto() async {
-        guard let item = pickedPhotoItem else { return }
-        do {
-            let data = try await item.loadTransferable(type: Data.self)
-            guard !Task.isCancelled else { return }
-            if let data {
-                addPhotoViewModel = AddPhotoViewModel(
-                    bodegaId: viewModel.bodega.id,
-                    imageData: data,
-                    photoService: photoService,
-                    sessionStore: sessionStore
-                )
-            } else {
-                photoLoadErrorMessage = "That photo isn't available."
-            }
-        } catch {
-            guard !Task.isCancelled else { return }
-            photoLoadErrorMessage = error.localizedDescription
-        }
-        pickedPhotoItem = nil
     }
 
     /// Reuses the Add Bodega form, pre-filled from the bodega as currently
@@ -327,6 +302,74 @@ struct BodegaDetailView: View {
     }
 }
 
+// MARK: - Add Photos (#107 PR 2)
+
+extension BodegaDetailView {
+    /// Opens the Add Photos sheet the moment the picker closes (design D11),
+    /// with one source per pick; the sheet's view model loads them one at a
+    /// time (eng C1). No sign-in check here — that happens on Upload, same as
+    /// Submit in the review/flag flows. `loadTransferable` does its work out
+    /// of process, so awaiting it doesn't block the main actor.
+    private func presentAddPhotos(for items: [PhotosPickerItem]) {
+        guard !items.isEmpty else { return }
+        let sources: [AddPhotoViewModel.PhotoSource] = items.map { item in
+            { try await item.loadTransferable(type: Data.self) }
+        }
+        pickedPhotoItems = []
+        presentAddPhotos(sources: sources, sessionStore: sessionStore)
+    }
+
+    private func presentAddPhotos(
+        sources: [AddPhotoViewModel.PhotoSource],
+        sessionStore: SessionStore,
+        itemIDs: [UUID]? = nil
+    ) {
+        uploadedWhileSheetOpen = []
+        addPhotoViewModel = AddPhotoViewModel(
+            bodegaId: viewModel.bodega.id,
+            sources: sources,
+            itemIDs: itemIDs,
+            photoService: photoService,
+            sessionStore: sessionStore
+        ) { photo in
+            uploadedWhileSheetOpen.append(photo)
+        }
+    }
+
+    /// Photos join the gallery front in upload order (reverse selection
+    /// order), so the batch reads in selection order; then the row scrolls
+    /// to its leading edge (design D16). Opacity only under Reduce Motion.
+    private func insertUploadedPhotos() {
+        let photos = uploadedWhileSheetOpen
+        uploadedWhileSheetOpen = []
+        guard !photos.isEmpty else { return }
+        withAnimation(PhotoMotion.insertAnimation) {
+            for photo in photos {
+                viewModel.photoWasAdded(photo)
+            }
+        }
+        // Through the gallery's one scroll target (set here and by page
+        // changes in the viewer, never at open).
+        galleryScrollTarget = viewModel.photos.first?.id
+    }
+
+    #if DEBUG
+    /// `-UITestAddPhotos` (#107 eng O4): opens the sheet on the fixture
+    /// bodega with three fixture photos and a signed-in fixture session, so
+    /// a UI test can drive captions, removal, a failed upload and its retry
+    /// without the system picker.
+    private func openFixtureUploadSheetIfRequested() {
+        guard UITestFixtures.opensAddPhotos, !openedFixtureUploadSheet else { return }
+        openedFixtureUploadSheet = true
+        presentAddPhotos(
+            sources: UITestFixtures.addPhotoSources(),
+            sessionStore: UITestFixtures.makeSignedInSessionStore(),
+            itemIDs: UITestFixtures.addPhotoItemIDs
+        )
+    }
+    #endif
+}
+
 // `DataPointsSection`, `HoursSection`, `ReviewRow` and `DetailButtonRow` live in
 // `BodegaDetailSections.swift`.
 
@@ -388,13 +431,19 @@ private struct PhotoGallerySection: View {
     private static let thumbnailRadius: CGFloat = 12
     private static let thumbnailSize: CGFloat = 120
 
+    /// The picker's limit (#107 spec D1).
+    static let maxPickCount = 10
+
     let photos: [Photo]
     let urlFor: (Photo) -> URL?
-    @Binding var pickedItem: PhotosPickerItem?
+    @Binding var pickedItems: [PhotosPickerItem]
     let namespace: Namespace.ID
-    /// The viewer's current photo, kept scrolled into view (no animation:
-    /// the gallery is under the cover while it changes).
+    /// Scrolled into view on change: the viewer's page (no animation: the
+    /// gallery is under the cover while it changes), or the first photo
+    /// after an upload, to the leading edge (design D16).
     let scrollTarget: Photo.ID?
+    /// New thumbnails' insert transition (`PhotoMotion.InsertStyle`).
+    let insertTransition: AnyTransition
     var focusedPhotoID: AccessibilityFocusState<Photo.ID?>.Binding
     let onOpen: (Photo) -> Void
     let onFlag: (Photo) -> Void
@@ -404,7 +453,12 @@ private struct PhotoGallerySection: View {
             DetailButtonRow {
                 Text(AppCopy.photosSectionLabel.copy.text).font(.headline)
             } buttons: {
-                PhotosPicker(selection: $pickedItem, matching: .images) {
+                PhotosPicker(
+                    selection: $pickedItems,
+                    maxSelectionCount: Self.maxPickCount,
+                    selectionBehavior: .ordered,
+                    matching: .images
+                ) {
                     Label(AppCopy.addPhotoAction.copy.text, systemImage: "photo.badge.plus")
                 }
                 .buttonStyle(.bordered)
@@ -417,12 +471,20 @@ private struct PhotoGallerySection: View {
                         HStack(spacing: 8) {
                             ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
                                 thumbnail(photo, index: index)
+                                    .transition(insertTransition)
                             }
                         }
                     }
                     .onChange(of: scrollTarget) { _, target in
                         guard let target else { return }
-                        withoutAnimation { proxy.scrollTo(target, anchor: .center) }
+                        if target == photos.first?.id {
+                            // The leading edge: after an upload (design D16)
+                            // this runs on screen, so it moves with the insert;
+                            // under the viewer's cover the animation is unseen.
+                            withAnimation(PhotoMotion.insertAnimation) { proxy.scrollTo(target, anchor: .leading) }
+                        } else {
+                            withoutAnimation { proxy.scrollTo(target, anchor: .center) }
+                        }
                     }
                 }
             }
@@ -447,6 +509,7 @@ private struct PhotoGallerySection: View {
         }
         .id(photo.id)
         .accessibilityLabel(AppCopy.photoPositionLabel(index: index, count: photos.count).text)
+        .accessibilityValue(photo.caption ?? "")
         .accessibilityHint(AppCopy.photoOpensFullScreenHint.copy.text)
         .accessibilityFocused(focusedPhotoID, equals: photo.id)
         .contextMenu {

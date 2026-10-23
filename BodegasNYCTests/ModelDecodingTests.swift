@@ -83,6 +83,30 @@ struct ModelDecodingTests {
         let photo = try PostgRESTDecoding.makeDecoder().decode(Photo.self, from: Data(json.utf8))
 
         #expect(photo.storagePath == "bodega-photos/8f14e45f/front-door.jpg")
+        #expect(photo.caption == nil)
+    }
+
+    /// protects: a row's caption decodes, and an explicit null decodes as nil (#107).
+    /// fails_when: the caption key is wrong, or null throws.
+    /// no_claim: that a build without PR 2 ignores the column (AC 10: Decodable ignores unknown keys; not re-run here).
+    @Test func decodesPhotoCaptionAndNullCaption() throws {
+        func row(_ caption: String) -> Data {
+            Data("""
+            {
+              "id": "c56a4180-65aa-42ec-a945-5fd21dec0538",
+              "bodega_id": "8f14e45f-ceea-467e-adc9-15476f4eaa15",
+              "uploaded_by": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+              "storage_path": "8f14e45f/front-door.jpg",
+              "is_hidden": false,
+              "caption": \(caption),
+              "created_at": "2026-07-21T18:31:12.500000+00:00"
+            }
+            """.utf8)
+        }
+        let decoder = PostgRESTDecoding.makeDecoder()
+
+        #expect(try decoder.decode(Photo.self, from: row(#""The cat runs the counter.""#)).caption == "The cat runs the counter.")
+        #expect(try decoder.decode(Photo.self, from: row("null")).caption == nil)
     }
 
     @Test func decodesFlagAndResolvesTarget() throws {

@@ -1,4 +1,5 @@
 #if DEBUG
+import Auth
 import CoreGraphics
 import Foundation
 import ImageIO
@@ -49,23 +50,107 @@ nonisolated enum UITestFixtures {
         guard isEnabled else { return }
         URLProtocol.registerClass(FixtureURLProtocol.self)
     }
+
+    // MARK: Upload sheet (#107 eng O4)
+
+    /// With `-UITestFixtures`, opens the Add Photos sheet on the fixture
+    /// bodega's detail with `addPhotoItemIDs.count` fixture photos.
+    static let addPhotosLaunchArgument = "-UITestAddPhotos"
+
+    static var opensAddPhotos: Bool {
+        isEnabled && CommandLine.arguments.contains(addPhotosLaunchArgument)
+    }
+
+    /// Fixed so `FixtureURLProtocol` can tell the photos apart: the second
+    /// one's first insert fails.
+    static let addPhotoItemIDs: [UUID] = (1...3).map { number in
+        UUID(uuidString: "5B1D0C3A-0000-4000-8000-00000000000\(number)")!
+    }
+
+    static var failingAddPhotoID: UUID { addPhotoItemIDs[1] }
+
+    /// One generated JPEG per item, standing in for the picker's bytes.
+    static func addPhotoSources() -> [AddPhotoViewModel.PhotoSource] {
+        (1...addPhotoItemIDs.count).map { number in
+            { FixtureURLProtocol.photoJPEG(for: "pick-\(number)") }
+        }
+    }
+
+    /// A session store already signed in as the fixture user, from an
+    /// in-memory auth store, so Upload does not stop at the sign-in sheet.
+    @MainActor
+    static func makeSignedInSessionStore() -> SessionStore {
+        let storage = FixtureAuthStorage()
+        let session = Session(
+            accessToken: "fixture-access-token",
+            tokenType: "bearer",
+            expiresIn: 86_400,
+            expiresAt: Date().addingTimeInterval(86_400).timeIntervalSince1970,
+            refreshToken: "fixture-refresh-token",
+            user: User(
+                id: FixtureURLProtocol.fixtureUserID,
+                appMetadata: [:],
+                userMetadata: [:],
+                aud: "authenticated",
+                createdAt: Date(),
+                updatedAt: Date()
+            )
+        )
+        // The live store's encoding (a plain JSONEncoder) under the SDK's
+        // default key, as `makeTestAuthClient` does in the unit tests.
+        try? storage.store(key: "supabase.auth.token", value: JSONEncoder().encode(session))
+        let authSession = urlSession()
+        let auth = AuthClient(
+            configuration: AuthClient.Configuration(
+                url: URL(string: "https://fixture.supabase.co/auth/v1")!,
+                headers: ["apikey": "fixture-anon-key"],
+                localStorage: storage,
+                logger: nil,
+                fetch: { try await authSession.data(for: $0) }
+            )
+        )
+        return SessionStore(auth: auth)
+    }
+}
+
+/// In-memory `AuthLocalStorage` for the fixture session; never the Keychain.
+nonisolated private final class FixtureAuthStorage: AuthLocalStorage, @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [String: Data] = [:]
+
+    func store(key: String, value: Data) throws { lock.withLock { storage[key] = value } }
+    func retrieve(key: String) throws -> Data? { lock.withLock { storage[key] } }
+    func remove(key: String) throws { lock.withLock { storage[key] = nil } }
 }
 
 /// Answers every request locally: `bodegas` GETs and the
 /// `nearby_bodegas` RPC return the fixture row, `photos` GETs the three
 /// fixture photo rows, public photo objects a small JPEG, any other GET an
-/// empty JSON array, and any other write fails with a 501.
+/// empty JSON array. Writes: a Storage photo upload succeeds once per path
+/// and answers a repeat with Storage's "already exists"; a `photos` insert
+/// echoes the row back, except the first insert of
+/// `UITestFixtures.failingAddPhotoID`, which fails (#107 eng O4). Any other
+/// write fails with a 501.
 nonisolated final class FixtureURLProtocol: URLProtocol {
     static let bodegaID = "6E1C7A52-4B0B-4C8F-9C61-0F2E8E5A1B01"
     static let photoCount = 3
     static let failingPhotoRequests = RequestBudget(failures: UITestFixtures.photoFailureCount)
+    static let fixtureUserID = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+    /// The first fixture photo's caption (eng T1: one captioned row).
+    static let captionedPhotoCaption = "The cat runs the counter."
 
-    /// Newest first, as `PhotoService.fetchAll` orders them; no `caption`
-    /// column yet (PR 2).
+    /// Newest first, as `PhotoService.fetchAll` orders them; the first has
+    /// a caption, the others have none (one with the key null, one without
+    /// it).
     static let photosJSON: String = {
         let rows = (1...photoCount).map { number in
-            """
-            {
+            let caption = switch number {
+            case 1: "\n  \"caption\": \"\(captionedPhotoCaption)\","
+            case 2: "\n  \"caption\": null,"
+            default: ""
+            }
+            return """
+            {\(caption)
               "id": "7A0F3C2E-0000-4000-8000-00000000000\(number)",
               "bodega_id": "\(bodegaID)",
               "uploaded_by": "00000000-0000-0000-0000-000000000001",
@@ -77,6 +162,12 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
         }
         return "[" + rows.joined(separator: ",") + "]"
     }()
+
+    /// Upload state across requests (URLSession makes a new protocol
+    /// instance per request).
+    private static let lock = NSLock()
+    nonisolated(unsafe) private static var uploadedPaths: Set<String> = []
+    nonisolated(unsafe) private static var failedInsertIDs: Set<String> = []
 
     /// Generated rather than shipped as a resource, so Release carries no
     /// fixture bytes: a 640x480 JPEG, a different grey per photo so pages
@@ -152,6 +243,19 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
             }
         } else if method == "GET" {
             body = Data("[]".utf8)
+        } else if method == "POST" && path.contains("/storage/v1/object/photos/") {
+            let objectPath = String(path[path.range(of: "/storage/v1/object/photos/")!.upperBound...])
+            let isRepeat = Self.lock.withLock { !Self.uploadedPaths.insert(objectPath).inserted }
+            if isRepeat {
+                statusCode = 400
+                body = Data(#"{"statusCode":"409","error":"Duplicate","message":"The resource already exists"}"#.utf8)
+            } else {
+                body = Data(#"{"Key":"photos/\#(objectPath)","Id":"\#(UUID().uuidString)"}"#.utf8)
+            }
+        } else if method == "POST" && path.hasSuffix("/rest/v1/photos") {
+            let inserted = Self.insertPhoto(Self.requestBody(of: request))
+            statusCode = inserted.status
+            body = inserted.body
         } else {
             // Unknown writes fail loudly, so a write test can't pass on a silent `[]`.
             statusCode = 501
@@ -172,6 +276,42 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
     }
 
     override func stopLoading() {}
+
+    /// Echoes the inserted row back as PostgREST would for
+    /// `insert(...).select().single()`, or fails the first insert of the
+    /// fixture's failing photo with a 500.
+    private static func insertPhoto(_ body: Data) -> (status: Int, body: Data) {
+        guard var row = (try? JSONSerialization.jsonObject(with: body)) as? [String: Any],
+              let id = row["id"] as? String else {
+            return (400, Data(#"{"code":"PGRST102","message":"UITestFixtures: unreadable insert"}"#.utf8))
+        }
+        let failsNow = Self.lock.withLock {
+            id.uppercased() == UITestFixtures.failingAddPhotoID.uuidString && Self.failedInsertIDs.insert(id).inserted
+        }
+        if failsNow {
+            return (500, Data(#"{"code":"XX000","message":"UITestFixtures: injected failure"}"#.utf8))
+        }
+        row["is_hidden"] = false
+        row["created_at"] = ISO8601DateFormatter().string(from: Date())
+        let data = (try? JSONSerialization.data(withJSONObject: row)) ?? Data("{}".utf8)
+        return (201, data)
+    }
+
+    /// `URLSession` usually hands a custom protocol the body as a stream.
+    private static func requestBody(of request: URLRequest) -> Data {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return Data() }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        while stream.hasBytesAvailable {
+            let count = stream.read(&buffer, maxLength: buffer.count)
+            guard count > 0 else { break }
+            data.append(buffer, count: count)
+        }
+        return data
+    }
 }
 
 /// Counts requests across `URLProtocol` instances (which start on any

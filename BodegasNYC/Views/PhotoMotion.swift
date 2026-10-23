@@ -28,6 +28,20 @@ nonisolated enum PhotoMotion {
         reduceMotion ? .fade : .scaleAndFade
     }
 
+    /// The viewer's caption band expanding on "More" (design D2/D21), `easeInOut`.
+    static let captionExpandSeconds: TimeInterval = 0.25
+    /// The collapsed band's line limit (design D2).
+    static let captionCollapsedLines = 3
+    /// The expanded band's scroll area is capped at this share of the
+    /// viewer's height (design D2).
+    static let captionMaxHeightFraction: CGFloat = 0.5
+
+    /// `nil` (instant) under Reduce Motion: the band's height jumps rather
+    /// than grows.
+    static func captionExpandAnimation(reduceMotion: Bool) -> Animation? {
+        reduceMotion ? nil : .easeInOut(duration: captionExpandSeconds)
+    }
+
     static var chromeAnimation: Animation { .easeOut(duration: chromeSeconds) }
     static var rowStatusAnimation: Animation { .easeOut(duration: rowStatusSeconds) }
     static var insertAnimation: Animation { .easeInOut(duration: insertSeconds) }

@@ -32,6 +32,20 @@
 **Priority:** P2
 **Depends on:** PR 2 merged
 
+## Photos
+
+### Edit a photo's caption after upload
+
+**What:** Let the uploader change or clear a photo's caption once it is up: an RLS update policy on `public.photos` limited to `caption` (a column grant or a trigger, so `is_hidden`, `storage_path` and the rest stay immutable), plus an edit action in the photo viewer's menu for your own photos.
+
+**Why:** #107 locks a caption once its first upload attempt starts (eng O1), so a typo is permanent today; the only fix is flagging the photo.
+
+**Context:** #107 eng review TODO1 (D11) and spec D4. There is no update policy on `photos` now (`20260722043231_bodegas_reviews_photos_flags_rls.sql`); the caption column and its 1-140 character check land in `20261023120000_add_photo_caption.sql` (#107 PR 2). Keep the trim and empty-to-NULL rule from `AddPhotoViewModel.normalizedCaption(_:)`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** #107
+
 ## Completed
 
 ### Paginate `BodegaService.fetchAll` past the 1,000-row PostgREST cap (done 2026-10-21)

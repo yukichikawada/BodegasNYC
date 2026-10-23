@@ -12,6 +12,8 @@ import XCTest
 final class BodegasNYCUITests: XCTestCase {
     /// Must match `UITestFixtures.bodegaName` in the app target.
     private static let fixtureBodegaName = "Fixture Deli"
+    /// Must match `FixtureURLProtocol.captionedPhotoCaption`.
+    private static let fixtureCaption = "The cat runs the counter."
 
     override func setUpWithError() throws {
         continueAfterFailure = false
@@ -92,6 +94,21 @@ final class BodegasNYCUITests: XCTestCase {
         app.buttons["Photo 1 of 3"].tap()
         XCTAssertTrue(counter.waitForExistence(timeout: 10), "viewer did not reopen")
         XCTAssertEqual(counter.label, "1 of 3", "viewer did not reopen on the first photo")
+
+        // PR 2: the first fixture photo is captioned; the band shows with the
+        // controls and hides with them (design D2). It overlays the bottom of
+        // the page, so the page still fills the screen either way (QA P2).
+        let caption = app.staticTexts[Self.fixtureCaption]
+        XCTAssertTrue(caption.waitForExistence(timeout: 5), "caption band missing on the captioned photo")
+        let captionedPage = app.images["Photo 1 of 3"]
+        XCTAssertTrue(captionedPage.waitForExistence(timeout: 10), "captioned page image never loaded")
+        XCTAssertEqual(settledFrame(of: captionedPage), screen, "the caption band resized the page")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+        XCTAssertTrue(caption.waitForNonExistence(timeout: 5), "caption band stayed up with the controls hidden")
+        XCTAssertEqual(settledFrame(of: captionedPage), screen, "page moved when the band hid")
+        app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.35)).tap()
+        XCTAssertTrue(caption.waitForExistence(timeout: 5), "caption band did not come back with the controls")
+
         app.swipeDown(velocity: .fast)
         XCTAssertTrue(counter.waitForNonExistence(timeout: 5), "swipe down left the viewer up")
         XCTAssertTrue(app.navigationBars[Self.fixtureBodegaName].exists, "did not return to the detail")
@@ -138,6 +155,53 @@ final class BodegasNYCUITests: XCTestCase {
             last = current
         }
         return last
+    }
+
+    /// protects: the Add Photos sheet end to end on fixtures (#107 eng O4, AC 5, AC 8): a row is removed by swipe,
+    /// captions are typed, Upload sends the rest, the 2nd photo's injected failure shows "Didn't go through", a
+    /// locked caption and "Retry 1", and the retry (whose Storage object already exists) finishes and closes the
+    /// sheet, with both photos in the gallery.
+    /// fails_when: a row can't be removed, the failure isn't shown, the retry count is wrong, the failed caption
+    /// stays editable, the retry doesn't close the sheet, or the gallery doesn't gain the two photos.
+    /// no_claim: the system PhotosPicker (out of process), real Storage/Postgres, the Stop and discard paths
+    /// (unit tests, live QA), and anything visual.
+    @MainActor
+    func testAddPhotosSheetRemovesCaptionsFailsAndRetries() throws {
+        let app = launchWithFixtures(["-UITestAddPhotos"])
+
+        let pin = app.buttons[Self.fixtureBodegaName].firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 20), "fixture pin never appeared on the map")
+        pin.tap()
+
+        let firstCaption = app.descendants(matching: .any)["addPhoto.caption.0"]
+        XCTAssertTrue(firstCaption.waitForExistence(timeout: 15), "upload sheet never filled in its rows")
+        let thirdCaption = app.descendants(matching: .any)["addPhoto.caption.2"]
+        XCTAssertTrue(thirdCaption.waitForExistence(timeout: 10), "third row never filled in")
+
+        app.cells.element(boundBy: 2).swipeLeft()
+        let remove = app.buttons["Remove"]
+        XCTAssertTrue(remove.waitForExistence(timeout: 5), "swipe did not reveal Remove")
+        remove.tap()
+        XCTAssertTrue(thirdCaption.waitForNonExistence(timeout: 5), "third row was not removed")
+
+        firstCaption.tap()
+        firstCaption.typeText("Front door")
+        let secondCaption = app.descendants(matching: .any)["addPhoto.caption.1"]
+        secondCaption.tap()
+        secondCaption.typeText("The counter")
+
+        let upload = app.buttons["addPhoto.upload"]
+        upload.tap()
+        XCTAssertTrue(waitForLabel(upload, "Retry 1", timeout: 15), "partial failure did not offer Retry 1")
+        XCTAssertTrue(app.staticTexts["Didn't go through"].exists, "failed row shows no failure")
+        XCTAssertEqual(app.staticTexts["addPhoto.passFailed"].label, "1 went up. 1 didn't. Try again.")
+        let lockedCaption = app.staticTexts["addPhoto.lockedCaption.1"]
+        XCTAssertTrue(lockedCaption.exists, "failed row's caption is still editable")
+        XCTAssertEqual(lockedCaption.label, "The counter")
+
+        upload.tap()
+        XCTAssertTrue(upload.waitForNonExistence(timeout: 15), "retry did not finish and close the sheet")
+        XCTAssertTrue(app.buttons["Photo 1 of 5"].waitForExistence(timeout: 5), "gallery did not gain both photos")
     }
 
     @MainActor

@@ -1,49 +1,58 @@
 import SwiftUI
 import UIKit
 
-/// Presented as `.sheet(item:)` from `BodegaDetailView` right after the user
-/// picks an image in its `PhotosPicker`: a preview plus an Upload button.
-/// The confirmation step exists so the sign-in gate can sit on Upload
-/// (matching Submit in `AddReviewView`) instead of on the picker itself.
+/// The Add Photos sheet (#107 PR 2), presented as `.sheet(item:)` from
+/// `BodegaDetailView` the moment its picker closes: one row per pick with an
+/// optional caption, uploaded one at a time on Upload. The sign-in gate sits
+/// on Upload (matching Submit in `AddReviewView`), not on the picker.
+///
+/// Layout (design D12): exactly one pick gets the large preview with the
+/// caption below it; two to ten get an inset-grouped row list. Rows follow
+/// the `BodegaRow` idiom at accessibility sizes (design D18).
+///
+/// Status is neutral and shape-coded (design D9): no symbol while waiting,
+/// an untinted spinner while preparing or uploading, `checkmark.circle`
+/// `.secondary` once up, `exclamationmark.circle` `.primary` with "Didn't go
+/// through" on a failure. No red or green.
 struct AddPhotoView: View {
     @Bindable var viewModel: AddPhotoViewModel
+    /// Shown as the navigation subtitle (design D22).
+    let bodegaName: String
     let sessionStore: SessionStore
-    @Environment(\.dismiss) private var dismiss
-    let onSubmitted: (Photo) -> Void
+    /// Called once nothing is left to send; the parent closes the sheet.
+    let onSubmitted: ([Photo]) -> Void
 
-    /// Decoded off the main actor in `.task` (a thumbnail, not the full
-    /// image) — decoding a full-size library photo synchronously in `body`
-    /// would stall the sheet's presentation.
-    @State private var preview: UIImage?
-    @State private var previewFailed = false
+    @Environment(\.dismiss) private var dismiss
+    @FocusState private var focusedItemID: AddPhotoViewModel.Item.ID?
+    @State private var showingDiscardConfirmation = false
+    @State private var preview: LocalPreview?
+    @State private var previewCurrentID: UUID?
+
+    /// The local viewer's batch, frozen when it opens (design D13).
+    private struct LocalPreview: Identifiable {
+        let id = UUID()
+        let items: [PhotoViewerItem]
+        let initialID: UUID
+    }
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 16) {
-                previewArea
-                if case .failed(let message) = viewModel.submissionState {
-                    Text(message).foregroundStyle(.red).font(.footnote)
+            List {
+                if viewModel.showsSinglePhotoLayout {
+                    singlePhotoSections
+                } else {
+                    rowsSection
                 }
-                Spacer(minLength: 0)
             }
-            .padding()
-            .navigationTitle("Add a Photo")
+            .listStyle(.insetGrouped)
+            .navigationTitle(title)
+            .navigationSubtitle(bodegaName)
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
-                        .disabled(viewModel.submissionState == .submitting)
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Upload") { viewModel.submit() }
-                        .disabled(viewModel.submissionState == .submitting)
-                }
-            }
-            .overlay { if viewModel.submissionState == .submitting { ProgressView() } }
-            .interactiveDismissDisabled(viewModel.submissionState == .submitting)
-            .task { await loadPreview() }
+            .toolbar { toolbar }
+            .interactiveDismissDisabled(viewModel.isSubmitting || viewModel.needsDiscardConfirmation)
+            .task { await viewModel.loadPickedPhotos() }
             .onChange(of: viewModel.submissionState) { _, newValue in
-                if case .submitted(let photo) = newValue { onSubmitted(photo) }
+                if case .submitted(let photos) = newValue { onSubmitted(photos) }
             }
             // Manual Binding, not .onChange-driven — mirrors AddReviewView's
             // sign-in sheet exactly: a re-tap of Upload while still signed
@@ -59,41 +68,227 @@ struct AddPhotoView: View {
             ) {
                 SignInView(sessionStore: sessionStore)
             }
+            .confirmationDialog(
+                AppCopy.discardPhotosTitle(viewModel.unsentCount).text,
+                isPresented: $showingDiscardConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button(AppCopy.discardAction.copy.text, role: .destructive) { dismiss() }
+                Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
+            }
+            .alert(
+                AppCopy.photosUnloadableTitle(viewModel.unloadableCount).text,
+                isPresented: Binding(get: { viewModel.loadFailedEntirely }, set: { _ in })
+            ) {
+                Button(AppCopy.okAction.copy.text, role: .cancel) { dismiss() }
+            } message: {
+                Text(AddPhotoViewModel.unreadableImageMessage)
+            }
+            .fullScreenCover(item: $preview, onDismiss: { previewCurrentID = nil }, content: { preview in
+                PhotoViewer(
+                    items: preview.items,
+                    currentID: Binding(
+                        get: { previewCurrentID ?? preview.initialID },
+                        set: { previewCurrentID = $0 }
+                    ),
+                    makeFlagViewModel: nil,
+                    sessionStore: sessionStore
+                )
+            })
+        }
+    }
+
+    private var title: String {
+        (viewModel.showsSinglePhotoLayout ? AppCopy.addOnePhotoTitle : AppCopy.addPhotoAction).copy.text
+    }
+
+    // MARK: Toolbar (design D10)
+
+    @ToolbarContentBuilder
+    private var toolbar: some ToolbarContent {
+        ToolbarItem(placement: .cancellationAction) {
+            switch viewModel.leadingAction {
+            case .cancel:
+                Button(AppCopy.cancelAction.copy.text, action: close)
+            case .stop:
+                Button(AppCopy.stopAction.copy.text) { viewModel.stop() }
+                    .accessibilityIdentifier("addPhoto.stop")
+            case .done:
+                Button(AppCopy.doneAction.copy.text, action: close)
+                    .accessibilityIdentifier("addPhoto.done")
+            }
+        }
+        ToolbarItem(placement: .confirmationAction) {
+            Button(uploadLabel) {
+                focusedItemID = nil
+                viewModel.submit()
+            }
+            .disabled(!viewModel.canSubmit)
+            .accessibilityIdentifier("addPhoto.upload")
+        }
+    }
+
+    private var uploadLabel: String {
+        viewModel.submissionState == .partiallyFailed
+            ? AppCopy.retryCountLabel(viewModel.failedCount).text
+            : AppCopy.uploadAction.copy.text
+    }
+
+    /// Cancel or Done: asks first only when a caption would be lost.
+    private func close() {
+        if viewModel.needsDiscardConfirmation {
+            showingDiscardConfirmation = true
+        } else {
+            dismiss()
+        }
+    }
+
+    // MARK: Layouts
+
+    @ViewBuilder
+    private var singlePhotoSections: some View {
+        if let item = viewModel.items.first {
+            Section {
+                singlePreview(item)
+                    .frame(maxWidth: .infinity)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+            }
+            Section {
+                AddPhotoCaptionArea(
+                    item: item,
+                    index: 0,
+                    caption: captionBinding(for: item),
+                    focusedItemID: $focusedItemID
+                )
+                .animation(PhotoMotion.rowStatusAnimation, value: item.state)
+            } footer: {
+                footer
+            }
+        } else {
+            Section {} footer: { footer }
         }
     }
 
     @ViewBuilder
-    private var previewArea: some View {
-        if let preview {
-            Image(uiImage: preview)
-                .resizable()
-                .aspectRatio(contentMode: .fit)
-                .frame(maxHeight: 360)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-                .accessibilityLabel("Selected photo")
-        } else if previewFailed {
-            ContentUnavailableView("No Preview", systemImage: "photo")
-                .frame(maxHeight: 360)
+    private func singlePreview(_ item: AddPhotoViewModel.Item) -> some View {
+        let shape = RoundedRectangle(cornerRadius: AddPhotoRow.thumbnailRadius)
+        if let thumbnail = item.thumbnail {
+            Button { openPreview(at: item.id) } label: {
+                Image(uiImage: thumbnail)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+                    .frame(maxHeight: 360)
+                    .clipShape(shape)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(AppCopy.selectedPhotoLabel.copy.text)
+            .accessibilityValue(item.caption)
+            .accessibilityHint(AppCopy.photoOpensFullScreenHint.copy.text)
         } else {
-            RoundedRectangle(cornerRadius: 12)
+            shape
                 .fill(Color.secondary.opacity(0.2))
                 .frame(height: 240)
                 .overlay { ProgressView() }
         }
     }
 
-    private func loadPreview() async {
-        let data = viewModel.imageData
-        let thumbnail = await Task.detached(priority: .userInitiated) { () -> UIImage? in
-            guard let image = UIImage(data: data) else { return nil }
-            // preparingThumbnail(of:) renders at exactly the size passed,
-            // so compute an aspect-preserving one first.
-            let longEdge = max(image.size.width, image.size.height)
-            let ratio = min(1, 900 / max(longEdge, 1))
-            let size = CGSize(width: image.size.width * ratio, height: image.size.height * ratio)
-            return image.preparingThumbnail(of: size) ?? image
-        }.value
-        preview = thumbnail
-        previewFailed = thumbnail == nil
+    private var rowsSection: some View {
+        Section {
+            ForEach(Array(viewModel.items.enumerated()), id: \.element.id) { index, item in
+                AddPhotoRow(
+                    item: item,
+                    index: index,
+                    count: viewModel.items.count,
+                    caption: captionBinding(for: item),
+                    focusedItemID: $focusedItemID,
+                    onOpen: { openPreview(at: item.id) }
+                )
+                .animation(PhotoMotion.rowStatusAnimation, value: item.state)
+                .swipeActions(edge: .trailing) {
+                    if canRemove(item) {
+                        Button(role: .destructive) { viewModel.remove(itemID: item.id) } label: {
+                            Label(AppCopy.removeAction.copy.text, systemImage: "trash")
+                        }
+                    }
+                }
+                .accessibilityActions {
+                    if canRemove(item) {
+                        Button(AppCopy.removeAction.copy.text) { viewModel.remove(itemID: item.id) }
+                    }
+                }
+                .accessibilityIdentifier("addPhoto.row.\(index)")
+            }
+        } footer: {
+            footer
+        }
+    }
+
+    private func canRemove(_ item: AddPhotoViewModel.Item) -> Bool {
+        item.isRemovable && !viewModel.isSubmitting
+    }
+
+    /// Unloadable picks, the optional-captions note, then progress or the
+    /// failed-pass line (design D10, D11, D14).
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            if viewModel.unloadableCount > 0 {
+                Text(AppCopy.photosUnloadable(viewModel.unloadableCount).text)
+                    .foregroundStyle(.primary)
+            }
+            if let progress = viewModel.passProgress, viewModel.isSubmitting {
+                Text(AppCopy.uploadProgress(index: progress.index, count: progress.count).text)
+                    .foregroundStyle(Color.textMuted)
+                    .monospacedDigit()
+                    .accessibilityIdentifier("addPhoto.progress")
+            } else if viewModel.submissionState == .partiallyFailed {
+                Text(
+                    AppCopy.uploadPassFailed(
+                        uploaded: viewModel.uploadedPhotos.count,
+                        failed: viewModel.failedCount
+                    ).text
+                )
+                .foregroundStyle(.primary)
+                .accessibilityIdentifier("addPhoto.passFailed")
+            } else {
+                Text(AppCopy.captionsOptionalFooter.copy.text)
+            }
+        }
+        .font(.footnote)
+    }
+
+    // MARK: Captions and focus (design D14)
+
+    /// Return (a typed newline) moves to the next editable caption, or
+    /// closes the keyboard on the last one; the newline itself is dropped.
+    private func captionBinding(for item: AddPhotoViewModel.Item) -> Binding<String> {
+        Binding(
+            get: { viewModel.items.first { $0.id == item.id }?.caption ?? "" },
+            set: { newValue in
+                guard newValue.contains(where: \.isNewline) else {
+                    viewModel.setCaption(newValue, for: item.id)
+                    return
+                }
+                var stripped = newValue
+                while stripped.last?.isNewline == true { stripped.removeLast() }
+                viewModel.setCaption(stripped, for: item.id)
+                focusedItemID = nextEditableID(after: item.id)
+            }
+        )
+    }
+
+    private func nextEditableID(after id: UUID) -> UUID? {
+        guard let index = viewModel.items.firstIndex(where: { $0.id == id }) else { return nil }
+        return viewModel.items[(index + 1)...].first(where: \.isCaptionEditable)?.id
+    }
+
+    private func openPreview(at id: UUID) {
+        let items = viewModel.items.compactMap { item in
+            item.jpeg.map { PhotoViewerItem(id: item.id, source: .local($0), caption: nil) }
+        }
+        guard items.contains(where: { $0.id == id }) else { return }
+        focusedItemID = nil
+        previewCurrentID = id
+        preview = LocalPreview(items: items, initialID: id)
     }
 }
