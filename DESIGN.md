@@ -412,7 +412,28 @@ Loading is a `ProgressView`; a failure is the `photo` symbol `.secondary`, "That
 `.primary`, and a `.bordered` Retry that reloads that page only. VoiceOver: thumbnails read
 "Photo N of M" with the hint "Opens full screen."; a page is an image with the same label and the
 actions Zoom In and Reset Zoom; a page change announces "Photo N of M."; escape closes, and focus
-returns to the current photo's thumbnail.
+returns to the current photo's thumbnail. A captioned photo shows its caption in an opaque band
+over the bottom of the page while the controls are up, the photo fitted and centred in the space
+above it; the page itself stays full screen (`.body` `.primary`, 3 lines, 16pt inset, no gradient);
+"More" expands it into a scroll capped at half the screen, and it hides with the controls. A
+thumbnail's VoiceOver value is its caption; after the flag sheet closes, focus returns to the menu.
+
+**Add Photos sheet** (`AddPhotoView`, #107 PR 2): opens the moment the picker (up to 10, in
+selection order) closes, titled "Add Photos" with the bodega's name as the subtitle. One pick gets
+the large preview (fit, max 360pt, 12pt radius) with the caption below; two to ten get an
+inset-grouped list of rows: a 64pt 12pt-radius thumbnail that opens the viewer on the batch (no
+menu, no captions), the caption field, and the status. Rows stack at accessibility sizes and
+otherwise use `ViewThatFits` (the `BodegaRow` idiom). A placeholder row (grey tile, spinner) stands
+in while a pick is prepared. Status is neutral and shape-coded: nothing while waiting, an untinted
+spinner while preparing or uploading, `checkmark.circle` `.secondary` once up,
+`exclamationmark.circle` `.primary` with "Didn't go through" on a failure; never red or green. A
+caption locks (plain `.body` text) once its upload starts; the counter shows from 120 characters
+(`.footnote` `textMuted`, monospaced, red only over 140). Return moves to the next caption. Rows
+remove by swipe or the VoiceOver Remove action. The leading button is Cancel, Stop during a pass,
+Done once one photo is up; with an unsent caption it asks "Discard N photos?". The footer carries
+"Uploading 3 of 8." or, after a failure, "2 went up. 1 didn't. Try again." with "Retry N" in the
+trailing button. When it closes, the new thumbnails insert at the front of the gallery and it
+scrolls to its leading edge.
 
 **Section empty state** (DD9, amended by #95 D7): title `.subheadline` `textMuted`, body
 `.footnote` `textMuted` (never `.tertiary`), 2pt
@@ -497,8 +518,9 @@ on the card and in the popover it is `.primary` (#95 D11).
     with its content. Under Reduce Motion the system zoom becomes a crossfade.
   - No haptic on pin tap; the first add keeps the app's one haptic.
 - **Photos (#107):** values live in `PhotoMotion`. Viewer controls 0.2s `easeOut`, opacity only;
-  upload row status 0.15s `easeOut`; new gallery thumbnails 0.25s `easeInOut`. Under Reduce
-  Motion everything is opacity only and the thumbnail zoom becomes a crossfade.
+  upload row status 0.15s `easeOut`; caption band expand 0.25s `easeInOut`; new gallery thumbnails
+  0.25s `easeInOut`. Under Reduce Motion everything is opacity only (the caption band expands
+  instantly) and the thumbnail zoom becomes a crossfade.
 
 ## Follow-ups
 

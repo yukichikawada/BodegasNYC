@@ -18,13 +18,21 @@ import UIKit
 /// Always dark, as in Photos (design D3); semantic colors only. Controls
 /// show on open and never auto-hide; a single tap toggles them (opacity,
 /// `PhotoMotion.chromeSeconds`), except under VoiceOver where they stay.
+///
+/// A photo with a caption shows it in an opaque band over the bottom of the
+/// page while the controls are visible (design D2, PR 2). The page stays full
+/// screen (QA P2); the zoom page fits and centres the photo in the space
+/// above the band. Hiding the controls hides the band and the photo gets
+/// the full screen.
+///
+/// The upload sheet opens it in local mode (design D13): prepared JPEGs, no
+/// Flag menu (`makeFlagViewModel` is `nil`) and no captions.
 struct PhotoViewer: View {
-    let photos: [Photo]
-    @Binding var currentID: Photo.ID
-    let urlFor: (Photo) -> URL?
+    let items: [PhotoViewerItem]
+    @Binding var currentID: PhotoViewerItem.ID
     /// Builds the flag form for a photo; the sheet is presented over the
-    /// viewer, which stays open (eng A2).
-    let makeFlagViewModel: (Photo.ID) -> FlagIssueViewModel
+    /// viewer, which stays open (eng A2). `nil` hides the menu.
+    let makeFlagViewModel: ((Photo.ID) -> FlagIssueViewModel)?
     let sessionStore: SessionStore
 
     @Environment(\.dismiss) private var dismiss
@@ -40,12 +48,33 @@ struct PhotoViewer: View {
     /// sheet's `onDismiss`, never while the sheet is still leaving.
     @State private var flagSubmittedPendingConfirmation = false
     @State private var showingFlagConfirmation = false
+    @State private var captionExpanded = false
+    /// The viewer's full-screen frame and the band's top edge, both global:
+    /// the band covers `viewerFrame.maxY - bandTop` of the page's bottom.
+    @State private var viewerFrame: CGRect = .zero
+    @State private var bandTop: CGFloat = 0
+    /// VoiceOver focus goes back to the menu button after the flag sheet
+    /// closes (design D19).
+    @AccessibilityFocusState private var menuFocused: Bool
 
     private var position: PhotoViewerPosition {
-        PhotoViewerPosition(ids: photos.map(\.id), currentID: currentID)
+        PhotoViewerPosition(ids: items.map(\.id), currentID: currentID)
     }
 
     private var showsControls: Bool { controlsVisible || voiceOverEnabled }
+
+    private var currentCaption: String? {
+        items.first { $0.id == currentID }?.caption
+    }
+
+    /// The band is up only with the controls and a caption.
+    private var bandCaption: String? { showsControls ? currentCaption : nil }
+
+    /// How much of the page's bottom the band covers; 0 without a band.
+    private var bandObstruction: CGFloat {
+        guard bandCaption != nil, bandTop > 0 else { return 0 }
+        return max(0, viewerFrame.maxY - bandTop)
+    }
 
     var body: some View {
         NavigationStack {
@@ -54,7 +83,26 @@ struct PhotoViewer: View {
                     .opacity(groundOpacity)
                     .ignoresSafeArea()
                 pager
+                // The band overlays the bottom of the full-screen page (the
+                // page never resizes, QA P2); the page fits the photo in the
+                // space above it through `bandObstruction`.
+                if let bandCaption {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
+                        PhotoCaptionBand(
+                            caption: bandCaption,
+                            maxExpandedHeight: viewerFrame.height * PhotoMotion.captionMaxHeightFraction,
+                            isExpanded: $captionExpanded
+                        )
+                        .onGeometryChange(for: CGFloat.self, of: { $0.frame(in: .global).minY }, action: {
+                            bandTop = $0
+                        })
+                    }
+                    .opacity(groundOpacity)
+                    .transition(.opacity)
+                }
             }
+            .onGeometryChange(for: CGRect.self, of: { $0.frame(in: .global) }, action: { viewerFrame = $0 })
             .ignoresSafeArea()
             .containerBackground(.clear, for: .navigation)
             .navigationBarTitleDisplayMode(.inline)
@@ -70,12 +118,18 @@ struct PhotoViewer: View {
         .accessibilityAction(.escape) { dismiss() }
         .onChange(of: currentID) {
             zoomRequests.pageChanged()
+            captionExpanded = false
             AccessibilityNotification.Announcement(position.announcement.text).post()
+        }
+        .onChange(of: showsControls) { _, visible in
+            if !visible { captionExpanded = false }
         }
         .sheet(item: $flagIssueViewModel, onDismiss: {
             if flagSubmittedPendingConfirmation {
                 flagSubmittedPendingConfirmation = false
                 showingFlagConfirmation = true
+            } else {
+                menuFocused = true
             }
         }, content: { flagIssueViewModel in
             FlagIssueView(viewModel: flagIssueViewModel, sessionStore: sessionStore) { _ in
@@ -85,7 +139,7 @@ struct PhotoViewer: View {
             .environment(\.colorScheme, systemColorScheme)
         })
         .alert(AppCopy.flagSubmittedTitle.copy.text, isPresented: $showingFlagConfirmation) {
-            Button(AppCopy.okAction.copy.text, role: .cancel) {}
+            Button(AppCopy.okAction.copy.text, role: .cancel) { menuFocused = true }
         } message: {
             Text(AppCopy.flagSubmittedBody.copy.text)
         }
@@ -93,11 +147,13 @@ struct PhotoViewer: View {
 
     private var pager: some View {
         TabView(selection: $currentID) {
-            ForEach(Array(photos.enumerated()), id: \.element.id) { index, photo in
+            ForEach(Array(items.enumerated()), id: \.element.id) { index, photo in
                 PhotoPage(
-                    url: urlFor(photo),
+                    source: photo.source,
                     isCurrent: photo.id == currentID,
-                    label: AppCopy.photoPositionLabel(index: index, count: photos.count).text,
+                    label: AppCopy.photoPositionLabel(index: index, count: items.count).text,
+                    caption: photo.caption,
+                    bottomObstruction: bandObstruction,
                     zoomCommand: zoomRequests.command(for: photo.id),
                     onSingleTap: toggleControls,
                     onZoomAction: { action in
@@ -142,16 +198,19 @@ struct PhotoViewer: View {
                 .foregroundStyle(.primary)
                 .accessibilityIdentifier("photoViewer.counter")
         }
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Button(AppCopy.flagPhotoAction.copy.text, systemImage: "flag") {
-                    flagIssueViewModel = makeFlagViewModel(currentID)
+        if let makeFlagViewModel {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Button(AppCopy.flagPhotoAction.copy.text, systemImage: "flag") {
+                        flagIssueViewModel = makeFlagViewModel(currentID)
+                    }
+                } label: {
+                    Label(AppCopy.photoViewerMoreLabel.copy.text, systemImage: "ellipsis.circle")
+                        .frame(minWidth: 44, minHeight: 44)
                 }
-            } label: {
-                Label(AppCopy.photoViewerMoreLabel.copy.text, systemImage: "ellipsis.circle")
-                    .frame(minWidth: 44, minHeight: 44)
+                .accessibilityIdentifier("photoViewer.more")
+                .accessibilityFocused($menuFocused)
             }
-            .accessibilityIdentifier("photoViewer.more")
         }
     }
 
@@ -207,9 +266,12 @@ nonisolated struct PhotoZoomRequests: Equatable, Sendable {
 /// One page: loading, the zoomable photo, or the failure state (design D17)
 /// whose Retry reloads this page only.
 private struct PhotoPage: View {
-    let url: URL?
+    let source: PhotoViewerItem.Source
     let isCurrent: Bool
     let label: String
+    let caption: String?
+    /// The caption band's cover over the page's bottom (PR 2).
+    let bottomObstruction: CGFloat
     let zoomCommand: PhotoZoomCommand?
     let onSingleTap: () -> Void
     let onZoomAction: (PhotoZoomCommand.Action) -> Void
@@ -238,6 +300,7 @@ private struct PhotoPage: View {
                 ZoomableImagePage(
                     image: image,
                     isCurrent: isCurrent,
+                    bottomObstruction: bottomObstruction,
                     zoomCommand: zoomCommand,
                     onZoomCommandApplied: onZoomCommandApplied,
                     onSingleTap: onSingleTap,
@@ -246,6 +309,7 @@ private struct PhotoPage: View {
                 )
                 .accessibilityElement()
                 .accessibilityLabel(label)
+                .accessibilityValue(caption ?? "")
                 .accessibilityAddTraits(.isImage)
                 .accessibilityAction(named: AppCopy.photoZoomInAction.copy.text) { onZoomAction(.zoomIn) }
                 .accessibilityAction(named: AppCopy.photoResetZoomAction.copy.text) { onZoomAction(.reset) }
@@ -276,6 +340,8 @@ private struct PhotoPage: View {
             .buttonStyle(.bordered)
         }
         .padding(16)
+        // Centred above the caption band, never under it.
+        .padding(.bottom, bottomObstruction)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture(perform: onSingleTap)
@@ -286,9 +352,20 @@ private struct PhotoPage: View {
     /// scrolls back into view keeps its image.
     private func load() async {
         if case .loaded = phase { return }
-        guard let url else {
+        let url: URL
+        switch source {
+        case .local(let data):
+            // A prepared ≤1600px JPEG from the upload sheet (design D13).
+            let image = await Task.detached(priority: .userInitiated) { UIImage(data: data) }.value
+            let prepared = await image?.byPreparingForDisplay() ?? image
+            guard !Task.isCancelled else { return }
+            phase = prepared.map(Phase.loaded) ?? .failed
+            return
+        case .remote(nil):
             phase = .failed
             return
+        case .remote(let remote?):
+            url = remote
         }
         do {
             let (data, response) = try await URLSession.shared.data(from: url)
@@ -316,6 +393,7 @@ private struct PhotoPage: View {
 private struct ZoomableImagePage: UIViewRepresentable {
     let image: UIImage
     let isCurrent: Bool
+    let bottomObstruction: CGFloat
     let zoomCommand: PhotoZoomCommand?
     let onZoomCommandApplied: (Int) -> Void
     let onSingleTap: () -> Void
@@ -330,6 +408,7 @@ private struct ZoomableImagePage: UIViewRepresentable {
         view.onSingleTap = onSingleTap
         view.onSwipeDownChanged = onSwipeDownChanged
         view.onSwipeDownEnded = onSwipeDownEnded
+        view.setBottomObstruction(bottomObstruction)
         view.display(image)
         // Zoom resets when the page changes.
         if !isCurrent {
@@ -357,6 +436,7 @@ final class ZoomablePhotoView: UIView, UIScrollViewDelegate {
     private let swipeDownDelegate = SwipeDownGestureDelegate()
     private var laidOutSize: CGSize = .zero
     private var lastZoomSerial: Int?
+    private var bottomObstruction: CGFloat = 0
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -441,14 +521,38 @@ final class ZoomablePhotoView: UIView, UIScrollViewDelegate {
         }
     }
 
+    /// Points at the bottom of the page the caption band covers (PR 2). The
+    /// page itself stays full screen (QA P2); the photo fits and centres in
+    /// the space above the band, and a zoomed photo can still scroll up
+    /// from under it.
+    func setBottomObstruction(_ obstruction: CGFloat) {
+        let obstruction = max(0, obstruction.rounded())
+        guard obstruction != bottomObstruction else { return }
+        bottomObstruction = obstruction
+        relayoutKeepingZoom()
+    }
+
     override func layoutSubviews() {
         super.layoutSubviews()
         guard bounds.size != laidOutSize else { return }
         laidOutSize = bounds.size
         scrollView.transform = .identity
         scrollView.frame = bounds
-        layoutImage()
+        relayoutKeepingZoom()
     }
+
+    /// Re-fits the photo, keeping a zoomed photo zoomed rather than
+    /// snapping it back to 1x (the band toggling, a rotation).
+    private func relayoutKeepingZoom() {
+        let savedScale = scrollView.zoomScale
+        layoutImage()
+        if !PhotoMotion.Zoom.isAtRest(savedScale) {
+            scrollView.setZoomScale(savedScale, animated: false)
+        }
+    }
+
+    /// The height the photo fits into: the page minus the band.
+    private var visibleHeight: CGFloat { max(1, bounds.height - bottomObstruction) }
 
     /// At 1x the image is aspect-fit and centred with insets, so content
     /// plus insets equal the bounds and nothing scrolls: pans go to the pager.
@@ -456,7 +560,7 @@ final class ZoomablePhotoView: UIView, UIScrollViewDelegate {
         guard let size = imageView.image?.size, size.width > 0, size.height > 0,
               bounds.width > 0, bounds.height > 0 else { return }
         scrollView.setZoomScale(PhotoMotion.Zoom.minimumScale, animated: false)
-        let fit = min(bounds.width / size.width, bounds.height / size.height)
+        let fit = min(bounds.width / size.width, visibleHeight / size.height)
         let fitted = CGSize(width: size.width * fit, height: size.height * fit)
         imageView.frame = CGRect(origin: .zero, size: fitted)
         scrollView.contentSize = fitted
@@ -466,8 +570,11 @@ final class ZoomablePhotoView: UIView, UIScrollViewDelegate {
 
     private func centreImage() {
         let horizontal = max(0, (scrollView.bounds.width - scrollView.contentSize.width) / 2)
-        let vertical = max(0, (scrollView.bounds.height - scrollView.contentSize.height) / 2)
-        scrollView.contentInset = UIEdgeInsets(top: vertical, left: horizontal, bottom: vertical, right: horizontal)
+        let available = max(1, scrollView.bounds.height - bottomObstruction)
+        let vertical = max(0, (available - scrollView.contentSize.height) / 2)
+        scrollView.contentInset = UIEdgeInsets(
+            top: vertical, left: horizontal, bottom: vertical + bottomObstruction, right: horizontal
+        )
     }
 
     private func zoom(to scale: CGFloat, centeredOn point: CGPoint) {

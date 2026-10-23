@@ -157,7 +157,8 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
 
     /// The detail gallery's section header.
     case photosSectionLabel
-    /// The gallery's picker button. PR 2 renames it "Add Photos".
+    /// The gallery's picker button (up to 10 photos, #107 PR 2), and the
+    /// upload sheet's title for more than one photo.
     case addPhotoAction
     /// The thumbnail context menu item and the viewer's menu item.
     case flagPhotoAction
@@ -178,6 +179,23 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case flagSubmittedTitle
     case flagSubmittedBody
     case okAction
+
+    // MARK: Upload sheet and captions (#107 PR 2; design D2, D9-D15)
+
+    /// The sheet's title with exactly one photo ("Add Photos" otherwise).
+    case addOnePhotoTitle
+    /// Toolbar: Upload; Stop while a pass runs; Done once one went up.
+    case uploadAction, stopAction, doneAction, cancelAction
+    /// The row's swipe and VoiceOver action; the discard dialog's button.
+    case removeAction, discardAction
+    /// The viewer's caption band button that expands it.
+    case captionMoreAction
+    /// The field's placeholder (never "optional") and the footer that is.
+    case captionPlaceholder, captionsOptionalFooter
+    /// A row's failure text and its uploaded checkmark's VoiceOver label.
+    case photoUploadFailedValue, photoUploadedValue
+    /// The single-photo preview's VoiceOver label; the no-loadable-picks body.
+    case selectedPhotoLabel, photoUnreadableBody
 
     var copy: CopyString {
         switch self {
@@ -277,7 +295,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
             CopyString(kind: .body, text: "Newest first for now. Nearest first needs to know where you are.")
         case .listOrderNearestAnnouncement: CopyString(kind: .body, text: "Nearest first now.")
         case .photosSectionLabel: CopyString(kind: .label, text: "Photos")
-        case .addPhotoAction: CopyString(kind: .label, text: "Add a Photo")
+        case .addPhotoAction: CopyString(kind: .label, text: "Add Photos")
         case .flagPhotoAction: CopyString(kind: .label, text: "Flag Photo")
         case .photoViewerCloseLabel: CopyString(kind: .label, text: "Close")
         case .photoViewerMoreLabel: CopyString(kind: .label, text: "More")
@@ -288,6 +306,20 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .flagSubmittedTitle: CopyString(kind: .title, text: "Thanks for the heads-up.")
         case .flagSubmittedBody: CopyString(kind: .body, text: "Your flag was submitted.")
         case .okAction: CopyString(kind: .label, text: "OK")
+        case .addOnePhotoTitle: CopyString(kind: .label, text: "Add a Photo")
+        case .uploadAction: CopyString(kind: .label, text: "Upload")
+        case .stopAction: CopyString(kind: .label, text: "Stop")
+        case .doneAction: CopyString(kind: .label, text: "Done")
+        case .cancelAction: CopyString(kind: .label, text: "Cancel")
+        case .removeAction: CopyString(kind: .label, text: "Remove")
+        case .discardAction: CopyString(kind: .label, text: "Discard")
+        case .captionMoreAction: CopyString(kind: .label, text: "More")
+        case .captionPlaceholder: CopyString(kind: .body, text: "What's in the shot?")
+        case .captionsOptionalFooter: CopyString(kind: .body, text: "Captions are optional. 140 characters, tops.")
+        case .photoUploadFailedValue: CopyString(kind: .value, text: "Didn't go through")
+        case .photoUploadedValue: CopyString(kind: .value, text: "Went up")
+        case .selectedPhotoLabel: CopyString(kind: .value, text: "Selected photo")
+        case .photoUnreadableBody: CopyString(kind: .body, text: "Try a different photo.")
         }
     }
 
@@ -361,26 +393,5 @@ nonisolated extension AppCopy {
                 .grouping(.automatic)
                 .locale(Locale(identifier: "en_US"))
         )
-    }
-}
-
-// MARK: - Photo position (#107)
-
-/// The position is data, so these are templates. `index` is zero-based, the
-/// text one-based; the voice test runs them over a fixture set.
-nonisolated extension AppCopy {
-    /// The viewer's counter (design D5): "3 of 12".
-    static func photoCounter(index: Int, count: Int) -> CopyString {
-        CopyString(kind: .value, text: "\(index + 1) of \(count)")
-    }
-
-    /// A thumbnail's and a viewer page's VoiceOver label: "Photo 3 of 12".
-    static func photoPositionLabel(index: Int, count: Int) -> CopyString {
-        CopyString(kind: .value, text: "Photo \(index + 1) of \(count)")
-    }
-
-    /// Posted when the viewer's page changes (design D19): "Photo 3 of 12.".
-    static func photoPageAnnouncement(index: Int, count: Int) -> CopyString {
-        CopyString(kind: .body, text: "Photo \(index + 1) of \(count).")
     }
 }

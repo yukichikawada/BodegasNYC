@@ -56,7 +56,7 @@ final class BodegaDetailViewModel {
                 let fetchedReviews = try await reviewService.fetchAll(bodegaId: bodega.id)
                 let fetchedPhotos = try await photoService.fetchAll(bodegaId: bodega.id)
                 reviews = fetchedReviews.filter { !$0.isHidden }
-                photos = fetchedPhotos.filter { !$0.isHidden }
+                photos = Self.mergingLocalPhotos(photos, into: fetchedPhotos.filter { !$0.isHidden })
                 loadState = .loaded
             } catch {
                 loadState = .failed(error.localizedDescription)
@@ -88,6 +88,15 @@ final class BodegaDetailViewModel {
     func photoWasAdded(_ photo: Photo) {
         guard !photos.contains(where: { $0.id == photo.id }) else { return }
         photos.insert(photo, at: 0)
+    }
+
+    /// The initial load's photos, keeping any photo added locally while the
+    /// fetch was in flight that the fetch lacks, ahead of the fetched ones
+    /// (#107 eng O2): an upload that finishes before the first load must not
+    /// vanish when the load lands.
+    nonisolated static func mergingLocalPhotos(_ local: [Photo], into fetched: [Photo]) -> [Photo] {
+        let fetchedIDs = Set(fetched.map(\.id))
+        return local.filter { !fetchedIDs.contains($0.id) } + fetched
     }
 
     /// Swaps in the server's copy of this bodega after an Edit Bodega save

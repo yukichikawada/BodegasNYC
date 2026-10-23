@@ -3,16 +3,24 @@ import PostgREST
 import Storage
 
 /// Payload for the `photos` row created after a successful Storage upload.
-/// `storagePath` must match the path actually used for the upload.
+/// `storagePath` must match the path actually used for the upload. `id` is
+/// the client's stable id for the photo (#107 eng A1): the same id names the
+/// Storage object, so a retry after a lost response finds both again instead
+/// of making a second object and row. `caption` is left out of the JSON when
+/// `nil` (synthesized `encodeIfPresent`), so the column stays NULL.
 nonisolated struct NewPhotoRecord: Encodable, Sendable {
+    var id: UUID
     var bodegaId: UUID
     var uploadedBy: UUID
     var storagePath: String
+    var caption: String?
 
     private enum CodingKeys: String, CodingKey {
+        case id
         case bodegaId = "bodega_id"
         case uploadedBy = "uploaded_by"
         case storagePath = "storage_path"
+        case caption
     }
 }
 
@@ -23,7 +31,7 @@ nonisolated struct NewPhotoRecord: Encodable, Sendable {
 ///
 /// Bucket named `"photos"` — no bucket-naming convention existed before
 /// this slice. `storage_path` (the DB column) is the full bucket-relative
-/// path, namespaced as `"<bodegaId>/<uuid>.<extension>"` on upload.
+/// path, namespaced as `"<bodegaId>/<photoId>.jpg"` on upload.
 nonisolated struct PhotoService: Sendable {
     static let bucket = "photos"
 
@@ -45,27 +53,74 @@ nonisolated struct PhotoService: Sendable {
             .value
     }
 
+    /// The Storage path for a photo: `<bodegaId>/<id>.jpg`.
+    static func storagePath(id: UUID, bodegaId: UUID) -> String {
+        "\(bodegaId.uuidString)/\(id.uuidString).jpg"
+    }
+
+    /// Uploads one prepared JPEG under the caller's stable `id` (#107 eng
+    /// A1), then inserts its row with that same id. Safe to repeat: a
+    /// Storage "already exists" means an earlier attempt's object landed, so
+    /// it carries on to the insert; a Postgres unique violation (`23505`) on
+    /// the insert means the earlier attempt's row landed too, so it fetches
+    /// that row by id and returns it. Either way there is one object and one
+    /// row per `id`.
+    ///
+    /// `caption` is sent as given; callers trim it and pass `nil` for empty
+    /// (`AddPhotoViewModel.normalizedCaption(_:)`).
     @discardableResult
-    func upload(
-        bodegaId: UUID,
-        uploadedBy: UUID,
-        data: Data,
-        fileExtension: String,
-        contentType: String
-    ) async throws -> Photo {
-        let path = "\(bodegaId)/\(UUID().uuidString).\(fileExtension)"
-        _ = try await storage.from(Self.bucket).upload(
-            path,
-            data: data,
-            options: FileOptions(contentType: contentType)
+    func upload(id: UUID, bodegaId: UUID, uploadedBy: UUID, data: Data, caption: String?) async throws -> Photo {
+        let path = Self.storagePath(id: id, bodegaId: bodegaId)
+        do {
+            _ = try await storage.from(Self.bucket).upload(
+                path,
+                data: data,
+                options: FileOptions(contentType: "image/jpeg")
+            )
+        } catch where Self.isAlreadyExists(error) {
+            // An earlier attempt uploaded it. Objects are immutable and the
+            // path is this item's own id, so the bytes are the same.
+        }
+        let record = NewPhotoRecord(
+            id: id, bodegaId: bodegaId, uploadedBy: uploadedBy, storagePath: path, caption: caption
         )
-        return try await postgrest
-            .from("photos")
-            .insert(NewPhotoRecord(bodegaId: bodegaId, uploadedBy: uploadedBy, storagePath: path))
-            .select()
-            .single()
-            .execute()
-            .value
+        do {
+            return try await postgrest
+                .from("photos")
+                .insert(record)
+                .select()
+                .single()
+                .execute()
+                .value
+        } catch where Self.isUniqueViolation(error) {
+            return try await postgrest
+                .from("photos")
+                .select()
+                .eq("id", value: id)
+                .single()
+                .execute()
+                .value
+        }
+    }
+
+    /// Storage answers a second upload to the same path with
+    /// `{"statusCode": "409", "error": "Duplicate", "message": "The resource
+    /// already exists"}` (over HTTP 400 or 409, depending on the server).
+    static func isAlreadyExists(_ error: any Error) -> Bool {
+        if let error = error as? StorageError {
+            return error.statusCode == "409"
+                || error.error == "Duplicate"
+                || error.message.localizedCaseInsensitiveContains("already exists")
+        }
+        if let error = error as? HTTPError {
+            return error.response.statusCode == 409
+        }
+        return false
+    }
+
+    /// Postgres `unique_violation`, which PostgREST passes through as `code`.
+    static func isUniqueViolation(_ error: any Error) -> Bool {
+        (error as? PostgrestError)?.code == "23505"
     }
 
     func publicURL(for photo: Photo) throws -> URL {
