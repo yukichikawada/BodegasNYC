@@ -14,8 +14,8 @@ import TipKit
 /// wide.
 struct MapBottomCard: View {
     /// The empty states the map can show. The first three are bodega
-    /// banners; `noStreets` is the streets-walked banner, lowest in
-    /// precedence.
+    /// banners; `noStreets` and `zoomInForBlocks` are Streets Walked's,
+    /// lowest in precedence.
     nonisolated enum EmptyState: Hashable, Sendable {
         case noneNearby
         /// `noneNearby` at block zoom (#84 design D3): the 200 m radius is
@@ -24,6 +24,10 @@ struct MapBottomCard: View {
         case noBodegas
         case noFilterMatches
         case noStreets
+        /// More walked runs are in view than the map draws, so the layer is
+        /// hidden (#108 design D3). Title only, not dismissible: zooming in
+        /// clears it.
+        case zoomInForBlocks
     }
 
     /// The first-add card (#25): shown once per device, after the first
@@ -41,25 +45,29 @@ struct MapBottomCard: View {
 
     /// Precedence: placement bar (nil) > first-add card > bodega empty
     /// state (noneNearby, noBodegas, noFilterMatches) > add tip > streets
-    /// banner.
+    /// banner > zoom in for blocks (#108 design D3, lowest).
     ///
     /// - Parameters:
     ///   - emptyState: the bodega banner that applies, if any (see
     ///     `bodegaEmptyState`).
     ///   - streets: whether the "No streets yet." banner applies (see
     ///     `showsStreetsBanner`).
+    ///   - zoomInForBlocks: whether the walked layer is hidden over its cap
+    ///     (only while Show on Map is on and history exists).
     nonisolated static func select(
         isPlacing: Bool,
         firstAdd: FirstAdd?,
         emptyState: EmptyState?,
         addTip: Bool,
-        streets: Bool
+        streets: Bool,
+        zoomInForBlocks: Bool = false
     ) -> Content? {
         if isPlacing { return nil }
         if let firstAdd { return .firstAdd(firstAdd) }
         if let emptyState { return .emptyState(emptyState) }
         if addTip { return .addTip }
         if streets { return .emptyState(.noStreets) }
+        if zoomInForBlocks { return .emptyState(.zoomInForBlocks) }
         return nil
     }
 
@@ -81,10 +89,18 @@ struct MapBottomCard: View {
         return nil
     }
 
-    /// The streets banner shows while tracking is on, nothing has been
-    /// drawn yet, and the user hasn't closed it this launch.
-    nonisolated static func showsStreetsBanner(isTrackingEnabled: Bool, hasPolylines: Bool, isDismissed: Bool) -> Bool {
-        isTrackingEnabled && !hasPolylines && !isDismissed
+    /// The streets banner shows while tracking is on, a count has finished
+    /// with zero walked blocks (it keys on blocks, not raw fixes, #108), and
+    /// the user hasn't closed it this launch. Never while the first count
+    /// runs (design D8) and never when the street data did not load: "No
+    /// streets yet." would be wrong in both.
+    nonisolated static func showsStreetsBanner(
+        isTrackingEnabled: Bool,
+        hasCounted: Bool,
+        hasWalkedBlocks: Bool,
+        isDismissed: Bool
+    ) -> Bool {
+        isTrackingEnabled && hasCounted && !hasWalkedBlocks && !isDismissed
     }
 
     /// From `.accessibility1` up the card stacks vertically (symbol above
@@ -128,16 +144,18 @@ private extension MapBottomCard.EmptyState {
         case .noBodegas: .emptyNoBodegasTitle
         case .noFilterMatches: .emptyNoFilterMatchesTitle
         case .noStreets: .emptyNoStreetsTitle
+        case .zoomInForBlocks: .zoomInForBlocksTitle
         }
     }
 
-    var body: AppCopy {
+    var body: AppCopy? {
         switch self {
         case .noneNearby: .emptyNoneNearbyBody
         case .noneOnBlock: .emptyNoneOnBlockBody
         case .noBodegas: .emptyNoBodegasBody
         case .noFilterMatches: .emptyNoFilterMatchesBody
         case .noStreets: .emptyNoStreetsBody
+        case .zoomInForBlocks: nil
         }
     }
 
@@ -145,7 +163,7 @@ private extension MapBottomCard.EmptyState {
         switch self {
         case .noneNearby, .noneOnBlock, .noBodegas: .addBodegaAction
         case .noFilterMatches: .clearFiltersAction
-        case .noStreets: nil
+        case .noStreets, .zoomInForBlocks: nil
         }
     }
 
@@ -273,13 +291,15 @@ private struct EmptyStateCard: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilitySortPriority(4)
-            Text(state.body.copy.text)
-                .font(.subheadline)
-                .foregroundStyle(.primary)
-                .lineLimit(4)
-                .minimumScaleFactor(0.85)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilitySortPriority(3)
+            if let body = state.body {
+                Text(body.copy.text)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .lineLimit(4)
+                    .minimumScaleFactor(0.85)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .accessibilitySortPriority(3)
+            }
         }
     }
 
@@ -294,6 +314,8 @@ private struct EmptyStateCard: View {
             Image(systemName: "line.3.horizontal.decrease.circle").foregroundStyle(.secondary)
         case .noStreets:
             Image(systemName: "figure.walk").foregroundStyle(.secondary)
+        case .zoomInForBlocks:
+            Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
         }
     }
 }

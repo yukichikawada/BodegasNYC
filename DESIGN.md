@@ -15,6 +15,7 @@ colors:
   accent: "#FF3B30"           # pin, systemRed asset color; dark #FF453A. Bodega pins and the mappin symbol
   accent-cat: "#FF9500"       # catPin, systemOrange asset color; dark #FF9F0A. Cat symbol everywhere, cat pins
   star: "#FFCC00"             # systemYellow; dark #FFD60A. Rating stars only
+  walked: "#5856D6"           # walked asset (#108 D1); dark #7D7AFF, Increase Contrast #3634A3 / #A5A3FF. Walked blocks only
   cluster: "#8E8E93"          # systemGray. Cluster badge fill
   error: "#FF3B30"            # systemRed as text only (form errors, destructive actions); dark #FF453A
 typography:
@@ -136,7 +137,8 @@ a New Yorker." Every decision below serves that: the data and the words carry th
 
 **Key characteristics:**
 - The map is always on screen; everything else floats over it or slides over it.
-- Only three saturated colors exist and all three are data: pin red, cat orange, star yellow.
+- Only four saturated colors exist and all four are data: pin red, cat orange, star yellow,
+  walked indigo.
 - One tint, Deli Green, for every control. It never means data, status, or success.
 - System face everywhere; one display register (heavy, condensed) on three surfaces.
 - Copy is in voice (see `AppCopy`), one symbol per surface, the cat appears sparingly.
@@ -180,6 +182,14 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   on the map, and plain text for form errors and destructive actions in sheets.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
   first-add card, the noBodegas empty state). Yellow is stars and only stars.
+- Indigo is walked blocks and only walked blocks (#108 D1): the `walked` asset, #5856D6 light and
+  #7D7AFF dark, with Increase Contrast slots #3634A3 / #A5A3FF, at full opacity with round caps and
+  joins. Each walked block is a line on its street's centerline, chained into runs, drawn above
+  the roads and under the labels, pins and location dot (`.mapOverlayLevel(level: .aboveRoads)`),
+  8pt up to 400 m of visible height, 5pt to 2 km, 3pt to 8 km, 2pt above, with 10% hysteresis on
+  the way out. Past 2,000 visible runs the layer hides and the bottom card says "Zoom in to see
+  your blocks."; it never draws a subset. Changes land at camera rest with a 0.2s opacity fade,
+  none under Reduce Motion.
 - Cat and non-cat pins are distinguished by glyph (`cat` vs `figure.wave`) as well as color, so
   the red/orange pair is a redundant encoding, not the only one. Keep it that way.
 - Materials (`.regularMaterial`) carry floating content (map card, pin label); `.thickMaterial` is not used (#95 D11). On iOS 26 the
@@ -232,7 +242,7 @@ photo, or its load failure standing in its place).
 `maxWidth: 560pt`, top-aligned at 25% of the height.
 
 **Density:** medium on the map (one floating object at a time in the bottom slot; precedence
-placement card > first-add card > empty state > add tip > streets banner), comfortable on
+placement card > first-add card > empty state > add tip > streets banner > zoom in for blocks), comfortable on
 onboarding and detail. At block zoom the pin layer carries names (#67); the bottom-slot rule is
 unchanged. The map is never replaced by a results screen; list and detail sit over
 it. The List tab slides over the live map; detail zooms out of its pin.
@@ -268,7 +278,9 @@ with opacity over 0.25s ease-in-out (opacity only under Reduce Motion, #23). Sta
 breathe; noneNearby `mappin.slash`; noneOnBlock `mappin.slash`, the nearby empty card at block zoom,
 "Nothing on this block yet." / "Pinch out and look around. Or add the one on your corner." with
 Add a Bodega (#84; above block zoom noneNearby keeps "Nothing near you yet."); noFilterMatches `line.3.horizontal.decrease.circle`;
-loadFailed `exclamationmark.triangle`), firstAdd, addTip, streets banner, tracking error.
+loadFailed `exclamationmark.triangle`), firstAdd, addTip, streets banner ("No streets yet." once a count finds no walked
+blocks, never while the first count runs, #108 D8), zoomInForBlocks (`plus.magnifyingglass`, title only, lowest
+precedence, #108 D3), tracking error.
 
 **Pin** (`BodegaPinView`, DD3): 28pt circle, `.pin` or `.catPin`, white 14pt glyph, 2pt white
 stroke, shadow 2/1, 44pt hit area, anchored at center. Selected: 3pt stroke, shadow 4/2, scale
@@ -562,3 +574,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-21 | #84 long-press peek shelved (owner D10). Probe P4 tried the single-owner route (D5: no `selection:`, no `.tag`, annotation gestures own the tap). Taps, cluster zoom and VoiceOver buttons worked, but no SwiftUI long press both recognises inside an annotation and lets a pan that starts on a pin move the map: `.onLongPressGesture` never fired, and the `simultaneousGesture` forms blocked the pan (0/9). The window-observer route was rejected in eng review (a MapKit selection carries no touch identity). DD3 recovery stays the tap or a zoom; main keeps MapKit selection | Evidence under `~/.gstack/projects/yukichikawada-BodegasNYC/qa/84-peek-probe/` (P2, `p4/`); reopen only with a UIKit route that keeps map pans |
 | 2026-10-21 | #95 design D6 to D9 and D11: a `textMuted` asset (#636366 / #98989F, Increase Contrast #545458 / #AEAEB2) for muted text on opaque surfaces, a scoped exception to the system-neutrals rule; `.tertiary` never on text (empty-state bodies `textMuted`, the duplicate footnote `.primary`, page dots `.secondary` (3:1 non-text, kept a step lighter than the current dot), the decorative chevron kept); error and consequence copy `.primary`, the onboarding body `textMuted`, system `Form` headers and footers keep `.secondary`; data points carry presence by shape plus contrast (absent: struck-through caption in `textMuted`, no opacity; none of the five symbols has a `.slash` variant); inline tips on opaque rows take `textMuted`. D11 (owner): body text on material (map card bodies, tip messages on the card and in the popover, the sign-in and duplicate sheet bodies) is `.primary`, as in iOS notification banners, titles keep `.headline`, symbols on material stay `.secondary`, and the materials stay `.regularMaterial` (`.thickMaterial` is not used) | `/plan-design-review` with a Codex design voice and an independent Claude pass; owner accepted all. Flattened `secondaryLabel` measured 3.44:1 on white and 3.29:1 on grouped, `.tertiary` 1.74:1, under WCAG AA for body text. D11: live, vibrant `.secondary` on material held 3.3 to 4.0:1 in light on both regular and thick material, so thickening could not meet the 4.5:1 gate |
 | 2026-10-23 | #107 design D3: the photo viewer is always dark, as in Photos; semantic `.primary`/`.secondary` on the dark `systemBackground`, no `.white` literals. Its counter is a centered principal toolbar item, an exception to the leading-alignment rule | `/plan-design-review` with two outside voices; owner accepted all. A bright photo on a light ground loses its edges, and every photo app the user knows is dark here |
+| 2026-10-23 | #108 walked blocks replace the raw GPS trace: fixes are map-matched to CSCL street blocks (walked at 6 of 10 tenths), drawn in a new `walked` indigo (#5856D6 / #7D7AFF, Increase Contrast slots; "Indigo is walked blocks and only walked blocks"), above roads and under labels and pins, 8/5/3/2pt by visible height with 10% hysteresis, hidden past 2,000 runs with "Zoom in to see your blocks.", changes at camera rest with a 0.2s fade (none under Reduce Motion). Menu: Show on Map, Start/Stop Recording, Clear History… with "Delete your walked history?"; Motion & Fitness asked once after Start Recording; no one-time announcement (D9 declined). The Your Blocks sheet and its component entry land with PR 2 | `/plan-design-review` D1 to D11 with two outside voices; owner accepted all but D9. The orange trace broke the cat-only rule and read as noise; indigo is clear of red, orange, yellow and Deli Green |

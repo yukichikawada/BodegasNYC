@@ -88,6 +88,7 @@ extension MapScreenView {
         viewModel.regionDidSettle(context.region)
         refreshPinLabels(proxy)
         addCompletion?.cameraDidSettle(center: Coordinate(context.region.center))
+        refreshWalkedOverlay(proxy)
     }
 
     /// The Map tab is back: deliver the settle parked under the List tab,
@@ -153,7 +154,7 @@ extension MapScreenView {
     /// The map's visible height in metres, top-centre to bottom-centre of its
     /// bounds (design D4: heading does not change it). `nil` when the top
     /// does not land on the map (the horizon is in view).
-    private func visibleHeightMeters(_ proxy: MapProxy, bottom: CLLocationCoordinate2D) -> Double? {
+    func visibleHeightMeters(_ proxy: MapProxy, bottom: CLLocationCoordinate2D) -> Double? {
         guard let top = proxy.convert(CGPoint(x: mapSize.width / 2, y: 0), from: .local) else { return nil }
         let meters = Coordinate(top).distance(to: Coordinate(bottom))
         // Before the map has laid out, both points convert to the same
