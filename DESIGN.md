@@ -450,7 +450,9 @@ scrolls to its leading edge.
 **Your Blocks sheet** (`YourBlocksSheet`, #108 PR 2, D7, D8, D11): opened by Your Blocks, the first
 item of the Streets Walked menu (hint "Shows blocks walked in each borough."); opening it brings the
 counts up to date and loads the street data even with no history. Inset-grouped `List`, inline
-title "Your Blocks", Done, `.medium` and `.large` (`.large` only at accessibility sizes). Section 1
+title "Your Blocks", Done, `.medium` and `.large` (`.large` only at accessibility sizes), opaque
+(`systemGroupedBackground`) at both detents, because the counts are `textMuted` data lines, which
+belong on opaque surfaces only, and iOS 26 otherwise draws a `.medium` sheet as glass. Section 1
 is New York City, "412 blocks" with "of 99,360" in `textMuted`; section 2 is Manhattan, Brooklyn,
 Queens, Bronx, Staten Island, each "412 of 9,300 blocks" in `.subheadline` `textMuted` under the
 name in `.body`, the percent trailing in `.body`, all monospaced digits. The percent rounds down;

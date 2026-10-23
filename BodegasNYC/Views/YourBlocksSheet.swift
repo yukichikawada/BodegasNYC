@@ -12,7 +12,8 @@ import UIKit
 /// (`.subheadline` `textMuted`) with the percent trailing, monospaced
 /// digits; it stacks at the accessibility sizes and otherwise uses
 /// `ViewThatFits` (the `BodegaRow` idiom). No progress bars, no display
-/// register.
+/// register. Opaque (`systemGroupedBackground`) at both detents, since the
+/// counts are `textMuted`.
 ///
 /// States (D8), failure > counting > zero: the street data failing replaces
 /// both sections with one `.primary` line; a first count shows "—" and,
@@ -64,6 +65,10 @@ struct YourBlocksSheet: View {
             }
         }
         .presentationDetents(dynamicTypeSize.isAccessibilitySize ? [.large] : [.medium, .large])
+        // Opaque at every detent: the counts are `textMuted` data lines, which
+        // DESIGN.md allows on opaque surfaces only; iOS 26 draws a `.medium`
+        // sheet as glass by default.
+        .presentationBackground(Color(.systemGroupedBackground))
         .task(id: content.phase == .counting) {
             guard content.phase == .counting else {
                 showsCountingStatus = false
