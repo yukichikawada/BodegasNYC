@@ -8,6 +8,8 @@ struct YourBlocksContent: Equatable {
     enum Phase: Equatable {
         /// The street data did not load (eng R5).
         case unavailable
+        /// The first count failed twice and no counts exist (#113 item 5).
+        case countFailed
         /// The first count since launch is running and no counts exist yet:
         /// values show "—", and "Counting your blocks…" after 0.5s.
         case counting
@@ -82,15 +84,17 @@ struct YourBlocksContent: Equatable {
         isMotionDenied = motion == .denied
     }
 
-    /// Failure first, then a first count with nothing to show yet, then
-    /// zero. A recount after a count keeps the last counts (design D8), so
-    /// it is `.zero` or `.counted`, never `.counting`.
+    /// Failure first (the street data, then a first count that failed),
+    /// then a first count with nothing to show yet, then zero. A recount
+    /// after a count keeps the last counts (design D8), so it is `.zero` or
+    /// `.counted`, never `.counting`.
     static func phase(
         countState: StreetsWalkedViewModel.CountState,
         hasCounted: Bool,
         progress: [BoroughProgress]
     ) -> Phase {
         if countState == .unavailable { return .unavailable }
+        if countState == .failed, !hasCounted { return .countFailed }
         guard hasCounted, !progress.isEmpty else { return .counting }
         return progress.allSatisfy { $0.walked == 0 } ? .zero : .counted
     }

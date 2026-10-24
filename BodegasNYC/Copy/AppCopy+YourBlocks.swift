@@ -20,6 +20,9 @@ nonisolated extension AppCopy {
         case recordingOff
         /// The street data did not load (eng R5, design D8); `.primary`.
         case streetMapUnavailable
+        /// The first count failed twice (#113 item 5); `.primary`, in the
+        /// street-map failure's place.
+        case countFailed
         case motionDenied
         /// The Motion & Fitness row for people already recording (design D6).
         case allowMotionAccess
@@ -44,6 +47,8 @@ nonisolated extension AppCopy {
             case .recordingOff: CopyString(kind: .body, text: "Recording is off. Your blocks stay.")
             case .streetMapUnavailable:
                 CopyString(kind: .body, text: "The street map didn't load. Your walks are still saved.")
+            case .countFailed:
+                CopyString(kind: .body, text: "Your blocks couldn't be counted. Your walks are still saved.")
             case .motionDenied:
                 CopyString(kind: .body, text: "Without Motion & Fitness, rides are filtered by speed only.")
             case .allowMotionAccess: CopyString(kind: .label, text: "Allow Motion Access")

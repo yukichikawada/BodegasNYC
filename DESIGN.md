@@ -451,24 +451,26 @@ scrolls to its leading edge.
 
 **Your Blocks sheet** (`YourBlocksSheet`, #108 PR 2, D7, D8, D11): opened by Your Blocks, the first
 item of the Streets Walked menu (hint "Shows blocks walked in each borough."); opening it brings the
-counts up to date and loads the street data even with no history. Inset-grouped `List`, inline
-title "Your Blocks", Done, `.medium` and `.large` (`.large` only at accessibility sizes), opaque
+counts up to date and loads the street data even with no history. Inset-grouped `List`, inline title
+"Your Blocks", Done, `.medium` and `.large` (`.large` only at accessibility sizes), opaque
 (`systemGroupedBackground`) at both detents, because the counts are `textMuted` data lines, which
-belong on opaque surfaces only, and iOS 26 otherwise draws a `.medium` sheet as glass. Section 1
-is New York City, "412 blocks" with "of 99,360" in `textMuted`; section 2 is Manhattan, Brooklyn,
+belong on opaque surfaces only, and iOS 26 otherwise draws a `.medium` sheet as glass. Section 1 is
+New York City, "412 blocks" with "of 99,360" in `textMuted`; section 2 is Manhattan, Brooklyn,
 Queens, Bronx, Staten Island, each "412 of 9,300 blocks" in `.subheadline` `textMuted` under the
 name in `.body`, the percent trailing in `.body`, all monospaced digits. The percent rounds down;
 any nonzero count under 1% shows "<1%". Rows stack at accessibility sizes and otherwise use
-`ViewThatFits` (the `BodegaRow` idiom). No progress bars, no display register, no indigo (the
-sheet is numbers, not the overlay). Footer: "A block counts once you've walked most of it. Your
-walks stay on this phone.", plus "Recording is off. Your blocks stay." and "Without Motion &
-Fitness, rides are filtered by speed only." when they apply. States, failure > counting > zero:
-"The street map didn't load. Your walks are still saved." in `.primary` replaces both sections; a
-first count shows "—" and, after 0.5s, "Counting your blocks…" under the city; a recount keeps the
-last counts; zero adds "Walk somewhere. This fills in on its own." under the city. Someone already
-recording whose Motion & Fitness was never asked gets an Allow Motion Access row; after a denial it
-is Open Settings. VoiceOver: each row is one element, "Manhattan, 412 of 9,300 blocks, 4 percent.";
-"<1%" reads "less than 1 percent", "—" reads "counting".
+`ViewThatFits` (the `BodegaRow` idiom). No progress bars, no display register, no indigo (the sheet
+is numbers, not the overlay). Footer: "A block counts once you've walked most of it. Your walks stay
+on this phone.", plus "Recording is off. Your blocks stay." and "Without Motion & Fitness, rides are
+filtered by speed only." when they apply. States, failure > counting > zero: "The street map didn't
+load. Your walks are still saved." in `.primary` replaces both sections, as does "Your blocks
+couldn't be counted. Your walks are still saved." when the first count fails and its one automatic
+retry fails too (#113; reopening the sheet counts again); a Clear History during the first count
+ends on zero; a first count shows "—" and, after 0.5s, "Counting your blocks…" under the city; a
+recount keeps the last counts; zero adds "Walk somewhere. This fills in on its own." under the city.
+Someone already recording whose Motion & Fitness was never asked gets an Allow Motion Access row;
+after a denial it is Open Settings. VoiceOver: each row is one element, "Manhattan, 412 of 9,300
+blocks, 4 percent."; "<1%" reads "less than 1 percent", "—" reads "counting".
 
 **Section empty state** (DD9, amended by #95 D7): title `.subheadline` `textMuted`, body
 `.footnote` `textMuted` (never `.tertiary`), 2pt
@@ -600,3 +602,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-23 | #108 walked blocks replace the raw GPS trace: fixes are map-matched to CSCL street blocks (walked at 6 of 10 tenths), drawn in a new `walked` indigo (#5856D6 / #7D7AFF, Increase Contrast slots; "Indigo is walked blocks and only walked blocks"), above roads and under labels and pins, 8/5/3/2pt by visible height with 10% hysteresis, hidden past 1,000 runs (2,000 lowered after the R3 device check, where 1,087 to 2,000 runs hitched) with "Zoom in to see your blocks.", changes at camera rest with a 0.2s fade (none under Reduce Motion). Menu: Show on Map, Start/Stop Recording, Clear History… with "Delete your walked history?"; Motion & Fitness asked once after Start Recording; no one-time announcement (D9 declined). The Your Blocks sheet followed in PR 2 (next row) | `/plan-design-review` D1 to D11 with two outside voices; owner accepted all but D9. The orange trace broke the cat-only rule and read as noise; indigo is clear of red, orange, yellow and Deli Green |
 | 2026-10-23 | #108 PR 2 Your Blocks sheet (D5 to D8, D11): first in the Streets Walked menu with the hint "Shows blocks walked in each borough."; an inset-grouped list, New York City then the five boroughs, name over a `textMuted` count with the percent trailing, rounded down with "<1%" under one; no progress bars, no display register; states failure > counting > zero, a first count shows "—" and "Counting your blocks…" after 0.5s, a recount keeps the last counts; an Allow Motion Access row for people already recording, Open Settings after a denial; one VoiceOver element per row | `/plan-design-review` D7, D8, D11, owner accepted. The sheet is the accessible equivalent of the overlay; a percent of a borough is honest only as a number, and bars would make 1% look like nothing |
 | 2026-10-23 | #113 item 1: walked runs enter at the view + 25% and, once drawn, stay until they leave the view + 75%; the over-cap decision is still counted on the + 25% set, and kept runs fill only the room under 1,000, farthest dropped first | The #110 device trace put a 167 ms settle hitch in MapKit's overlay add/remove, scaling with the lines changed; a replayed pan session over the 5,000-block seed swaps fewer lines per settle (numbers in the PR). Not yet confirmed on device |
+| 2026-10-23 | #113 item 5: when the first count of a launch fails and its one automatic retry fails too, Your Blocks shows "Your blocks couldn't be counted. Your walks are still saved." in `.primary`, in the street-map failure's place (both sections replaced; reopening the sheet counts again); a Clear History during the first count ends on the zero state; a failed recount keeps the last counts | D8 had no state for a count that fails: the sheet said "Counting your blocks…" until it was reopened. Zero was not an option, because with history it would be false and without a count there are no totals; one line in the existing failure layout is the least new UI |

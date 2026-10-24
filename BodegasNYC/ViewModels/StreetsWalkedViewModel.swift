@@ -30,18 +30,6 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         case authorizationNotGranted
     }
 
-    /// Where the block counts stand (design D8).
-    enum CountState: Equatable {
-        /// Nothing asked yet (no history, recording off: the street data
-        /// never loads).
-        case idle
-        /// A pass is running; the last overlay and counts stay up.
-        case counting
-        case ready
-        /// The bundled street data did not load (eng R5).
-        case unavailable
-    }
-
     private(set) var isTrackingEnabled = false
     /// Blocks with at least 6 of 10 tenths walked, by `physicalid`.
     private(set) var walkedBlockIDs: Set<UInt32> = []
@@ -97,6 +85,7 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     private let matcher: BlockMatchingActor
     let motion: any MotionActivityProviding
     private var refreshTask: Task<Void, Never>?
+    private let firstCountRetryDelay: Duration
     private var refreshQueued = false
 
     private static let trackingEnabledDefaultsKey = "streetsWalked.isTrackingEnabled"
@@ -112,13 +101,16 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     ///   - matcher: the matching actor; by default one over `modelContainer`
     ///     with the bundled street data and CoreMotion.
     ///   - motion: Motion & Fitness, for the one-time ask (design D6).
+    ///   - firstCountRetryDelay: before a failed first count's retry (#113).
     init(
         locationPermissionClient: LocationPermissionClient,
         modelContainer: ModelContainer,
         userDefaults: UserDefaults = .standard,
         motion: any MotionActivityProviding = CoreMotionActivityProvider(),
-        matcher: BlockMatchingActor? = nil
+        matcher: BlockMatchingActor? = nil,
+        firstCountRetryDelay: Duration = .milliseconds(500)
     ) {
+        self.firstCountRetryDelay = firstCountRetryDelay
         self.locationPermissionClient = locationPermissionClient
         self.modelContainer = modelContainer
         self.modelContext = modelContainer.mainContext
@@ -230,23 +222,29 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
         Task { await requestFullAccuracyIfNeeded() }
     }
 
-    /// Clear History (PRD §5.1, eng R9): deletes every fix recorded up to
-    /// `tapTime` (the confirm tap) at once, makes any pass in flight drop its
-    /// work, then clears the block cache after it. A fix saved after the
-    /// tap survives and starts the new history. Does not affect whether
-    /// tracking is enabled.
+    /// Clear History (PRD §5.1, eng R9): deletes every fix up to `tapTime`
+    /// (the confirm tap) at once, makes passes in flight drop their work
+    /// (never waiting on one), then clears the block cache after them: zero
+    /// walked, real totals (#113). Fixes after the tap survive.
     func clearHistory(at tapTime: Date = Date()) async throws {
         try modelContext.delete(model: WalkedPoint.self, where: #Predicate { $0.recordedAt <= tapTime })
         try modelContext.save()
         matcher.invalidate()
-        if case .failed(let message) = await matcher.clearCache() {
-            lastTrackingError = message
-        }
+        let outcome = await matcher.clearCache()
         walkedBlockIDs = []
         walkedRunIndex = .empty
         walkedRunsVersion += 1
         appliedRunsVersion = nil
         boroughProgress = boroughProgress.map { BoroughProgress(borough: $0.borough, walked: 0, total: $0.total) }
+        if case .updated(let summary, _) = outcome {
+            apply(summary)
+            hasCounted = true
+            // A refresh still running settles the state itself.
+            if countState != .unavailable, !isRefreshing { countState = .ready }
+        } else if case .failed(let message) = outcome {
+            lastTrackingError = message
+            if !hasCounted, countState != .unavailable { countState = .failed }
+        }
         hasHistory = storedPointCount() > 0
         if hasHistory { scheduleRefresh() }
     }
@@ -301,10 +299,14 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
     private func refreshOnce() async {
         let generation = matcher.generation
         if countState != .unavailable { countState = .counting }
-        let outcome = await matcher.catchUp()
+        var outcome = await matcher.catchUp()
+        if case .failed = outcome, !hasCounted, matcher.generation == generation { // one retry (#113)
+            try? await Task.sleep(for: firstCountRetryDelay)
+            if matcher.generation == generation { outcome = await matcher.catchUp() }
+        }
         // A Clear History that landed meanwhile owns the state now.
         guard matcher.generation == generation else {
-            countState = hasCounted ? .ready : .idle
+            if countState == .counting { countState = hasCounted ? .ready : .idle }
             return
         }
         switch outcome {
@@ -318,7 +320,7 @@ final class StreetsWalkedViewModel: NSObject, CLLocationManagerDelegate {
             countState = hasCounted ? .ready : .idle
         case .failed(let message):
             lastTrackingError = message
-            countState = hasCounted ? .ready : .idle
+            countState = hasCounted ? .ready : .failed
         }
     }
 

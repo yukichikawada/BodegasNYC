@@ -92,30 +92,40 @@ nonisolated final class WalkedBlockStore {
         )
     }
 
-    /// Matches the plan and saves masks, flips and stamp in one `save()`,
-    /// unless `shouldCommit` says the work is stale (Clear History). Returns
-    /// whether it saved.
+    /// Matches the plan, stages masks, flips and stamp, then asks
+    /// `shouldCommit` immediately before the one `save()`, so the check is as
+    /// late as it can be. If the work is stale (Clear History), or anything
+    /// throws, the staged changes are rolled back. Returns whether it saved.
+    /// `seam` is for tests (`.beforeCheck`, `.beforeSave`).
     @discardableResult
-    func apply(_ plan: Plan, activity: VehicleActivity, shouldCommit: () -> Bool) throws -> Bool {
+    func apply(
+        _ plan: Plan,
+        activity: VehicleActivity,
+        seam: (BlockMatchingActor.CommitPoint) throws -> Void = { _ in },
+        shouldCommit: () -> Bool
+    ) throws -> Bool {
         let delta = BlockMatcher.match(plan.snapshots, grid: grid, activity: activity)
-        guard shouldCommit() else {
-            plan.context.rollback()
-            return false
-        }
         let context = plan.context
-        let updated = switch plan.kind {
-        case .rebuild: try writeRebuild(delta, in: context)
-        case .incremental: try writeIncrement(delta, in: context)
-        }
-        if let state = try context.fetch(FetchDescriptor<WalkedMatchState>()).first {
-            state.datasetStamp = Int(grid.datasetStamp)
-        } else {
-            context.insert(WalkedMatchState(datasetStamp: grid.datasetStamp))
-        }
-        for point in plan.unmatched {
-            point.isMatched = true
-        }
+        let updated: [UInt32: UInt16]
         do {
+            updated = switch plan.kind {
+            case .rebuild: try writeRebuild(delta, in: context)
+            case .incremental: try writeIncrement(delta, in: context)
+            }
+            if let state = try context.fetch(FetchDescriptor<WalkedMatchState>()).first {
+                state.datasetStamp = Int(grid.datasetStamp)
+            } else {
+                context.insert(WalkedMatchState(datasetStamp: grid.datasetStamp))
+            }
+            for point in plan.unmatched {
+                point.isMatched = true
+            }
+            try seam(.beforeCheck)
+            guard shouldCommit() else {
+                context.rollback()
+                return false
+            }
+            try seam(.beforeSave)
             try context.save()
         } catch {
             context.rollback()
