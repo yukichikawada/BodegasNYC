@@ -22,7 +22,11 @@ nonisolated final class WalkedBlockStore {
 
     let container: ModelContainer
     let grid: StreetGrid
-    /// The saved masks, mirrored after every successful save.
+    /// The saved masks, read in full once for the first `summary()` and
+    /// mirrored after every successful save from then on; `nil` until then.
+    /// A pass never reads it: an incremental pass merges into the rows it
+    /// fetches, so its cost follows its fixes, not the walked history
+    /// (#113 item 4).
     private var masks: [UInt32: UInt16]?
     /// The summary of `masks`, until they change.
     private var cachedSummary: WalkedSummary?
@@ -30,6 +34,9 @@ nonisolated final class WalkedBlockStore {
     private var lastSummary = WalkedSummary.empty
     /// Full rebuilds saved so far (for tests: a stamp change rebuilds once).
     private(set) var rebuildCount = 0
+    /// `WalkedBlock` rows fetched so far (for tests: an incremental pass
+    /// fetches only the rows of the blocks it touches).
+    private(set) var blockRowsFetched = 0
 
     init(container: ModelContainer, grid: StreetGrid) {
         self.container = container
@@ -62,23 +69,19 @@ nonisolated final class WalkedBlockStore {
         guard state?.datasetStamp == Int(grid.datasetStamp) else {
             return try rebuildPlan(context)
         }
-        var firstUnmatched = FetchDescriptor<WalkedPoint>(
-            predicate: #Predicate { $0.isMatched == false },
-            sortBy: Self.oldestFirst
-        )
-        firstUnmatched.fetchLimit = 1
-        guard let oldestNew = try context.fetch(firstUnmatched).first else { return nil }
+        let unmatched = try fetchPaged(context, predicate: #Predicate { $0.isMatched == false })
+        let new = Self.ordered(unmatched)
+        guard let oldestNew = new.first else { return nil }
         var lastMatched = FetchDescriptor<WalkedPoint>(
             predicate: #Predicate { $0.isMatched == true },
             sortBy: [SortDescriptor(\.recordedAt, order: .reverse), SortDescriptor(\.id, order: .reverse)]
         )
         lastMatched.fetchLimit = 1
         let predecessor = try context.fetch(lastMatched).first.map(Self.snapshot)
-        if let predecessor, WalkedPointSnapshot.sortsBefore(Self.snapshot(oldestNew), predecessor) {
+        if let predecessor, WalkedPointSnapshot.sortsBefore(oldestNew, predecessor) {
             return try rebuildPlan(context)
         }
-        let unmatched = try fetchPaged(context, predicate: #Predicate { $0.isMatched == false })
-        let snapshots = (predecessor.map { [$0] } ?? []) + Self.ordered(unmatched)
+        let snapshots = (predecessor.map { [$0] } ?? []) + new
         return Plan(kind: .incremental, context: context, snapshots: snapshots, unmatched: unmatched)
     }
 
@@ -106,9 +109,9 @@ nonisolated final class WalkedBlockStore {
     ) throws -> Bool {
         let delta = BlockMatcher.match(plan.snapshots, grid: grid, activity: activity)
         let context = plan.context
-        let updated: [UInt32: UInt16]
+        let written: MaskWrite
         do {
-            updated = switch plan.kind {
+            written = switch plan.kind {
             case .rebuild: try writeRebuild(delta, in: context)
             case .incremental: try writeIncrement(delta, in: context)
             }
@@ -131,18 +134,35 @@ nonisolated final class WalkedBlockStore {
             context.rollback()
             throw error
         }
-        if updated != masks { cachedSummary = nil }
-        masks = updated
-        if plan.kind == .rebuild { rebuildCount += 1 }
+        switch written {
+        case .replaced(let all):
+            if all != masks { cachedSummary = nil }
+            masks = all
+            rebuildCount += 1
+        case .merged(let changed):
+            guard !changed.isEmpty else { break }
+            cachedSummary = nil
+            masks?.merge(changed) { $1 }
+        }
         return true
+    }
+
+    /// What a pass staged, applied to `masks` only once it saves.
+    private enum MaskWrite {
+        /// Every mask (a rebuild).
+        case replaced([UInt32: UInt16])
+        /// The masks whose value changed, merged values (an incremental pass).
+        case merged([UInt32: UInt16])
     }
 
     /// Replaces every mask with `delta`. Rows are updated in place or
     /// deleted, never deleted and re-inserted under the same unique id in
     /// one save.
-    private func writeRebuild(_ delta: [UInt32: UInt16], in context: ModelContext) throws -> [UInt32: UInt16] {
+    private func writeRebuild(_ delta: [UInt32: UInt16], in context: ModelContext) throws -> MaskWrite {
         var remaining = delta
-        for block in try context.fetch(FetchDescriptor<WalkedBlock>()) {
+        let rows = try context.fetch(FetchDescriptor<WalkedBlock>())
+        blockRowsFetched += rows.count
+        for block in rows {
             if let mask = remaining.removeValue(forKey: block.physicalID) {
                 if block.mask != mask { block.mask = mask }
             } else {
@@ -152,31 +172,35 @@ nonisolated final class WalkedBlockStore {
         for (physicalID, mask) in remaining {
             context.insert(WalkedBlock(physicalID: physicalID, mask: mask))
         }
-        return delta
+        return .replaced(delta)
     }
 
-    /// ORs `delta` into the saved masks, touching only rows that change.
-    private func writeIncrement(_ delta: [UInt32: UInt16], in context: ModelContext) throws -> [UInt32: UInt16] {
-        var updated = try loadMasks()
-        var changed: [UInt32: UInt16] = [:]
-        for (physicalID, bits) in delta {
-            let merged = (updated[physicalID] ?? 0) | bits
-            if merged != updated[physicalID] {
-                changed[physicalID] = merged
-                updated[physicalID] = merged
-            }
-        }
-        let keys = changed.keys.map(Int.init)
-        let existing = try context.fetch(
+    /// ORs `delta` into the saved masks. Fetches only the rows of the
+    /// blocks `delta` touches (the merge base is what is on disk, never a
+    /// copy that might be stale), writes only rows that change, and returns
+    /// those.
+    private func writeIncrement(_ delta: [UInt32: UInt16], in context: ModelContext) throws -> MaskWrite {
+        guard !delta.isEmpty else { return .merged([:]) }
+        var remaining = delta
+        let keys = delta.keys.map(Int.init)
+        let rows = try context.fetch(
             FetchDescriptor<WalkedBlock>(predicate: #Predicate { keys.contains($0.storedPhysicalID) })
         )
-        for block in existing {
-            if let mask = changed.removeValue(forKey: block.physicalID) { block.mask = mask }
+        blockRowsFetched += rows.count
+        var changed: [UInt32: UInt16] = [:]
+        for block in rows {
+            guard let bits = remaining.removeValue(forKey: block.physicalID) else { continue }
+            let merged = block.mask | bits
+            if merged != block.mask {
+                block.mask = merged
+                changed[block.physicalID] = merged
+            }
         }
-        for (physicalID, mask) in changed {
+        for (physicalID, mask) in remaining {
             context.insert(WalkedBlock(physicalID: physicalID, mask: mask))
+            changed[physicalID] = mask
         }
-        return updated
+        return .merged(changed)
     }
 
     /// The saved masks as walked blocks, counts and runs. Built once per
@@ -217,7 +241,9 @@ nonisolated final class WalkedBlockStore {
         if let masks { return masks }
         let context = Self.makeContext(container)
         var loaded: [UInt32: UInt16] = [:]
-        for block in try context.fetch(FetchDescriptor<WalkedBlock>()) {
+        let rows = try context.fetch(FetchDescriptor<WalkedBlock>())
+        blockRowsFetched += rows.count
+        for block in rows {
             loaded[block.physicalID] = block.mask
         }
         masks = loaded

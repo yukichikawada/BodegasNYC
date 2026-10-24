@@ -151,16 +151,51 @@ final class WalkedBlocksPerformanceTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(store.summary()).walkedIDs.count, 5_000)
     }
 
+    /// protects: an incremental pass of 10 fixes on a 100,000-fix history
+    /// (over 5,000 saved masks) stays inside its budget on a warm store.
+    /// fails_when: the median passes 5 ms (Release) or 30 ms (opted-in Debug).
+    /// no_claim: the first pass after launch (the next test).
     func testIncrementalPassOfTenFixesBudget() throws {
         try skipUnlessMeasurable()
-        let (container, grid, walk) = try Self.seededHistory()
-        let store = WalkedBlockStore(container: container, grid: grid)
+        let (times, plans) = try measureIncrementalPasses(freshStoreEachPass: false)
+        let report = "Incremental pass of 10 fixes median: \(Self.median(times)) (plan \(Self.median(plans)))"
+        print(report)
+        XCTContext.runActivity(named: report) { _ in }
+        XCTAssertLessThan(Self.median(times), Self.ceiling(release: .milliseconds(5), debug: .milliseconds(30)))
+    }
+
+    /// protects: the first incremental pass after launch (a new
+    /// `WalkedBlockStore`, nothing cached) costs about what a warm one does:
+    /// it reads only the masks of the blocks its fixes touch, not every
+    /// saved mask (#113 item 4: 29 ms of a 36 ms device pass was loading all
+    /// 5,006 masks).
+    /// fails_when: the median passes 5 ms (Release) or 30 ms (opted-in Debug).
+    /// no_claim: the summary that follows, which reads every mask once per
+    /// launch because it counts all of them.
+    func testFirstIncrementalPassAfterLaunchOfTenFixesBudget() throws {
+        try skipUnlessMeasurable()
+        let (times, plans) = try measureIncrementalPasses(freshStoreEachPass: true)
+        let report = "First incremental pass after launch, 10 fixes median: \(Self.median(times)) (plan \(Self.median(plans)))"
+        print(report)
+        XCTContext.runActivity(named: report) { _ in }
+        XCTAssertLessThan(Self.median(times), Self.ceiling(release: .milliseconds(5), debug: .milliseconds(30)))
+    }
+
+    /// Times `plan()` + `apply()` of ten new fixes walking north from the end
+    /// of the seeded history, once per measure iteration. Returns the whole
+    /// pass and the plan alone.
+    private func measureIncrementalPasses(freshStoreEachPass: Bool) throws -> (passes: [Duration], plans: [Duration]) {
+        let (container, grid, _) = try Self.seededHistory()
+        var store = WalkedBlockStore(container: container, grid: grid)
         if let plan = try store.plan() {
             try store.apply(plan, activity: .unavailable) { true }
         }
-        var next = walk.last?.recordedAt ?? StreetFixtures.baseDate
-        let anchor = try XCTUnwrap(walk.last?.coordinate)
+        XCTAssertGreaterThan(try store.summary().walkedIDs.count, 5_000)
+        let newest = try XCTUnwrap(container.mainContext.fetch(Self.newestFix).first)
+        var next = newest.recordedAt
+        let anchor = Coordinate(latitude: newest.latitude, longitude: newest.longitude)
         var times: [Duration] = []
+        var plans: [Duration] = []
         let clock = ContinuousClock()
         measure(metrics: [XCTClockMetric()], options: manualOptions) {
             // Ten new fixes walking north from the end of history.
@@ -172,10 +207,12 @@ final class WalkedBlocksPerformanceTests: XCTestCase {
                 )
             }
             try? StreetFixtures.seed(fixes, in: container.mainContext)
+            if freshStoreEachPass { store = WalkedBlockStore(container: container, grid: grid) }
             startMeasuring()
             let start = clock.now
             do {
                 let plan = try XCTUnwrap(store.plan())
+                plans.append(clock.now - start)
                 XCTAssertEqual(plan.kind, .incremental)
                 XCTAssertEqual(plan.unmatched.count, 10)
                 XCTAssertTrue(try store.apply(plan, activity: .unavailable) { true })
@@ -185,7 +222,12 @@ final class WalkedBlocksPerformanceTests: XCTestCase {
             times.append(clock.now - start)
             stopMeasuring()
         }
-        print("Incremental pass of 10 fixes median: \(Self.median(times))")
-        XCTAssertLessThan(Self.median(times), Self.ceiling(release: .milliseconds(5), debug: .milliseconds(30)))
+        return (times, plans)
+    }
+
+    private static var newestFix: FetchDescriptor<WalkedPoint> {
+        var descriptor = FetchDescriptor<WalkedPoint>(sortBy: [SortDescriptor(\.recordedAt, order: .reverse)])
+        descriptor.fetchLimit = 1
+        return descriptor
     }
 }
