@@ -70,7 +70,9 @@ nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
             lineWidth = WalkedOverlay.lineWidth(visibleHeightMeters: visibleHeightMeters, current: lineWidth)
         }
         if showsOverlay, let region {
-            visible = index.visible(in: region)
+            // Hysteresis (#113): lines already drawn stay while they meet
+            // the retain margin, so a small pan swaps fewer overlays.
+            visible = index.visible(in: region, keeping: visible)
         } else {
             visible = .runs([])
         }
@@ -101,6 +103,13 @@ nonisolated enum WalkedOverlay {
     static let maxVisibleRuns = 1_000
     /// The region is expanded by this fraction of its span on each side.
     static let regionMargin = 0.25
+    /// Culling hysteresis (#113): a run already drawn stays while its box
+    /// meets the region expanded by this fraction on each side; a new run
+    /// enters only inside `regionMargin`. The cap is still decided on the
+    /// `regionMargin` set alone, and retained runs only fill the room left
+    /// under `maxVisibleRuns`, nearest first, so at most 1,000 runs are ever
+    /// drawn (the R3 device ceiling).
+    static let retainMargin = 0.75
     static let joinToleranceMeters = 1.0
     /// An interior vertex within this of the line through its neighbours is
     /// dropped from the drawn polyline: well under a point at the 8pt zoom.
@@ -189,10 +198,10 @@ nonisolated enum WalkedOverlay {
         var maxLongitude: Double
     }
 
-    /// The region expanded by `regionMargin` of its span on each side.
-    static func expandedBounds(_ region: WalkedRegion) -> Bounds {
-        let halfLatitude = region.latitudeDelta * (0.5 + regionMargin)
-        let halfLongitude = region.longitudeDelta * (0.5 + regionMargin)
+    /// The region expanded by `margin` of its span on each side.
+    static func expandedBounds(_ region: WalkedRegion, margin: Double = regionMargin) -> Bounds {
+        let halfLatitude = region.latitudeDelta * (0.5 + margin)
+        let halfLongitude = region.longitudeDelta * (0.5 + margin)
         return Bounds(
             minLatitude: region.centerLatitude - halfLatitude,
             maxLatitude: region.centerLatitude + halfLatitude,
@@ -204,6 +213,18 @@ nonisolated enum WalkedOverlay {
     static func meets(_ run: WalkedRun, _ bounds: Bounds) -> Bool {
         run.maxLatitude >= bounds.minLatitude && run.minLatitude <= bounds.maxLatitude
             && run.maxLongitude >= bounds.minLongitude && run.minLongitude <= bounds.maxLongitude
+    }
+
+    /// How far `run`'s box lies from the region's centre, in region spans
+    /// (the larger of the two axes; 0 when the box covers the centre): the
+    /// order in which retained runs give way to the cap, farthest first.
+    static func distance(of run: WalkedRun, from region: WalkedRegion) -> Double {
+        let latitudeGap = max(0, run.minLatitude - region.centerLatitude, region.centerLatitude - run.maxLatitude)
+        let longitudeGap = max(0, run.minLongitude - region.centerLongitude, region.centerLongitude - run.maxLongitude)
+        return max(
+            region.latitudeDelta > 0 ? latitudeGap / region.latitudeDelta : 0,
+            region.longitudeDelta > 0 ? longitudeGap / region.longitudeDelta : 0
+        )
     }
 
     // MARK: Stroke width (design D2)
