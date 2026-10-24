@@ -322,6 +322,28 @@ struct AddPhotoViewModelTests {
         #expect(json["caption"] as? String == "Front door")
     }
 
+    /// protects: once the sheet lets go of it, the view model (and every pick's JPEG and thumbnail) is freed after a
+    /// load and an upload pass; neither stored task keeps it alive (#112 memory check).
+    /// fails_when: the load or submit task, or a closure it holds, retains the view model after both have finished.
+    /// no_claim: SwiftUI's own release of the sheet's item, or image caches outside the view model (device trace).
+    @Test func theViewModelIsFreedAfterLoadingAndUploading() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data(Self.storageJSON.utf8))
+        MockURLProtocol.stub(body: Data(Self.photoJSON(id: Self.itemIDs[0]).utf8))
+        weak var weakViewModel: AddPhotoViewModel?
+        do {
+            let viewModel = try await makeLoadedViewModel(count: 1)
+            weakViewModel = viewModel
+            viewModel.submit()
+            await viewModel.waitForPendingSubmitForTesting()
+            guard case .submitted = viewModel.submissionState else {
+                Issue.record("expected .submitted, got \(viewModel.submissionState)")
+                return
+            }
+        }
+        #expect(weakViewModel == nil)
+    }
+
     /// protects: a batch uploads one item at a time in reverse selection order, so `created_at desc` shows it in
     /// selection order; an empty caption is omitted (NULL) (spec, AC 6, AC 7).
     /// fails_when: items upload in selection order, interleave, or send "" for an empty caption.

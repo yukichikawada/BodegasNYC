@@ -183,7 +183,7 @@ struct AddPhotoView: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(AppCopy.selectedPhotoLabel.copy.text)
-            .accessibilityValue(item.caption)
+            .accessibilityValue(AddPhotoViewModel.normalizedCaption(item.caption) ?? "")
             .accessibilityHint(AppCopy.photoOpensFullScreenHint.copy.text)
         } else {
             shape
