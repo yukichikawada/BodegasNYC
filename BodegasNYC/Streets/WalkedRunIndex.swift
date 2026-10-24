@@ -11,9 +11,6 @@ nonisolated struct WalkedRunIndex: Sendable, Equatable {
     static let cellLongitudeDegrees = 0.0066
 
     let runs: [WalkedRun]
-    /// A run's position in `runs` by its id (the retained runs of a settle
-    /// are looked up in the current data, never drawn from a stale copy).
-    private let positions: [UInt32: Int32]
     private let cells: [Int64: [Int32]]
     private let rowRange: ClosedRange<Int>
     private let columnRange: ClosedRange<Int>
@@ -38,19 +35,14 @@ nonisolated struct WalkedRunIndex: Sendable, Equatable {
             }
         }
         self.cells = cells
-        positions = Dictionary(
-            runs.enumerated().map { ($0.element.id, Int32($0.offset)) },
-            uniquingKeysWith: { first, _ in first }
-        )
         rowRange = runs.isEmpty ? 0 ... 0 : minRow ... maxRow
         columnRange = runs.isEmpty ? 0 ... 0 : minColumn ... maxColumn
     }
 
-    /// The runs whose bounding box meets the region expanded by 25% on each
-    /// side, in run order, or `overCap` past `WalkedOverlay.maxVisibleRuns`:
-    /// what a first settle draws, and the set every later settle must draw
-    /// (`visible(in:keeping:)`). Same answer as `WalkedOverlay.visible(_:in:)`,
-    /// which scans every run.
+    /// What the map draws for `region`: the runs whose bounding box meets
+    /// the region expanded by 25% on each side, in run order, or `overCap`
+    /// past `WalkedOverlay.maxVisibleRuns`. Same answer as
+    /// `WalkedOverlay.visible(_:in:)`, which scans every run.
     func visible(in region: WalkedRegion) -> WalkedOverlay.Visible {
         query(region).visible
     }
@@ -58,73 +50,28 @@ nonisolated struct WalkedRunIndex: Sendable, Equatable {
     /// `visible(in:)` plus how many index entries it examined (tests: the
     /// cost follows the cells in view, not the total).
     func query(_ region: WalkedRegion) -> (visible: WalkedOverlay.Visible, examined: Int) {
-        let (kept, examined) = innerPositions(for: region)
-        guard let kept else { return (.overCap, examined) }
-        return (.runs(kept.sorted().map { runs[Int($0)] }), examined)
-    }
-
-    /// What the map draws for `region` after drawing `previous`, with
-    /// culling hysteresis (#113): every run `visible(in:)` draws, plus the
-    /// runs of `previous` that still exist and whose box meets the region
-    /// expanded by `retainMargin`, so lines just past the 25% margin are
-    /// not removed and re-added on every small pan.
-    ///
-    /// The over-cap decision is `visible(in:)`'s alone (design D3 is never
-    /// hit more often than without hysteresis), and the whole of that set is
-    /// always drawn. Retained runs only fill the room left under
-    /// `WalkedOverlay.maxVisibleRuns`, nearest the centre first, so at most
-    /// 1,000 runs are drawn. Pure: previous set + region + index in, next
-    /// set out, in run order.
-    func visible(
-        in region: WalkedRegion,
-        keeping previous: WalkedOverlay.Visible,
-        retainMargin: Double = WalkedOverlay.retainMargin
-    ) -> WalkedOverlay.Visible {
-        guard let inner = innerPositions(for: region).kept else { return .overCap }
-        guard case .runs(let drawn) = previous, !drawn.isEmpty, retainMargin > WalkedOverlay.regionMargin else {
-            return .runs(inner.sorted().map { runs[Int($0)] })
-        }
-        let outer = WalkedOverlay.expandedBounds(region, margin: retainMargin)
-        var retained: [Int32] = []
-        for run in drawn {
-            guard let position = positions[run.id], !inner.contains(position),
-                  WalkedOverlay.meets(runs[Int(position)], outer) else { continue }
-            retained.append(position)
-        }
-        let room = WalkedOverlay.maxVisibleRuns - inner.count
-        if retained.count > room {
-            retained = retained
-                .map { (position: $0, distance: WalkedOverlay.distance(of: runs[Int($0)], from: region)) }
-                .sorted { ($0.distance, $0.position) < ($1.distance, $1.position) }
-                .prefix(room)
-                .map(\.position)
-        }
-        return .runs((Array(inner) + retained).sorted().map { runs[Int($0)] })
-    }
-
-    /// The positions of the runs whose box meets `region` plus
-    /// `WalkedOverlay.regionMargin`, or nil past the cap.
-    private func innerPositions(for region: WalkedRegion) -> (kept: Set<Int32>?, examined: Int) {
-        guard !runs.isEmpty else { return ([], 0) }
+        guard !runs.isEmpty else { return (.runs([]), 0) }
         let bounds = WalkedOverlay.expandedBounds(region)
         let firstRow = max(rowRange.lowerBound, Self.row(bounds.minLatitude))
         let lastRow = min(rowRange.upperBound, Self.row(bounds.maxLatitude))
         let firstColumn = max(columnRange.lowerBound, Self.column(bounds.minLongitude))
         let lastColumn = min(columnRange.upperBound, Self.column(bounds.maxLongitude))
-        guard firstRow <= lastRow, firstColumn <= lastColumn else { return ([], 0) }
+        guard firstRow <= lastRow, firstColumn <= lastColumn else { return (.runs([]), 0) }
+        let rows = firstRow ... lastRow
+        let columns = firstColumn ... lastColumn
         var kept = Set<Int32>()
         var examined = 0
-        for row in firstRow ... lastRow {
-            for column in firstColumn ... lastColumn {
+        for row in rows {
+            for column in columns {
                 for index in cells[Self.key(row, column)] ?? [] {
                     examined += 1
                     guard !kept.contains(index), WalkedOverlay.meets(runs[Int(index)], bounds) else { continue }
                     kept.insert(index)
-                    if kept.count > WalkedOverlay.maxVisibleRuns { return (nil, examined) }
+                    if kept.count > WalkedOverlay.maxVisibleRuns { return (.overCap, examined) }
                 }
             }
         }
-        return (kept, examined)
+        return (.runs(kept.sorted().map { runs[Int($0)] }), examined)
     }
 
     static func == (lhs: WalkedRunIndex, rhs: WalkedRunIndex) -> Bool {
