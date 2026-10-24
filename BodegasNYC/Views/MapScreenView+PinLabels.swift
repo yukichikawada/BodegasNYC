@@ -156,9 +156,11 @@ extension MapScreenView {
     /// does not land on the map (the horizon is in view).
     /// This is the measure behind DESIGN.md's 400 m / 2 km / 8 km width bands
     /// and #67's 400/440 m block zoom: the ground distance across the Map's
-    /// laid-out frame (`mapSize`), about 0.75 of the full screen's height, not
-    /// the whole screen. Locate Me's 850 m camera measures about 350 m here
-    /// while about 480 m of street is on screen (#113).
+    /// laid-out frame (`mapSize`), not the whole screen. On the iPhone 17 Pro
+    /// simulator (iOS 26.5, #113 QA) it measured about 0.75 of the full
+    /// screen's height; the ratio varies with device and safe areas. There,
+    /// Locate Me's 850 m camera measures about 350 m while about 480 m of
+    /// street is on screen.
     func visibleHeightMeters(_ proxy: MapProxy, bottom: CLLocationCoordinate2D) -> Double? {
         guard let top = proxy.convert(CGPoint(x: mapSize.width / 2, y: 0), from: .local) else { return nil }
         let meters = Coordinate(top).distance(to: Coordinate(bottom))
