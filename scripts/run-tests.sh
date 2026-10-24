@@ -15,8 +15,12 @@
 #                          "Clone N of iPhone 17 Pro" devices, the first UI
 #                          launch on a fresh clone took ~60s, and the run hit
 #                          the cap. Measured with the flag: ~45-55s of
-#                          testing after a warm build, no clones.
-#   TEST_TIMEOUT_SECONDS env var overrides the default (180s / 3min) too.
+#                          testing after a warm build, no clones. Its
+#                          default cap is 300s, not 180s: with the machine
+#                          at its limits (two builds, three booted devices)
+#                          a --ui run took 231s, 2026-10-24.
+#   TEST_TIMEOUT_SECONDS env var overrides the default (180s / 3min, or
+#   300s / 5min with --ui) too.
 #
 # Clones live in xcodebuild's own device set
 # (~/Library/Developer/XCTestDevices), not the default one, so the sweep
@@ -53,7 +57,9 @@ for arg in "$@"; do
     *) TIMEOUT_ARG="$arg" ;;
   esac
 done
-TIMEOUT_SECONDS="${TEST_TIMEOUT_SECONDS:-${TIMEOUT_ARG:-180}}"
+DEFAULT_TIMEOUT=180
+[ "$INCLUDE_UI_TESTS" -eq 1 ] && DEFAULT_TIMEOUT=300
+TIMEOUT_SECONDS="${TEST_TIMEOUT_SECONDS:-${TIMEOUT_ARG:-$DEFAULT_TIMEOUT}}"
 
 TIMEOUT_BIN=""
 if command -v timeout >/dev/null 2>&1; then
