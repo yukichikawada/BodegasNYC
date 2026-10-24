@@ -105,6 +105,32 @@ final class WalkedBlocksPerformanceTests: XCTestCase {
         return options
     }
 
+    /// protects: a settle's culling with hysteresis (#113,
+    /// `WalkedRunIndex.visible(in:keeping:)`) stays a small part of a frame
+    /// on the 5,000-block seed, timed over a scripted 69-settle pan session.
+    /// fails_when: the median per-settle time passes 1 ms (Release) or 2 ms
+    /// (opted-in Debug; measured 0.13 ms on the simulator, 2026-10-23).
+    /// no_claim: MapKit's add/remove cost, which is the hitch (#113 trace).
+    func testSettleCullingWithRetentionBudget() throws {
+        try skipUnlessMeasurable()
+        let index = WalkedPanReplay.seedIndex
+        XCTAssertGreaterThan(index.runs.count, 100)
+        let regions = WalkedPanReplay.script(over: index, seed: 1)
+        var times: [Duration] = []
+        let clock = ContinuousClock()
+        measure(metrics: [XCTClockMetric()]) {
+            var drawn = WalkedOverlay.Visible.runs([])
+            let start = clock.now
+            for region in regions {
+                drawn = index.visible(in: region, keeping: drawn)
+            }
+            times.append((clock.now - start) / regions.count)
+            XCTAssertNotEqual(drawn, .overCap)
+        }
+        print("Settle culling with retention, per settle median: \(Self.median(times))")
+        XCTAssertLessThan(Self.median(times), Self.ceiling(release: .milliseconds(1), debug: .milliseconds(2)))
+    }
+
     func testStreetGridLoadBudget() throws {
         try skipUnlessMeasurable()
         var times: [Duration] = []
