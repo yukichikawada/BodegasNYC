@@ -230,7 +230,8 @@ nonisolated enum WalkedOverlay {
     // MARK: Stroke width (design D2)
 
     /// Up to 400 m of visible height 8pt, up to 2 km 5pt, up to 8 km 3pt,
-    /// above that 2pt. Leaving a band takes 10% more height than entering it.
+    /// above that 2pt. Visible height is `MapScreenView.visibleHeightMeters`
+    /// (about 0.75 of the full screen's height, #113). Leaving a band takes 10% more height than entering it.
     static let widthBands: [(maxHeight: Double, width: Double)] = [(400, 8), (2_000, 5), (8_000, 3)]
     static let widestBeyond = 2.0
     static let hysteresis = 0.10

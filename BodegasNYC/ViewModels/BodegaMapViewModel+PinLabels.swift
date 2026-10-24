@@ -85,8 +85,9 @@ nonisolated extension MapDisplayItem {
 /// vector, so the order and every pairwise overlap are unchanged and no
 /// label swaps. Do not "fix" it to distance from the centre.
 nonisolated extension BodegaMapViewModel {
-    /// Block zoom is entered at a visible map height of 400 m or less and
-    /// left above 440 m (design D2: hysteresis, so a settle near the line
+    /// Block zoom is entered at a visible map height (as
+    /// `MapScreenView.visibleHeightMeters` measures it, about 0.75 of the
+    /// full screen's height, #113) of 400 m or less and left above 440 m (design D2: hysteresis, so a settle near the line
     /// never blinks every label).
     static let blockZoomEnterMeters: Double = 400
     static let blockZoomExitMeters: Double = 440

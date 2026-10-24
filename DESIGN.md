@@ -187,9 +187,15 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   joins. Each walked block is a line on its street's centerline, chained into runs, drawn above
   the roads and under the labels, pins and location dot (`.mapOverlayLevel(level: .aboveRoads)`),
   8pt up to 400 m of visible height, 5pt to 2 km, 3pt to 8 km, 2pt above, with 10% hysteresis on
-  the way out. Past 1,000 visible runs (2,000 in the spec, lowered after the R3 device check) the layer hides and the bottom card says "Zoom in to see
-  your blocks."; it never draws a subset. Changes land at camera rest with a 0.2s opacity fade,
-  none under Reduce Motion. A run is drawn once its box meets the view plus 25% on each side and,
+  the way out. Visible height is the app's measure, not the screen's: the ground distance from
+  the top-centre to the bottom-centre of the Map's laid-out frame (`visibleHeightMeters`), about
+  0.75 of the full screen's height. Locate Me's 850 m camera distance measures about 350 m while
+  about 480 m of street is on a full screen, so the bands are roughly 530 m / 2.6 km / 10.5 km of
+  full-screen height (#113). Past 1,000 visible runs (2,000 in the spec, lowered after the R3 device check) the layer hides and the bottom card says "Zoom in to see
+  your blocks."; it never draws a subset. Changes land at camera rest and swap in place, with no
+  fade: MapKit does not animate `MapPolyline` changes (#113 dropped D10's 0.2s fade), so Reduce
+  Motion needs nothing special. Nothing is written mid-gesture, and a settle that changes nothing
+  drawn writes nothing. A run is drawn once its box meets the view plus 25% on each side and,
   once drawn, stays until it leaves the view plus 75% (#113), so small pans swap few lines; the
   cap is counted on the 25% set, and the kept runs only fill the room under 1,000, nearest first.
 - Cat and non-cat pins are distinguished by glyph (`cat` vs `figure.wave`) as well as color, so
@@ -291,6 +297,9 @@ stroke, shadow 2/1, 44pt hit area, anchored at center. Selected: 3pt stroke, sha
 dropping, and at block zoom on every pin whose label clears every kept label and every drawn
 circle (#67). Block zoom is a visible map height (top-centre to bottom-centre of the map) of
 400 m or less; labels stay until it passes 440 m, so a settle near the line never blinks them.
+That height is the app's `visibleHeightMeters`, the Map's laid-out frame, about 0.75 of the full
+screen's height: Locate Me's 850 m camera measures about 350 m with about 480 m of street on a
+full screen (#113), so 400 / 440 m are roughly 530 / 590 m of full-screen height.
 Placement: held and dropping labels first, always kept; then north to south, then by id; a label
 that would touch another label (4pt clearance) or another pin's, cluster's or the location
 dot's drawn circle is hidden, never moved. The location dot counts as drawn, a 24pt square for
@@ -514,7 +523,8 @@ on the card and in the popover it is `.primary` (#95 D11).
   camera flights over three zoom levels 0.9s.
 - **Locate Me (#84):** a precise fix (100 m or better) flies the camera to block zoom,
   `locateMeCameraDistance` 850 m, about 350 m of visible height (measured
-  350.2 m on the iPhone 17 Pro simulator), heading kept, pitch levelled, `easeInOut`
+  350.2 m on the iPhone 17 Pro simulator; the app's measure, about 0.75 of the screen, so about
+  480 m of street is on a full screen, #113), heading kept, pitch levelled, `easeInOut`
   0.9s when the flight zooms in more than three levels (a ratio of 8) or moves more than 2 km,
   0.6s otherwise. A precise fix kept from the last 60s lands at once; otherwise the toolbar
   symbol pulses while the fix is awaited (no spinner). The landing is one-shot: the camera does not follow the user afterwards and a
@@ -603,3 +613,5 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-23 | #108 PR 2 Your Blocks sheet (D5 to D8, D11): first in the Streets Walked menu with the hint "Shows blocks walked in each borough."; an inset-grouped list, New York City then the five boroughs, name over a `textMuted` count with the percent trailing, rounded down with "<1%" under one; no progress bars, no display register; states failure > counting > zero, a first count shows "—" and "Counting your blocks…" after 0.5s, a recount keeps the last counts; an Allow Motion Access row for people already recording, Open Settings after a denial; one VoiceOver element per row | `/plan-design-review` D7, D8, D11, owner accepted. The sheet is the accessible equivalent of the overlay; a percent of a borough is honest only as a number, and bars would make 1% look like nothing |
 | 2026-10-23 | #113 item 1: walked runs enter at the view + 25% and, once drawn, stay until they leave the view + 75%; the over-cap decision is still counted on the + 25% set, and kept runs fill only the room under 1,000, farthest dropped first | The #110 device trace put a 167 ms settle hitch in MapKit's overlay add/remove, scaling with the lines changed; a replayed pan session over the 5,000-block seed swaps fewer lines per settle (numbers in the PR). Not yet confirmed on device |
 | 2026-10-23 | #113 item 5: when the first count of a launch fails and its one automatic retry fails too, Your Blocks shows "Your blocks couldn't be counted. Your walks are still saved." in `.primary`, in the street-map failure's place (both sections replaced; reopening the sheet counts again); a Clear History during the first count ends on the zero state; a failed recount keeps the last counts | D8 had no state for a count that fails: the sheet said "Counting your blocks…" until it was reopened. Zero was not an option, because with history it would be false and without a count there are no totals; one line in the existing failure layout is the least new UI |
+| 2026-10-23 | #113 D10 fade dropped: walked-block changes swap in place at camera rest, no 0.2s fade, and Reduce Motion needs nothing special; mid-gesture writes and unchanged writes are still skipped | MapKit does not animate `MapPolyline` changes; verified on simulator in #113 (an `easeOut(0.2)` transaction around the write landed within one frame for Show on Map, data changes and the first count) |
+| 2026-10-23 | #113 map-height wording: "visible height" (the 400 m / 2 km / 8 km width bands, #67's 400/440 m block zoom, Locate Me's 350 m) means the app's `visibleHeightMeters`, the ground distance across the Map's laid-out frame, about 0.75 of the full screen's height (850 m camera ≈ 350 m measure ≈ 480 m of street on a full screen); no threshold changed | Simulator QA in #113 found the gap; the bands are internally consistent and were tuned on this measure, so the owner kept the numbers and fixed the wording rather than rescale |
