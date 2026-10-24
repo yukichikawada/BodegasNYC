@@ -64,7 +64,7 @@ struct WalkedOverlayHysteresisTests {
     /// settle (#113: hysteresis is only about which offscreen lines stay).
     /// fails_when: a stale run object survives a data change, Clear leaves a
     /// line, or the width stops changing while lines are retained.
-    /// no_claim: the 0.2 s fade (device check).
+    /// no_claim: how MapKit draws the swap (no fade since #113, D10).
     @Test func dataAndWidthChangesStillApplyFully() {
         let near = Self.run(1, x: 0, y: 0)
         let band = Self.run(2, x: 0, y: 1_000)
