@@ -5,8 +5,9 @@ import UIKit
 // Walked blocks on the map (#108): runs of walked blocks in the `walked`
 // indigo (design D1), above the roads but under the labels, pins and the
 // location dot (D4), width by visible height (D2). What is drawn changes only
-// at camera rest, with a 0.2s fade or none under Reduce Motion (D10), and past
-// 1,000 visible runs nothing is drawn and the bottom card says to zoom in (D3).
+// at camera rest and swaps in place (D10: MapKit does not animate
+// `MapPolyline` changes, so there is no fade, #113), and past 1,000 visible
+// runs nothing is drawn and the bottom card says to zoom in (D3).
 extension MapScreenView {
     @MapContentBuilder
     var walkedBlockOverlay: some MapContent {
@@ -35,8 +36,8 @@ extension MapScreenView {
     /// (eng A2).
     func walkedBlockTriggers(_ content: some View, proxy: MapProxy) -> some View {
         content
-            .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy, fades: true) }
-            .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy, fades: true) }
+            .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
+            .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
             .onChange(of: scenePhase, initial: true) { _, phase in
                 streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active)
             }
@@ -51,12 +52,10 @@ extension MapScreenView {
     /// no-op while the camera moves (`WalkedOverlayDisplay.refresh`), so the
     /// Map's content is untouched mid-gesture, and no state write at all
     /// when nothing it draws changed. Culling reads the spatial index, so a
-    /// settle costs what is in view, not the whole history.
-    ///
-    /// - Parameter fades: a data or Show on Map change fades in over 0.2s
-    ///   (design D10); a settle's culling (runs entering from the margin)
-    ///   swaps without an animated transaction.
-    func refreshWalkedOverlay(_ proxy: MapProxy, fades: Bool = false) {
+    /// settle costs what is in view, not the whole history. The write is
+    /// plain, never in an animated transaction: MapKit applies `MapPolyline`
+    /// changes within a frame either way (design D10, #113).
+    func refreshWalkedOverlay(_ proxy: MapProxy) {
         guard let streetsWalkedViewModel else { return }
         var height: Double?
         if mapSize.height > 0,
@@ -72,13 +71,7 @@ extension MapScreenView {
             isCameraMoving: isCameraMoving
         )
         guard changed else { return }
-        guard fades, !reduceMotion else {
-            walkedDisplay = next
-            return
-        }
-        withAnimation(.easeOut(duration: 0.2)) {
-            walkedDisplay = next
-        }
+        walkedDisplay = next
     }
 
     // MARK: Menu actions (design D5, D6, D11)

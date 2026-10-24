@@ -87,7 +87,8 @@ nonisolated extension MapDisplayItem {
 nonisolated extension BodegaMapViewModel {
     /// Block zoom is entered at a visible map height of 400 m or less and
     /// left above 440 m (design D2: hysteresis, so a settle near the line
-    /// never blinks every label).
+    /// never blinks every label). The height is
+    /// `MapScreenView.visibleHeightMeters`, not the full screen (#113).
     static let blockZoomEnterMeters: Double = 400
     static let blockZoomExitMeters: Double = 440
 
