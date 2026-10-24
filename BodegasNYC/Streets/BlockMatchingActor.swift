@@ -7,10 +7,26 @@ import Synchronization
 /// main actor, on the first pass) and a `WalkedBlockStore` on its own
 /// contexts.
 ///
-/// Clear History bumps `generation` from the main actor at once; a pass
-/// checks it right before its single `save()` and drops its work if it
-/// changed, so a cancelled rebuild never resurrects masks (eng R9).
+/// Clear History deletes raw history and bumps `generation` from the main
+/// actor at once (eng R9), then queues `clearCache()`. A pass checks the
+/// generation after staging its writes, right before its single `save()`,
+/// and drops its work if it changed. The check is an optimization, not the
+/// guarantee: nothing here ever makes the main actor wait on a pass's save,
+/// so a Clear can still land between the check and the save. That pass's
+/// save then only touches state the Clear's queued `clearCache()` replaces
+/// (masks and stamp), plus `isMatched` on fixes the Clear deleted, and the
+/// cache clear runs after it, here, in order (#113 item 2).
 actor BlockMatchingActor {
+    /// Where a test seam runs inside a pass or a cache clear.
+    nonisolated enum CommitPoint: Sendable {
+        /// A pass has staged its writes; its generation check comes next.
+        case beforeCheck
+        /// A pass passed its check; its `save()` comes next.
+        case beforeSave
+        /// A cache clear is about to delete masks and the stamp.
+        case clear
+    }
+
     nonisolated enum Outcome: Sendable {
         /// The saved masks, current with history at the time of the pass.
         case updated(WalkedSummary, StreetGrid)
@@ -26,6 +42,7 @@ actor BlockMatchingActor {
     private let loadGrid: @Sendable () throws -> StreetGrid
     private let onGridLoadFailure: @Sendable (Error) -> Void
     private let activityProvider: any MotionActivityProviding
+    private let willCommit: @Sendable (CommitPoint) throws -> Void
     private let generationLock = Mutex(0)
     private var gridLoad: Result<StreetGrid, Error>?
     private var store: WalkedBlockStore?
@@ -42,8 +59,10 @@ actor BlockMatchingActor {
         loadGrid: @escaping @Sendable () throws -> StreetGrid = { try StreetGrid.loadBundled() },
         onGridLoadFailure: @escaping @Sendable (Error) -> Void = { error in
             assertionFailure("nyc-streets.bin did not load: \(error)")
-        }
+        },
+        willCommit: @escaping @Sendable (CommitPoint) throws -> Void = { _ in }
     ) {
+        self.willCommit = willCommit
         self.container = container
         self.activityProvider = activityProvider
         self.loadGrid = loadGrid
@@ -52,7 +71,8 @@ actor BlockMatchingActor {
 
     nonisolated var generation: Int { generationLock.withLock { $0 } }
 
-    /// Makes every pass in flight drop its work (Clear History).
+    /// Makes every pass in flight drop its work (Clear History). Never waits
+    /// on a pass: the lock only guards the integer.
     nonisolated func invalidate() {
         generationLock.withLock { $0 += 1 }
     }
@@ -91,7 +111,12 @@ actor BlockMatchingActor {
             if let range = plan.range {
                 activity = await activityProvider.vehicleActivity(from: range.start, to: range.end)
             }
-            let saved = try store.apply(plan, activity: activity) { generation == startGeneration }
+            let saved = try store.apply(
+                plan,
+                activity: activity,
+                seam: willCommit,
+                shouldCommit: { generation == startGeneration }
+            )
             return saved ? .updated(try store.summary(), store.grid) : .cancelled
         } catch {
             return .failed(error.localizedDescription)
@@ -100,6 +125,7 @@ actor BlockMatchingActor {
 
     private func runClear() async -> Outcome {
         do {
+            try willCommit(.clear)
             if let store {
                 try store.clear()
                 return .updated(try store.summary(), store.grid)

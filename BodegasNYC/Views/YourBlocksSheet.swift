@@ -15,8 +15,9 @@ import UIKit
 /// register. Opaque (`systemGroupedBackground`) at both detents, since the
 /// counts are `textMuted`.
 ///
-/// States (D8), failure > counting > zero: the street data failing replaces
-/// both sections with one `.primary` line; a first count shows "—" and,
+/// States (D8), failure > counting > zero: the street data failing, or a
+/// first count failing twice (#113), replaces both sections with one
+/// `.primary` line; a first count shows "—" and,
 /// 0.5s in, "Counting your blocks…"; a recount keeps the last counts; zero
 /// adds "Walk somewhere. This fills in on its own.". The footer adds
 /// "Recording is off." and the Motion denial line when they apply.
@@ -34,9 +35,9 @@ struct YourBlocksSheet: View {
         let content = viewModel.yourBlocks
         NavigationStack {
             List {
-                if content.phase == .unavailable {
+                if let failure = Self.failureLine(content.phase) {
                     Section {
-                        Text(AppCopy.YourBlocks.streetMapUnavailable.copy.text)
+                        Text(failure.copy.text)
                             .foregroundStyle(.primary)
                     } footer: {
                         footer(content)
@@ -78,6 +79,15 @@ struct YourBlocksSheet: View {
             if !Task.isCancelled { showsCountingStatus = true }
         }
         .onAppear { viewModel.yourBlocksDidOpen() }
+    }
+
+    /// The one line that replaces both sections when counts can't show.
+    static func failureLine(_ phase: YourBlocksContent.Phase) -> AppCopy.YourBlocks? {
+        switch phase {
+        case .unavailable: .streetMapUnavailable
+        case .countFailed: .countFailed
+        case .counting, .zero, .counted: nil
+        }
     }
 
     @ViewBuilder

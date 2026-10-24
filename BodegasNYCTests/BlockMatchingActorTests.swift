@@ -135,6 +135,81 @@ struct BlockMatchingActorTests {
         #expect(try context.fetchCount(FetchDescriptor<WalkedPoint>(predicate: #Predicate { $0.isMatched })) == 0)
     }
 
+    /// protects: the Clear History invariant (#113 item 2, eng R9): once the
+    /// Clear's queued cache clear has run there are zero `WalkedBlock`s, no
+    /// `WalkedMatchState`, no fix at or before the tap, every fix after the
+    /// tap is kept, and the next pass counts only those. Holds whether the
+    /// Clear lands before the pass's generation check (the pass drops) or
+    /// after it, so the pass saves after the Clear's delete (the case the
+    /// check cannot catch, as if there were no check).
+    /// fails_when: a pass that saves after the Clear's delete leaves masks,
+    /// a stamp or resurrected fixes behind the cache clear, a post-tap fix
+    /// is lost, or the next pass still counts deleted history.
+    /// no_claim: the view model's ordering (StreetsWalkedViewModelTests);
+    /// a crash mid-save (SwiftData's transaction).
+    @Test(arguments: [BlockMatchingActor.CommitPoint.beforeCheck, .beforeSave])
+    func clearHistoryLeavesNoTraceWhereverItLandsInAPass(_ point: BlockMatchingActor.CommitPoint) async throws {
+        let container = try makeInMemoryModelContainer()
+        let tapTime = F.baseDate.addingTimeInterval(3_600)
+        let beforeTap = F.walk(from: (0, 12), to: (100, 12))
+        let afterTap = F.walk(from: (0, 68), to: (100, 68), startTime: 3_601)
+        try F.seed(beforeTap, in: container.mainContext)
+        let hook = CommitHook(at: point)
+        let actor = BlockMatchingActor(
+            container: container,
+            activityProvider: FakeMotionProvider(),
+            loadGrid: { F.cornerGrid() },
+            onGridLoadFailure: { _ in },
+            willCommit: { try hook.fire($0) }
+        )
+        // Clear History's tap in the view model's order (delete and save at
+        // the tap, then the bump), then fixes that arrive after the tap.
+        hook.setOnce {
+            let context = ModelContext(container)
+            try context.delete(model: WalkedPoint.self, where: #Predicate { $0.recordedAt <= tapTime })
+            try context.save()
+            actor.invalidate()
+            for fix in afterTap {
+                context.insert(
+                    WalkedPoint(
+                        id: fix.id,
+                        latitude: fix.coordinate.latitude,
+                        longitude: fix.coordinate.longitude,
+                        recordedAt: fix.recordedAt
+                    )
+                )
+            }
+            try context.save()
+        }
+
+        let outcome = await actor.catchUp()
+        #expect(hook.fired == 1)
+        if point == .beforeCheck {
+            // The check runs after staging, so a Clear before it drops the
+            // whole pass even before the cache clear.
+            guard case .cancelled = outcome else {
+                Issue.record("expected the pass to be cancelled, got \(outcome)")
+                return
+            }
+            #expect(try ModelContext(container).fetchCount(FetchDescriptor<WalkedBlock>()) == 0)
+            #expect(try ModelContext(container).fetchCount(FetchDescriptor<WalkedMatchState>()) == 0)
+        }
+
+        _ = await actor.clearCache()
+
+        let context = ModelContext(container)
+        #expect(try context.fetchCount(FetchDescriptor<WalkedBlock>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<WalkedMatchState>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<WalkedPoint>(predicate: #Predicate { $0.recordedAt <= tapTime })) == 0)
+        let remaining = try context.fetch(FetchDescriptor<WalkedPoint>())
+        #expect(Set(remaining.map(\.id)) == Set(afterTap.map(\.id)))
+
+        let expected = BlockMatcher.match(afterTap, grid: F.cornerGrid())
+        #expect(!expected.isEmpty)
+        _ = await actor.catchUp()
+        #expect(try savedMasks(ModelContext(container)) == expected)
+    }
+
     /// protects: per-borough counts come from walked masks only, totals from
     /// the header, and the percent reads floor or "<1%" (spec
     /// Implementation 7).
@@ -162,5 +237,30 @@ struct BlockMatchingActorTests {
         #expect(BoroughProgress.percent(walked: 9_299, total: 9_300) == .whole(99))
         #expect(BoroughProgress.percent(walked: 9_300, total: 9_300) == .whole(100))
         #expect(BoroughProgress.percent(walked: 0, total: 0) == .whole(0))
+    }
+}
+
+/// Runs a test's action once, from inside a pass, at one `CommitPoint`.
+final class CommitHook: @unchecked Sendable {
+    private let point: BlockMatchingActor.CommitPoint
+    private let lock = NSLock()
+    private var action: (@Sendable () throws -> Void)?
+    private var _fired = 0
+    var fired: Int { lock.withLock { _fired } }
+
+    init(at point: BlockMatchingActor.CommitPoint) { self.point = point }
+
+    func setOnce(_ action: @escaping @Sendable () throws -> Void) {
+        lock.withLock { self.action = action }
+    }
+
+    func fire(_ reached: BlockMatchingActor.CommitPoint) throws {
+        guard reached == point else { return }
+        let pending = lock.withLock { () -> (@Sendable () throws -> Void)? in
+            defer { action = nil }
+            if action != nil { _fired += 1 }
+            return action
+        }
+        try pending?()
     }
 }

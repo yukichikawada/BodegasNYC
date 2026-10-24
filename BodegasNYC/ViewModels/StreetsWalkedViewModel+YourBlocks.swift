@@ -2,6 +2,21 @@ import Foundation
 
 // Motion & Fitness asks and Your Blocks (#108, design D6 to D8, eng R2).
 extension StreetsWalkedViewModel {
+    /// Where the block counts stand (design D8).
+    enum CountState: Equatable {
+        /// Nothing asked yet (no history, recording off: the street data
+        /// never loads).
+        case idle
+        /// A pass is running; the last overlay and counts stay up.
+        case counting
+        case ready
+        /// The first count and its one retry failed (#113); the next refresh
+        /// tries again.
+        case failed
+        /// The bundled street data did not load (eng R5).
+        case unavailable
+    }
+
     /// Asks for Motion & Fitness once, ever (design D6): right after Start
     /// Recording succeeds and the location dialogs have closed. Never on map
     /// open, rebuild or resume; the matcher's queries never prompt.
