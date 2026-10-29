@@ -86,6 +86,12 @@ final class PassPark: @unchecked Sendable {
     func release() { released.signal() }
 }
 
+/// Every VoiceOver announcement the view model posts.
+@MainActor
+final class AnnouncementLog {
+    var texts: [String] = []
+}
+
 /// Counts street-data loads, and can fail them.
 final class GridLoadCounter: @unchecked Sendable {
     private let lock = NSLock()
@@ -118,6 +124,8 @@ struct StreetsWalkedViewModelTests {
         let loads: GridLoadCounter
         let defaults: UserDefaults
         let commits: FailingCommits
+        let auth: AuthorizationBox
+        let announcements: AnnouncementLog
     }
 
     private func makeHarness(
@@ -148,10 +156,12 @@ struct StreetsWalkedViewModelTests {
             }
         )
         let backend = FakeWalkBackend()
+        let auth = AuthorizationBox(.authorizedAlways)
+        let announcements = AnnouncementLog()
         let recorder = WalkRecorder(
             modelContainer: container,
             userDefaults: defaults,
-            authorizationStatus: { .authorizedAlways },
+            access: { auth.access },
             backend: backend,
             now: { Self.liveNow }
         )
@@ -162,7 +172,8 @@ struct StreetsWalkedViewModelTests {
             userDefaults: defaults,
             motion: motion,
             matcher: matcher,
-            firstCountRetryDelay: .zero
+            firstCountRetryDelay: .zero,
+            announce: { announcements.texts.append($0) }
         )
         return Harness(
             viewModel: viewModel,
@@ -174,7 +185,9 @@ struct StreetsWalkedViewModelTests {
             motion: motion,
             loads: loads,
             defaults: defaults,
-            commits: commits
+            commits: commits,
+            auth: auth,
+            announcements: announcements
         )
     }
 
@@ -265,28 +278,132 @@ struct StreetsWalkedViewModelTests {
         #expect(viewModel.isTrackingEnabled == false)
     }
 
-    /// protects=the banner shows the recorder's error before the view
-    /// model's own (a match failure), and one dismiss clears both (#123
-    /// spec); fails_when=the match failure hides a recording problem, or a
-    /// dismiss leaves one of them up; no_claim=the banner's rendering.
-    @Test func trackingErrorPrefersTheRecordersAndDismissClearsBoth() async throws {
-        let harness = try makeHarness(failingCommits: 2)
-        try F.seed(Self.blockWalk, in: harness.context)
-        harness.viewModel.yourBlocksDidOpen()
-        await waitForRefresh(harness.viewModel)
-        let matchError = try #require(harness.viewModel.lastTrackingError)
+    // MARK: Recording state (#123 design DS3 to DS7)
+
+    /// protects=the menu, the map card and Your Blocks read one state: off
+    /// without the intent, paused for the first problem that pauses, and
+    /// recording through a failed save (design DS3); fails_when=a problem
+    /// leaves the state "recording", the wrong problem wins, or Stop leaves
+    /// a problem behind; no_claim=the views' rendering (QA screenshots).
+    @Test func recordingStateFollowsTheRecorder() async throws {
+        let harness = try makeHarness()
+        typealias State = StreetsWalkedViewModel.RecordingState
+        #expect(harness.viewModel.recordingState == .off)
 
         try harness.recorder.start()
-        let target = harness.recorder.handledUpdateCount + 1
-        harness.backend.send(WalkUpdate(location: nil, problem: .denied))
-        await waitUntil { harness.recorder.handledUpdateCount >= target }
-        let recorderError = try #require(harness.recorder.lastError)
-        #expect(harness.viewModel.lastTrackingError == recorderError)
-        #expect(recorderError != matchError)
+        #expect(harness.viewModel.recordingState == .recording)
 
-        harness.viewModel.dismissTrackingError()
+        let cases: [(CLAuthorizationStatus, Bool, Bool, State)] = [
+            (.authorizedWhenInUse, true, true, .paused(.needsAlways)),
+            (.authorizedWhenInUse, false, true, .paused(.preciseOff)),
+            (.authorizedAlways, false, true, .paused(.preciseOff)),
+            (.denied, true, true, .paused(.denied)),
+            (.denied, true, false, .paused(.servicesOff)),
+            (.restricted, true, true, .paused(.restricted)),
+            (.authorizedAlways, true, true, .recording)
+        ]
+        for (status, isPrecise, servicesEnabled, expected) in cases {
+            harness.auth.status = status
+            harness.auth.isPrecise = isPrecise
+            harness.auth.servicesEnabled = servicesEnabled
+            harness.viewModel.sceneActivityChanged(isActive: true)
+            #expect(harness.viewModel.recordingState == expected, "\(status.rawValue) precise \(isPrecise)")
+            #expect(harness.viewModel.cardProblem == expected.pausedProblem)
+        }
 
-        #expect(harness.viewModel.lastTrackingError == nil)
+        harness.auth.status = .authorizedWhenInUse
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        harness.viewModel.disableTracking()
+        #expect(harness.viewModel.recordingState == .off)
+        #expect(harness.viewModel.cardProblem == nil)
+        #expect(harness.viewModel.yourBlocks.isRecordingOff)
+    }
+
+    /// protects=Start Recording answered with While Using saves the intent
+    /// and shows the needsAlways card, with no Settings jump and no
+    /// recording; Your Blocks says paused, offers Open Settings, and drops
+    /// the zero line and the Motion row (design DS3, DS4);
+    /// fails_when=the intent is dropped, recording starts without Always,
+    /// or Your Blocks still says "Recording is off."; no_claim=the system
+    /// prompt and the Settings deep link (QA).
+    @Test func startingWithWhileUsingPausesWithACard() async throws {
+        let harness = try makeHarness(motion: FakeMotionProvider(authorization: .notDetermined))
+        harness.auth.status = .authorizedWhenInUse
+
+        harness.viewModel.saveRecordingIntent()
+        harness.viewModel.yourBlocksDidOpen()
+        await waitForRefresh(harness.viewModel)
+
+        #expect(harness.viewModel.recordingState == .paused(.needsAlways))
+        #expect(harness.viewModel.cardProblem == .needsAlways)
+        #expect(harness.backend.starts == 0)
+        let content = harness.viewModel.yourBlocks
+        #expect(content.phase == .zero)
+        #expect(content.isRecordingOff == false)
+        #expect(content.pausedProblem == .needsAlways)
+        #expect(content.showsPausedSettingsRow)
+        #expect(content.showsZeroLine == false)
+        #expect(content.motionRow == .hidden)
+        // The map's "No streets yet." needs `.recording`.
+        #expect(harness.viewModel.recordingState != .recording)
+    }
+
+    /// protects=closing the card hides it for that problem only: it stays
+    /// hidden on later activations while the problem holds, comes back when
+    /// the problem changes and changes back, and after a cold launch, while
+    /// the state stays paused throughout (design DS5); fails_when=a close
+    /// hides every later problem, clears the problem, or survives a change;
+    /// no_claim=two real windows (one shared view model; QA).
+    @Test func closingTheCardHidesItUntilTheProblemChanges() throws {
+        let harness = try makeHarness()
+        try harness.recorder.start()
+        harness.auth.status = .authorizedWhenInUse
+        harness.viewModel.sceneActivityChanged(isActive: true)
+
+        harness.viewModel.dismissRecorderCard()
+        #expect(harness.viewModel.cardProblem == nil)
+        #expect(harness.viewModel.recordingState == .paused(.needsAlways))
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        #expect(harness.viewModel.cardProblem == nil)
+
+        harness.auth.isPrecise = false
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        #expect(harness.viewModel.cardProblem == .preciseOff)
+        harness.auth.isPrecise = true
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        #expect(harness.viewModel.cardProblem == .needsAlways)
+
+        harness.viewModel.dismissRecorderCard()
+        let relaunched = try makeHarness(container: harness.container, defaults: harness.defaults)
+        relaunched.auth.status = .authorizedWhenInUse
+        relaunched.recorder.resumeIfPreviouslyEnabled()
+        #expect(relaunched.viewModel.cardProblem == .needsAlways)
+    }
+
+    /// protects=VoiceOver hears a new problem's card title while a window
+    /// is active, and "Recording again." when Always comes back, but
+    /// nothing while every window is in the background (design DS7);
+    /// fails_when=an announcement is missed, repeated for an unchanged
+    /// problem, or made in the background; no_claim=VoiceOver speaking it
+    /// (the post itself is injected).
+    @Test func announcementsFollowTheProblem() throws {
+        let harness = try makeHarness()
+        try harness.recorder.start()
+        harness.auth.status = .authorizedWhenInUse
+
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        #expect(harness.announcements.texts == ["Recording paused."])
+
+        harness.auth.status = .authorizedAlways
+        harness.viewModel.sceneActivityChanged(isActive: true)
+        #expect(harness.announcements.texts == ["Recording paused.", "Recording again."])
+
+        harness.viewModel.sceneActivityChanged(isActive: false)
+        harness.auth.status = .denied
+        harness.recorder.accessDidChange()
+        #expect(harness.announcements.texts.count == 2)
+        #expect(harness.viewModel.cardProblem == .denied)
     }
 
     /// protects=Start and Stop Recording go through the one recorder, and
@@ -754,7 +871,7 @@ struct StreetsWalkedViewModelTests {
         #expect(harness.viewModel.yourBlocks.phase != .counting)
         #expect(harness.viewModel.yourBlocks.phase == .countFailed)
         #expect(harness.viewModel.hasCounted == false)
-        #expect(harness.viewModel.lastTrackingError != nil)
+        #expect(harness.viewModel.lastMatchError != nil)
 
         harness.viewModel.yourBlocksDidOpen()
         await waitForRefresh(harness.viewModel)
@@ -778,7 +895,7 @@ struct StreetsWalkedViewModelTests {
         #expect(harness.viewModel.yourBlocks.phase == .counted)
         #expect(harness.viewModel.hasCounted)
         #expect(harness.viewModel.walkedBlockIDs == [100])
-        #expect(harness.viewModel.lastTrackingError == nil)
+        #expect(harness.viewModel.lastMatchError == nil)
     }
 
     /// protects: Clear History, run by the view model while a pass is parked
@@ -853,7 +970,7 @@ struct StreetsWalkedViewModelTests {
 
         #expect(harness.commits.attempts == 1)
         #expect(harness.viewModel.yourBlocks.phase == .countFailed)
-        #expect(harness.viewModel.lastTrackingError != nil)
+        #expect(harness.viewModel.lastMatchError != nil)
 
         harness.viewModel.yourBlocksDidOpen()
         await waitForRefresh(harness.viewModel)

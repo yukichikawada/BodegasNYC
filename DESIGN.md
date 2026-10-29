@@ -251,7 +251,8 @@ photo, or its load failure standing in its place).
 `maxWidth: 560pt`, top-aligned at 25% of the height.
 
 **Density:** medium on the map (one floating object at a time in the bottom slot; precedence
-placement card > first-add card > empty state > add tip > streets banner > zoom in for blocks), comfortable on
+placement card > first-add card > recorder problem > empty state > add tip > streets banner > zoom in for
+blocks, #123 DS2), comfortable on
 onboarding and detail. At block zoom the pin layer carries names (#67); the bottom-slot rule is
 unchanged. The map is never replaced by a results screen; list and detail sit over
 it. The List tab slides over the live map; detail zooms out of its pin.
@@ -288,8 +289,20 @@ breathe; noneNearby `mappin.slash`; noneOnBlock `mappin.slash`, the nearby empty
 "Nothing on this block yet." / "Pinch out and look around. Or add the one on your corner." with
 Add a Bodega (#84; above block zoom noneNearby keeps "Nothing near you yet."); noFilterMatches `line.3.horizontal.decrease.circle`;
 loadFailed `exclamationmark.triangle`), firstAdd, addTip, streets banner ("No streets yet." once a count finds no walked
-blocks, never while the first count runs, #108 D8), zoomInForBlocks (`plus.magnifyingglass`, title only, lowest
-precedence, #108 D3), tracking error.
+blocks, never while the first count runs and never while recording is paused, #108 D8, #123 DS3),
+zoomInForBlocks (`plus.magnifyingglass`, title only, lowest precedence, #108 D3), recorder (#123 DS1, DS6:
+Streets Walked's recorder problem, under first-add and over everything else; `.secondary` symbol, `.bordered`
+Open Settings when Settings can fix it, always closable). Recorder problems, one shown in the order restricted >
+denied > servicesOff > preciseOff > needsAlways > saveFailed: needsAlways `location.slash` "Recording paused." /
+"Streets Walked needs location set to Always. Your blocks stay."; denied `location.slash` "Recording can't see
+you." / "Location is off for this app. Your blocks stay."; servicesOff `location.slash` "Recording can't see
+you." / "Location Services is off for the whole phone."; restricted `location.slash` "Recording isn't allowed
+here." / "Location is restricted on this phone. Your blocks stay." (no action); preciseOff `scope` "Recording
+paused." / "Blocks need Precise Location, and it's off."; saveFailed `exclamationmark.triangle` "That stretch
+didn't save." / "Recording keeps going. Your other blocks are fine." (no action; recording continues). Closing
+the card hides it for that problem until the problem changes or the next cold launch, in every window; the
+menu and Your Blocks still say paused. VoiceOver hears the card's title when a problem appears while the app is
+active, and "Recording again." when recording resumes. There is no tracking-error banner.
 
 **Pin** (`BodegaPinView`, DD3): 28pt circle, `.pin` or `.catPin`, white 14pt glyph, 2pt white
 stroke, shadow 2/1, 44pt hit area, anchored at center. Selected: 3pt stroke, shadow 4/2, scale
@@ -473,13 +486,15 @@ name in `.body`, the percent trailing in `.body`, all monospaced digits. The per
 any nonzero count under 1% shows "<1%". Rows stack at accessibility sizes and otherwise use
 `ViewThatFits` (the `BodegaRow` idiom). No progress bars, no display register, no indigo (the sheet
 is numbers, not the overlay). Footer: "A block counts once you've walked most of it. Your walks stay
-on this phone.", plus "Recording is off. Your blocks stay." and "Without Motion & Fitness, rides are
-filtered by speed only." when they apply. States, failure > counting > zero: "The street map didn't
+on this phone.", plus "Recording is off. Your blocks stay." (or, while paused, "Recording is paused. Your
+blocks stay." with an Open Settings row when Settings can fix the problem, #123 DS3) and "Without Motion &
+Fitness, rides are filtered by speed only." when they apply. States, failure > counting > zero: "The street map didn't
 load. Your walks are still saved." in `.primary` replaces both sections, as does "Your blocks
 couldn't be counted. Your walks are still saved." when the first count fails and its one automatic
 retry fails too (#113; reopening the sheet counts again); a Clear History during the first count
 ends on zero; a first count shows "—" and, after 0.5s, "Counting your blocks…" under the city; a
-recount keeps the last counts; zero adds "Walk somewhere. This fills in on its own." under the city.
+recount keeps the last counts; zero adds "Walk somewhere. This fills in on its own." under the city (not
+while paused).
 Someone already recording whose Motion & Fitness was never asked gets an Allow Motion Access row;
 after a denial it is Open Settings. VoiceOver: each row is one element, "Manhattan, 412 of 9,300
 blocks, 4 percent."; "<1%" reads "less than 1 percent", "—" reads "counting".
@@ -619,3 +634,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-23 | #113 item 5: when the first count of a launch fails and its one automatic retry fails too, Your Blocks shows "Your blocks couldn't be counted. Your walks are still saved." in `.primary`, in the street-map failure's place (both sections replaced; reopening the sheet counts again); a Clear History during the first count ends on the zero state; a failed recount keeps the last counts | D8 had no state for a count that fails: the sheet said "Counting your blocks…" until it was reopened. Zero was not an option, because with history it would be false and without a count there are no totals; one line in the existing failure layout is the least new UI |
 | 2026-10-23 | #113 D10 fade dropped: walked-block changes swap in place at camera rest, no 0.2s fade, and Reduce Motion needs nothing special; mid-gesture writes and unchanged writes are still skipped | MapKit does not animate `MapPolyline` changes; verified on simulator in #113 (an `easeOut(0.2)` transaction around the write landed within one frame for Show on Map, data changes and the first count) |
 | 2026-10-23 | #113 map-height wording: "visible height" (the 400 m / 2 km / 8 km width bands, #67's 400/440 m block zoom, Locate Me's 350 m) means the app's `visibleHeightMeters`, the ground distance across the Map's laid-out frame, measured at about 0.75 of the full screen's height on the iPhone 17 Pro simulator (iOS 26.5, #113 QA; varies with device and safe areas), where an 850 m camera ≈ 350 m measure ≈ 480 m of street on a full screen; no threshold changed | Simulator QA in #113 found the gap; the bands are internally consistent and were tuned on this measure, so the owner kept the numbers and fixed the wording rather than rescale |
+| 2026-10-28 | #123 recording paused: Streets Walked recording is off, recording, or paused for one problem (restricted > denied > servicesOff > preciseOff > needsAlways; a failed save shows a card but keeps recording). The problem is a `MapBottomCard` state under first-add and over every other card, with DS6's symbols and copy (the denied body says "this app", since copy never names the app); the yellow footnote `TrackingErrorBanner` is gone. While paused the menu has a "Recording Paused" section with Open Settings above Stop Recording, Your Blocks says "Recording is paused. Your blocks stay." with Open Settings, and "No streets yet." stays away. Start Recording never jumps to Settings: any answer but Always saves the intent and shows the card, and granting Always later starts recording on return. Closing the card hides it for that problem until it changes or the next cold launch. VoiceOver hears the title when a problem appears and "Recording again." on resume | `/plan-design-review` DS1 to DS7 with two outside voices; owner accepted all. One slot with a defined precedence; the same state everywhere, so a dismissed card still leaves the menu and Your Blocks honest; no status colour or badge (Do's and Don'ts) |

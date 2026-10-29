@@ -55,13 +55,23 @@ struct YourBlocksContent: Equatable {
     var boroughs: [Row]
     var motionRow: MotionRow
     var isRecordingOff: Bool
+    /// What pauses recording, if anything (#123 design DS3): the footer
+    /// says "Recording is paused. Your blocks stay." instead of "off".
+    var pausedProblem: RecorderProblem?
     var isMotionDenied: Bool
+
+    /// The Open Settings row while paused for something Settings can fix.
+    var showsPausedSettingsRow: Bool { pausedProblem?.opensSettings == true }
+    /// "Walk somewhere. This fills in on its own." under a zero count, but
+    /// not while paused: walking would not fill anything in (DS3).
+    var showsZeroLine: Bool { phase == .zero && pausedProblem == nil }
 
     init(
         countState: StreetsWalkedViewModel.CountState,
         hasCounted: Bool,
         progress: [BoroughProgress],
         isRecording: Bool,
+        pausedProblem: RecorderProblem? = nil,
         motion: MotionAuthorization
     ) {
         let phase = Self.phase(countState: countState, hasCounted: hasCounted, progress: progress)
@@ -80,7 +90,8 @@ struct YourBlocksContent: Equatable {
             )
             : Row(borough: nil)
         motionRow = Self.motionRow(authorization: motion, isRecording: isRecording)
-        isRecordingOff = !isRecording
+        isRecordingOff = !isRecording && pausedProblem == nil
+        self.pausedProblem = pausedProblem
         isMotionDenied = motion == .denied
     }
 

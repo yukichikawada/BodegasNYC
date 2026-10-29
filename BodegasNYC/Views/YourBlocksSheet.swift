@@ -19,8 +19,10 @@ import UIKit
 /// first count failing twice (#113), replaces both sections with one
 /// `.primary` line; a first count shows "—" and,
 /// 0.5s in, "Counting your blocks…"; a recount keeps the last counts; zero
-/// adds "Walk somewhere. This fills in on its own.". The footer adds
-/// "Recording is off." and the Motion denial line when they apply.
+/// adds "Walk somewhere. This fills in on its own." (not while paused). The
+/// footer adds "Recording is off." or "Recording is paused." and the Motion
+/// denial line when they apply; paused for something Settings fixes adds an
+/// Open Settings row (#123 design DS3).
 struct YourBlocksSheet: View {
     let viewModel: StreetsWalkedViewModel
     @Environment(\.dismiss) private var dismiss
@@ -52,6 +54,11 @@ struct YourBlocksSheet: View {
                         ForEach(content.boroughs) { YourBlocksRow(row: $0) }
                     } footer: {
                         footer(content)
+                    }
+                }
+                if content.showsPausedSettingsRow {
+                    Section {
+                        Button(AppCopy.YourBlocks.openSettings.copy.text) { openSettings() }
                     }
                 }
                 motionSection(content.motionRow)
@@ -95,7 +102,7 @@ struct YourBlocksSheet: View {
         switch content.phase {
         case .counting where showsCountingStatus:
             Text(AppCopy.YourBlocks.countingStatus.withTrailingEllipsis)
-        case .zero:
+        case .zero where content.showsZeroLine:
             Text(AppCopy.emptyNoStreetsBody.copy.text)
         default:
             EmptyView()
@@ -115,11 +122,13 @@ struct YourBlocksSheet: View {
             }
         case .openSettings:
             Section {
-                Button(AppCopy.YourBlocks.openSettings.copy.text) {
-                    if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
-                }
+                Button(AppCopy.YourBlocks.openSettings.copy.text) { openSettings() }
             }
         }
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) { openURL(url) }
     }
 
     private func footer(_ content: YourBlocksContent) -> some View {
@@ -127,6 +136,9 @@ struct YourBlocksSheet: View {
             Text(AppCopy.YourBlocks.footer.copy.text)
             if content.isRecordingOff {
                 Text(AppCopy.YourBlocks.recordingOff.copy.text)
+            }
+            if content.pausedProblem != nil {
+                Text(AppCopy.YourBlocks.recordingPaused.copy.text)
             }
             if content.isMotionDenied {
                 Text(AppCopy.YourBlocks.motionDenied.copy.text)

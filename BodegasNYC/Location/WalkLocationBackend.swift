@@ -5,13 +5,6 @@ import OSLog
 /// so tests can feed a scripted stream (#123). Built off the main actor by
 /// the live backend's producer, so it is `nonisolated` (eng C1).
 nonisolated struct WalkUpdate: Sendable, Equatable {
-    /// What stops recording until the person acts. `.denied` covers denied,
-    /// denied globally and restricted; it wins over `.accuracyLimited`.
-    enum Problem: Sendable, Equatable {
-        case denied
-        case accuracyLimited
-    }
-
     /// Transient conditions that resolve without the person: logged on
     /// every change (eng R2), and `insufficientlyInUse` rebuilds the
     /// sessions on the next scene activation.
@@ -24,13 +17,15 @@ nonisolated struct WalkUpdate: Sendable, Equatable {
 
     var location: CLLocation?
     var isStationary: Bool
-    var problem: Problem?
+    /// What stops recording until the person acts (`saveFailed` never
+    /// comes from a delivery).
+    var problem: RecorderProblem?
     var diagnostics: Set<Diagnostic>
 
     init(
         location: CLLocation?,
         isStationary: Bool = false,
-        problem: Problem? = nil,
+        problem: RecorderProblem? = nil,
         diagnostics: Set<Diagnostic> = []
     ) {
         self.location = location
@@ -39,15 +34,20 @@ nonisolated struct WalkUpdate: Sendable, Equatable {
         self.diagnostics = diagnostics
     }
 
-    /// Maps a live update: denied, denied globally and restricted are
-    /// `.denied`; `accuracyLimited` is `.accuracyLimited`; the transient
-    /// flags are diagnostics only.
+    /// Maps a live update to one problem (#123 design DS3): restricted,
+    /// then Location Services off for the whole phone (checked before the
+    /// per-app denial, which may be set alongside it), then denied, then
+    /// Precise off. The transient flags are diagnostics only.
     init(_ update: CLLocationUpdate) {
-        var problem: Problem?
-        if update.authorizationDenied || update.authorizationDeniedGlobally || update.authorizationRestricted {
+        var problem: RecorderProblem?
+        if update.authorizationRestricted {
+            problem = .restricted
+        } else if update.authorizationDeniedGlobally {
+            problem = .servicesOff
+        } else if update.authorizationDenied {
             problem = .denied
         } else if update.accuracyLimited {
-            problem = .accuracyLimited
+            problem = .preciseOff
         }
         var diagnostics: Set<Diagnostic> = []
         if update.insufficientlyInUse { diagnostics.insert(.insufficientlyInUse) }
@@ -60,6 +60,29 @@ nonisolated struct WalkUpdate: Sendable, Equatable {
             problem: problem,
             diagnostics: diagnostics
         )
+    }
+}
+
+/// The authorization state the recorder reads at each activation and on
+/// each authorization change (#123 design DS3).
+nonisolated struct LocationAccess: Equatable, Sendable {
+    var status: CLAuthorizationStatus
+    var isPrecise: Bool = true
+    /// Location Services for the whole phone; with it off the per-app
+    /// status reads `.denied`.
+    var servicesEnabled: Bool = true
+
+    var isAlways: Bool { status == .authorizedAlways }
+
+    /// What this access state alone says is wrong.
+    var problems: Set<RecorderProblem> {
+        switch status {
+        case .restricted: return [.restricted]
+        case .denied: return servicesEnabled ? [.denied] : [.servicesOff]
+        case .authorizedAlways: return isPrecise ? [] : [.preciseOff]
+        case .authorizedWhenInUse: return isPrecise ? [.needsAlways] : [.needsAlways, .preciseOff]
+        default: return [.needsAlways]
+        }
     }
 }
 

@@ -13,18 +13,15 @@ import SwiftData
 /// sessions are held (`isRecording`: intent and Always at the last check),
 /// and whether the update loop is still running (`isLoopAlive`). Scene
 /// activation reconciles them (`resync()`).
+///
+/// What is wrong is a set of `RecorderProblem`s (design DS3): from the
+/// authorization state (read at activation and on each change), from the
+/// latest delivery, and a failed save. They live here, not in the UI, so a
+/// dismissed card still leaves the problem in the model (design DS5).
 @Observable
 final class WalkRecorder {
     enum RecorderError: Error {
         case authorizationNotGranted
-    }
-
-    /// What `lastError` was last set for, so a condition that persists
-    /// across deliveries or activations sets it once (no banner flicker).
-    enum Issue: Equatable {
-        case denied
-        case accuracyLimited
-        case alwaysOff
     }
 
     nonisolated static let trackingEnabledDefaultsKey = "streetsWalked.isTrackingEnabled"
@@ -36,15 +33,37 @@ final class WalkRecorder {
         category: "WalkRecorder"
     )
 
+    /// The persisted intent; survives a pause (eng R1) and any problem.
+    private(set) var isEnabled: Bool {
+        didSet { userDefaults.set(isEnabled, forKey: Self.trackingEnabledDefaultsKey) }
+    }
     /// The sessions are held and the loop was started: intent and Always.
     private(set) var isRecording = false
-    private(set) var lastError: String?
+    /// From the authorization state; empty while the intent is off.
+    private(set) var accessProblems: Set<RecorderProblem> = []
+    /// From the latest delivery; a delivery with a fix and no problem
+    /// clears it, and so does a restart.
+    private(set) var deliveryProblem: RecorderProblem?
+    /// The last save failed; the next successful save clears it.
+    private(set) var saveFailed = false
     /// Called on the main actor after each save that inserted a fix.
-    var onPointsSaved: (() -> Void)?
+    @ObservationIgnored var onPointsSaved: (@MainActor () -> Void)?
+    /// Called on the main actor when `topProblem` changes, with the old
+    /// and the new value, after the recorder has settled (so a resume has
+    /// already set `isRecording`).
+    @ObservationIgnored var onTopProblemChanged: (@MainActor (RecorderProblem?, RecorderProblem?) -> Void)?
 
-    /// The persisted intent; survives a pause without Always (eng R1) and a
-    /// `.denied` delivery.
-    var isEnabled: Bool { userDefaults.bool(forKey: Self.trackingEnabledDefaultsKey) }
+    /// Every current problem; empty while the intent is off.
+    var problems: Set<RecorderProblem> {
+        guard isEnabled else { return [] }
+        var all = accessProblems
+        if let deliveryProblem { all.insert(deliveryProblem) }
+        if saveFailed { all.insert(.saveFailed) }
+        return all
+    }
+
+    /// The one problem to show, by `RecorderProblem`'s order.
+    var topProblem: RecorderProblem? { problems.min() }
 
     /// Updates handled since launch, for tests to wait on.
     private(set) var handledUpdateCount = 0
@@ -54,96 +73,149 @@ final class WalkRecorder {
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private let userDefaults: UserDefaults
-    private let authorizationStatus: @MainActor () -> CLAuthorizationStatus
+    private let access: @MainActor () -> LocationAccess
     private let backend: any WalkLocationBackend
     private let now: () -> Date
-    private var loopTask: Task<Void, Never>?
+    private let saveContext: @MainActor (ModelContext) throws -> Void
+    @ObservationIgnored private var loopTask: Task<Void, Never>?
     /// Bumped on every start and stop, so a loop that outlives its run
     /// drops what it still receives.
-    private var loopGeneration = 0
-    private var lastSaved: CLLocation?
-    private var lastIssue: Issue?
-    private var lastStationary: Bool?
-    private var lastDiagnostics: Set<WalkUpdate.Diagnostic> = []
+    @ObservationIgnored private var loopGeneration = 0
+    @ObservationIgnored private var lastSaved: CLLocation?
+    @ObservationIgnored private var lastStationary: Bool?
+    @ObservationIgnored private var lastDiagnostics: Set<WalkUpdate.Diagnostic> = []
 
+    /// - Parameters:
+    ///   - access: the authorization state, read at launch, at each scene
+    ///     activation and on each authorization change.
+    ///   - saveContext: saves after each insert; a seam for the save-failure
+    ///     tests.
     init(
         modelContainer: ModelContainer,
         userDefaults: UserDefaults = .standard,
-        authorizationStatus: @escaping @MainActor () -> CLAuthorizationStatus,
+        access: @escaping @MainActor () -> LocationAccess,
         backend: any WalkLocationBackend = LiveWalkLocationBackend(),
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        saveContext: @escaping @MainActor (ModelContext) throws -> Void = { try $0.save() }
     ) {
         // Inserts and Clear History share the main context, as before (eng R3).
         self.modelContainer = modelContainer
         modelContext = modelContainer.mainContext
         self.userDefaults = userDefaults
-        self.authorizationStatus = authorizationStatus
+        self.access = access
         self.backend = backend
         self.now = now
+        self.saveContext = saveContext
+        isEnabled = userDefaults.bool(forKey: Self.trackingEnabledDefaultsKey)
     }
 
     /// Starts recording and persists the intent. Throws, changing nothing,
     /// unless Always is granted. A no-op while already recording.
     func start() throws {
-        guard authorizationStatus() == .authorizedAlways else {
+        let current = access()
+        guard current.isAlways else {
             throw RecorderError.authorizationNotGranted
         }
-        userDefaults.set(true, forKey: Self.trackingEnabledDefaultsKey)
-        guard !isRecording else { return }
-        if lastIssue == .alwaysOff { lastIssue = nil }
-        startBackend()
-        Self.logger.info("start")
+        settleProblems {
+            isEnabled = true
+            accessProblems = current.problems
+            guard !isRecording else { return }
+            startBackend()
+            Self.logger.info("start")
+        }
     }
 
-    /// Stops recording and clears the intent. A second call is a no-op.
+    /// Start Recording without Always (design DS4): the intent is saved and
+    /// the problem card explains what Settings needs; granting Always later
+    /// starts recording on the next activation (eng R1). With Always it
+    /// starts at once.
+    func enable() {
+        settleProblems { isEnabled = true }
+        resync()
+    }
+
+    /// Stops recording, clears the intent and every problem. A second call
+    /// is a no-op.
     func stop() {
-        userDefaults.set(false, forKey: Self.trackingEnabledDefaultsKey)
-        guard isRecording else { return }
-        stopBackend()
-        Self.logger.info("stop")
+        settleProblems {
+            isEnabled = false
+            accessProblems = []
+            deliveryProblem = nil
+            saveFailed = false
+            guard isRecording else { return }
+            stopBackend()
+            Self.logger.info("stop")
+        }
     }
 
     /// At launch, from `didFinishLaunching`: resumes when the intent and
     /// Always both hold, before the delegate returns, so a background
     /// relaunch re-takes the sessions in time. Never prompts.
     func resumeIfPreviouslyEnabled(isBackgroundLaunch: Bool = false) {
-        guard isEnabled, !isRecording, authorizationStatus() == .authorizedAlways else { return }
-        startBackend()
-        Self.logger.info("resumed at launch (background: \(isBackgroundLaunch, privacy: .public))")
+        guard isEnabled, !isRecording else { return }
+        let current = access()
+        settleProblems {
+            accessProblems = current.problems
+            guard current.isAlways else { return }
+            startBackend()
+            Self.logger.info("resumed at launch (background: \(isBackgroundLaunch, privacy: .public))")
+        }
     }
 
     /// On every scene activation (eng R1, R2, O1): without Always the
-    /// sessions are given up but the intent kept, and the person is told
-    /// once; with Always, recording starts if it was paused or skipped, and
-    /// a dead loop or one stalled on `insufficientlyInUse` is rebuilt here
-    /// in the foreground, where a new session can activate.
+    /// sessions are given up but the intent kept, and the problem says why;
+    /// with Always, recording starts if it was paused or skipped, and a dead
+    /// loop or one stalled on `insufficientlyInUse` is rebuilt here in the
+    /// foreground, where a new session can activate.
     func resync() {
         guard isEnabled else { return }
-        let status = authorizationStatus()
-        guard status == .authorizedAlways else {
-            if isRecording {
-                stopBackend()
-                Self.logger.info("paused: not Always (status \(status.rawValue, privacy: .public))")
+        let current = access()
+        settleProblems {
+            accessProblems = classify(current)
+            guard current.isAlways else {
+                if isRecording {
+                    stopBackend()
+                    Self.logger.info("paused: not Always (status \(current.status.rawValue, privacy: .public))")
+                }
+                return
             }
-            let isDenied = status == .denied || status == .restricted
-            report(isDenied ? .denied : .alwaysOff)
-            return
-        }
-        if lastIssue == .alwaysOff { lastIssue = nil }
-        guard isRecording else {
-            startBackend()
-            Self.logger.info("resumed on activation")
-            return
-        }
-        if !isLoopAlive || lastDiagnostics.contains(.insufficientlyInUse) {
-            Self.logger.info("rebuilding sessions (loop alive: \(self.isLoopAlive, privacy: .public))")
-            stopBackend()
-            startBackend()
+            guard isRecording else {
+                startBackend()
+                Self.logger.info("resumed on activation")
+                return
+            }
+            if !isLoopAlive || lastDiagnostics.contains(.insufficientlyInUse) {
+                Self.logger.info("rebuilding sessions (loop alive: \(self.isLoopAlive, privacy: .public))")
+                stopBackend()
+                startBackend()
+            }
         }
     }
 
-    func dismissError() {
-        lastError = nil
+    /// The authorization changed (the app delegate's location manager):
+    /// re-reads the problems only. Sessions start and stop at activation.
+    func accessDidChange() {
+        guard isEnabled else { return }
+        let current = access()
+        settleProblems { accessProblems = classify(current) }
+    }
+
+    /// With the per-app status `.denied`, a delivery that said Location
+    /// Services is off for the phone is the better answer when the cached
+    /// services flag has not caught up yet.
+    private func classify(_ current: LocationAccess) -> Set<RecorderProblem> {
+        if current.status == .denied, deliveryProblem == .servicesOff { return [.servicesOff] }
+        return current.problems
+    }
+
+    /// Runs `body`, then reports a change of `topProblem` once.
+    private func settleProblems(_ body: () -> Void) {
+        let before = topProblem
+        body()
+        let after = topProblem
+        guard before != after else { return }
+        Self.logger.info("problem \(after.map { "\($0)" } ?? "none", privacy: .public)")
+        onTopProblemChanged?(before, after)
     }
 
     // MARK: Loop
@@ -155,6 +227,7 @@ final class WalkRecorder {
         isRecording = true
         isLoopAlive = true
         lastDiagnostics = []
+        deliveryProblem = nil
         loopTask = Task { [weak self] in
             for await update in stream {
                 guard let self, self.loopGeneration == generation else { return }
@@ -192,13 +265,14 @@ final class WalkRecorder {
             let names = update.diagnostics.map(\.rawValue).sorted().joined(separator: ",")
             Self.logger.info("diagnostics [\(names, privacy: .public)]")
         }
-        if let problem = update.problem {
-            report(problem == .denied ? .denied : .accuracyLimited)
-        } else if update.location != nil {
-            lastIssue = nil
+        settleProblems {
+            if let problem = update.problem {
+                if problem != deliveryProblem { deliveryProblem = problem }
+            } else if update.location != nil, deliveryProblem != nil {
+                deliveryProblem = nil
+            }
+            if let location = update.location { record(location) }
         }
-        guard let location = update.location else { return }
-        record(location)
     }
 
     private func record(_ location: CLLocation) {
@@ -215,31 +289,15 @@ final class WalkRecorder {
         // Saved at once: the process can be suspended moments after a
         // background delivery.
         do {
-            try modelContext.save()
+            try saveContext(modelContext)
         } catch {
-            lastError = error.localizedDescription
+            Self.logger.error("save failed: \(error.localizedDescription, privacy: .public)")
+            if !saveFailed { saveFailed = true }
             return
         }
+        if saveFailed { saveFailed = false }
         lastSaved = location
         onPointsSaved?()
-    }
-
-    private func report(_ issue: Issue) {
-        guard issue != lastIssue else { return }
-        lastIssue = issue
-        lastError = Self.message(for: issue)
-    }
-
-    /// Interim copy until the design review's card replaces it.
-    private static func message(for issue: Issue) -> String {
-        switch issue {
-        case .denied:
-            "Location access is off, so Streets Walked can't record. Turn on Always in Settings."
-        case .accuracyLimited:
-            "Precise Location is off, so Streets Walked can't record streets accurately."
-        case .alwaysOff:
-            "Always is off, so Streets Walked paused. Turn on Always in Settings."
-        }
     }
 }
 

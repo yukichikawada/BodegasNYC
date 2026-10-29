@@ -18,6 +18,8 @@ nonisolated extension AppCopy {
         /// a first count (design D8).
         case countingStatus
         case recordingOff
+        /// Recording's intent is on but a problem pauses it (#123 DS3).
+        case recordingPaused
         /// The street data did not load (eng R5, design D8); `.primary`.
         case streetMapUnavailable
         /// The first count failed twice (#113 item 5); `.primary`, in the
@@ -45,6 +47,7 @@ nonisolated extension AppCopy {
                 )
             case .countingStatus: CopyString(kind: .value, text: "Counting your blocks")
             case .recordingOff: CopyString(kind: .body, text: "Recording is off. Your blocks stay.")
+            case .recordingPaused: CopyString(kind: .body, text: "Recording is paused. Your blocks stay.")
             case .streetMapUnavailable:
                 CopyString(kind: .body, text: "The street map didn't load. Your walks are still saved.")
             case .countFailed:

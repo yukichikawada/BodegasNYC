@@ -76,15 +76,42 @@ extension MapScreenView {
 
     // MARK: Menu actions (design D5, D6, D11)
 
-    /// Start or Stop Recording. The sole trigger for the separate Always
-    /// location prompt (PRD §5.2: never bundled with the core When-In-Use
-    /// ask). Requesting Always from `.notDetermined` typically only yields
-    /// `.authorizedWhenInUse` from the system's first prompt — full
-    /// "Always" needs either a later just-in-time prompt or Settings, so
-    /// that case gets a nudge there rather than silently doing nothing.
+    /// The menu's recording section by state (#123 design DS3): Start
+    /// Recording when off, Stop Recording when recording, and while paused
+    /// a "Recording Paused" section with Open Settings (when Settings can
+    /// fix it) above Stop Recording, which clears the intent.
+    @ViewBuilder
+    func recordingSection(_ viewModel: StreetsWalkedViewModel) -> some View {
+        switch viewModel.recordingState {
+        case .off:
+            Section {
+                Button(AppCopy.startRecordingAction.copy.text) {
+                    Task { await toggleStreetsWalked() }
+                }
+            }
+        case .recording:
+            Section {
+                Button(AppCopy.stopRecordingAction.copy.text) { viewModel.disableTracking() }
+            }
+        case .paused(let problem):
+            Section(AppCopy.Recorder.pausedSection.copy.text) {
+                if problem.opensSettings {
+                    Button(AppCopy.YourBlocks.openSettings.copy.text) { openSettings() }
+                }
+                Button(AppCopy.stopRecordingAction.copy.text) { viewModel.disableTracking() }
+            }
+        }
+    }
+
+    /// Start Recording. The sole trigger for the separate Always location
+    /// prompt (PRD §5.2: never bundled with the core When-In-Use ask). No
+    /// jump to Settings (#123 design DS4): any answer but Always saves the
+    /// intent, and the recorder card says what Settings needs (While Using:
+    /// needsAlways; Never: denied; restricted: no action). Granting Always
+    /// later starts recording when the app comes back (eng R1).
     func toggleStreetsWalked() async {
         guard let streetsWalkedViewModel else { return }
-        guard !streetsWalkedViewModel.isTrackingEnabled else {
+        guard streetsWalkedViewModel.recordingState == .off else {
             streetsWalkedViewModel.disableTracking()
             return
         }
@@ -98,10 +125,8 @@ extension MapScreenView {
             // Once, after Start Recording succeeds and the location
             // dialogs have closed (design D6).
             await streetsWalkedViewModel.requestMotionAccessIfNeeded()
-        case .authorizedWhenInUse:
-            openSettings()
         default:
-            break
+            streetsWalkedViewModel.saveRecordingIntent()
         }
     }
 

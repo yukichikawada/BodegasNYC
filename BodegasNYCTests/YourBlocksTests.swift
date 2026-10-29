@@ -31,6 +31,7 @@ struct YourBlocksTests {
         hasCounted: Bool = true,
         progress: [BoroughProgress] = progress(),
         isRecording: Bool = true,
+        pausedProblem: RecorderProblem? = nil,
         motion: MotionAuthorization = .authorized
     ) -> YourBlocksContent {
         YourBlocksContent(
@@ -38,6 +39,7 @@ struct YourBlocksTests {
             hasCounted: hasCounted,
             progress: progress,
             isRecording: isRecording,
+            pausedProblem: pausedProblem,
             motion: motion
         )
     }
@@ -150,6 +152,23 @@ struct YourBlocksTests {
         #expect(Self.content(motion: .denied).isMotionDenied)
         #expect(Self.content(motion: .notDetermined).isMotionDenied == false)
         #expect(Self.content(motion: .authorized).isMotionDenied == false)
+    }
+
+    /// protects=while paused the sheet says paused, not off, offers Open
+    /// Settings only for a problem Settings can fix, and drops the zero
+    /// line (#123 design DS3); fails_when="Recording is off." shows while
+    /// paused, a restricted pause offers Settings, or "Walk somewhere."
+    /// still promises blocks; no_claim=the sheet's rendering (QA).
+    @Test func pausedFooterAndSettingsRow() {
+        let paused = Self.content(isRecording: false, pausedProblem: .needsAlways)
+        #expect(paused.isRecordingOff == false)
+        #expect(paused.pausedProblem == .needsAlways)
+        #expect(paused.showsPausedSettingsRow)
+        #expect(paused.phase == .zero)
+        #expect(paused.showsZeroLine == false)
+        #expect(Self.content(isRecording: false, pausedProblem: .restricted).showsPausedSettingsRow == false)
+        #expect(Self.content().showsZeroLine)
+        #expect(Self.content().showsPausedSettingsRow == false)
     }
 
     // MARK: Motion row (design D6, eng R6)

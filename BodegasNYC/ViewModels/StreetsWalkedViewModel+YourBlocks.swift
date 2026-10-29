@@ -57,7 +57,8 @@ extension StreetsWalkedViewModel {
             countState: countState,
             hasCounted: hasCounted,
             progress: boroughProgress,
-            isRecording: isTrackingEnabled,
+            isRecording: recordingState == .recording,
+            pausedProblem: recordingState.pausedProblem,
             motion: motionAuthorization
         )
     }
