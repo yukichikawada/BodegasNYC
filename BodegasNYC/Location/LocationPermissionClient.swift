@@ -85,6 +85,23 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         return await awaitAuthorizationChange()
     }
 
+    /// Asks for temporary Precise Location when the person chose
+    /// Approximate (Streets Walked's Start Recording, #123 eng R4). No
+    /// prompt when Precise is already on. `purposeKey` must be in
+    /// `Info.plist`'s `NSLocationTemporaryUsageDescriptionDictionary`: an
+    /// unregistered key is a hard crash, not an error. Returns the
+    /// system's error, if any.
+    func requestFullAccuracyIfNeeded(purposeKey: String) async -> Error? {
+        guard Self.shouldRequestFullAccuracy(currentAccuracyAuthorization: manager.accuracyAuthorization) else {
+            return nil
+        }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: purposeKey) { error in
+                continuation.resume(returning: error)
+            }
+        }
+    }
+
     private func awaitAuthorizationChange() async -> CLAuthorizationStatus {
         let id = UUID()
         return await withCheckedContinuation { continuation in
@@ -173,6 +190,11 @@ extension LocationPermissionClient {
 
     nonisolated static func shouldSkipAlwaysRequest(currentStatus: CLAuthorizationStatus) -> Bool {
         currentStatus == .authorizedAlways
+    }
+
+    /// Only Approximate Location asks for Precise.
+    nonisolated static func shouldRequestFullAccuracy(currentAccuracyAuthorization: CLAccuracyAuthorization) -> Bool {
+        currentAccuracyAuthorization == .reducedAccuracy
     }
 
     nonisolated static func canRequestCurrentLocation(authorizationStatus: CLAuthorizationStatus) -> Bool {

@@ -3,13 +3,10 @@
 //  BodegasNYCTests
 //
 //  Constructs the real StreetsWalkedViewModel with an in-memory
-//  ModelContainer — never calls enableTracking() successfully or touches
-//  CLLocationManager.startUpdatingLocation(); real background delivery
-//  itself isn't unit-testable (same boundary LocationPermissionClientTests
-//  draws for permission prompts). Delegate *methods* are still plain Swift
-//  functions we can call directly, though — dismissTrackingErrorClearsLastTrackingError
-//  below calls locationManager(_:didFailWithError:) synthetically to seed
-//  state, without needing a real CLLocationManager to drive anything.
+//  ModelContainer and a real `WalkRecorder` over a scripted backend
+//  (`FakeWalkBackend`, #123): fixes reach the view model the way they do in
+//  the app, through the recorder's save and `onPointsSaved`. Real
+//  background delivery isn't unit-testable (WalkRecorderTests' header).
 //
 //  Since #108 the view model publishes walked blocks, not polylines: the
 //  pre-#108 `polylines` assertions are migrated to `walkedBlockIDs` and
@@ -106,9 +103,14 @@ struct StreetsWalkedViewModelTests {
     private typealias F = StreetFixtures
     /// A confirm tap after every seeded fix (fixtures are dated 2027).
     private static let afterHistory = F.baseDate.addingTimeInterval(86_400)
+    /// The recorder's clock in these tests: live fixes are dated from it, so
+    /// a slow run never ages them past the 30 s gate.
+    private static let liveNow = Date()
 
     private struct Harness {
         let viewModel: StreetsWalkedViewModel
+        let recorder: WalkRecorder
+        let backend: FakeWalkBackend
         let context: ModelContext
         let container: ModelContainer
         let matcher: BlockMatchingActor
@@ -145,9 +147,18 @@ struct StreetsWalkedViewModelTests {
                 try commits.attempt(point)
             }
         )
+        let backend = FakeWalkBackend()
+        let recorder = WalkRecorder(
+            modelContainer: container,
+            userDefaults: defaults,
+            authorizationStatus: { .authorizedAlways },
+            backend: backend,
+            now: { Self.liveNow }
+        )
         let viewModel = StreetsWalkedViewModel(
             locationPermissionClient: LocationPermissionClient(),
             modelContainer: container,
+            recorder: recorder,
             userDefaults: defaults,
             motion: motion,
             matcher: matcher,
@@ -155,6 +166,8 @@ struct StreetsWalkedViewModelTests {
         )
         return Harness(
             viewModel: viewModel,
+            recorder: recorder,
+            backend: backend,
             context: container.mainContext,
             container: container,
             matcher: matcher,
@@ -171,6 +184,19 @@ struct StreetsWalkedViewModelTests {
     private func waitForRefresh(_ viewModel: StreetsWalkedViewModel) async {
         while viewModel.isRefreshing { await Task.yield() }
     }
+
+    /// Delivers fixes through the recorder (started first) and waits until
+    /// it has handled them all.
+    private func deliver(_ locations: [CLLocation], to harness: Harness) async throws {
+        try harness.recorder.start()
+        let target = harness.recorder.handledUpdateCount + locations.count
+        harness.backend.send(locations)
+        await waitUntil { harness.recorder.handledUpdateCount >= target }
+    }
+
+    /// Block 100's 11 fixes are 10 m apart; the recorder's 15 m spacing
+    /// (#123, decision D2) keeps every other one: 0, 20, 40, 60, 80, 100 m.
+    private static let savedOfBlockWalk = 6
 
     // MARK: Migrated from polylines (AC12)
 
@@ -239,17 +265,99 @@ struct StreetsWalkedViewModelTests {
         #expect(viewModel.isTrackingEnabled == false)
     }
 
-    @Test func dismissTrackingErrorClearsLastTrackingError() async throws {
-        let viewModel = try makeHarness().viewModel
-        // Invokes the delegate method directly to seed an error deterministically
-        // rather than driving a real CLLocationManager (see LocationPermissionClientTests).
-        viewModel.locationManager(CLLocationManager(), didFailWithError: StreetsWalkedViewModel.StreetsWalkedError.authorizationNotGranted)
-        await Task.yield()
-        #expect(viewModel.lastTrackingError != nil)
+    /// protects=the banner shows the recorder's error before the view
+    /// model's own (a match failure), and one dismiss clears both (#123
+    /// spec); fails_when=the match failure hides a recording problem, or a
+    /// dismiss leaves one of them up; no_claim=the banner's rendering.
+    @Test func trackingErrorPrefersTheRecordersAndDismissClearsBoth() async throws {
+        let harness = try makeHarness(failingCommits: 2)
+        try F.seed(Self.blockWalk, in: harness.context)
+        harness.viewModel.yourBlocksDidOpen()
+        await waitForRefresh(harness.viewModel)
+        let matchError = try #require(harness.viewModel.lastTrackingError)
 
-        viewModel.dismissTrackingError()
+        try harness.recorder.start()
+        let target = harness.recorder.handledUpdateCount + 1
+        harness.backend.send(WalkUpdate(location: nil, problem: .denied))
+        await waitUntil { harness.recorder.handledUpdateCount >= target }
+        let recorderError = try #require(harness.recorder.lastError)
+        #expect(harness.viewModel.lastTrackingError == recorderError)
+        #expect(recorderError != matchError)
 
-        #expect(viewModel.lastTrackingError == nil)
+        harness.viewModel.dismissTrackingError()
+
+        #expect(harness.viewModel.lastTrackingError == nil)
+    }
+
+    /// protects=Start and Stop Recording go through the one recorder, and
+    /// the menu's state is the recorder's (#123); fails_when=the view model
+    /// keeps a recording flag of its own that drifts from the recorder's;
+    /// no_claim=the permission prompts before Start (MapScreenView, QA).
+    @Test func trackingStateForwardsToTheRecorder() throws {
+        let harness = try makeHarness()
+        #expect(harness.viewModel.isTrackingEnabled == false)
+
+        try harness.recorder.start()
+        #expect(harness.viewModel.isTrackingEnabled)
+        #expect(harness.backend.starts == 1)
+
+        harness.viewModel.disableTracking()
+        #expect(harness.viewModel.isTrackingEnabled == false)
+        #expect(harness.recorder.isEnabled == false)
+    }
+
+    /// protects=every window and every Retry get the one view model over the
+    /// app delegate's one recorder and store (spec AC 10, eng R5);
+    /// fails_when=a second request builds a second view model (a second
+    /// matcher over the store) or one over another recorder;
+    /// no_claim=`didFinishLaunching` itself (QA code read), and that no
+    /// other code constructs a `WalkRecorder` (grep in QA).
+    @Test func theAppDelegateBuildsOneSharedViewModel() throws {
+        let appDelegate = AppDelegate()
+        let defaults = try #require(UserDefaults(suiteName: "StreetsWalkedViewModelTests.\(UUID().uuidString)"))
+        appDelegate.setUpStreetsWalked(
+            container: try makeInMemoryModelContainer(),
+            backend: FakeWalkBackend(),
+            userDefaults: defaults,
+            isBackgroundLaunch: false
+        )
+
+        let first = try #require(appDelegate.streetsWalkedViewModel(locationPermissionClient: LocationPermissionClient()))
+        let retry = try #require(appDelegate.streetsWalkedViewModel(locationPermissionClient: LocationPermissionClient()))
+
+        #expect(first === retry)
+        #expect(first.recorder === appDelegate.walkRecorder)
+    }
+
+    /// protects=one view model shared by every window counts scene
+    /// activity: active while any window is, so fixes match then and only
+    /// then (eng R5, eng R2); fails_when=a bool is kept (one window going to
+    /// the background stops matching for the other), or a fix delivered with
+    /// no window active starts a pass; no_claim=real multi-window UI (QA).
+    @Test func sceneActivityIsCountedAcrossWindows() async throws {
+        let harness = try makeHarness()
+        let first = StreetsWalkedViewModel.SceneToken.make()
+        let second = StreetsWalkedViewModel.SceneToken.make()
+
+        harness.viewModel.sceneActivityChanged(isActive: true, scene: first)
+        harness.viewModel.sceneActivityChanged(isActive: true, scene: second)
+        harness.viewModel.sceneActivityChanged(isActive: false, scene: first)
+        #expect(harness.viewModel.isSceneActive)
+        await waitForRefresh(harness.viewModel)
+
+        // Nothing else refreshes after the activation's pass: the walk is
+        // matched only because a window is still active.
+        try await deliver(Self.liveBlockWalk(now: Self.liveNow), to: harness)
+        await waitForRefresh(harness.viewModel)
+        #expect(harness.viewModel.walkedBlockIDs == [100])
+
+        harness.viewModel.sceneActivityChanged(isActive: false, scene: second)
+        #expect(harness.viewModel.isSceneActive == false)
+        let elsewhere = F.walk(from: (0, 68), to: (100, 68))[0]
+        try await deliver([Self.location(elsewhere, timestamp: Self.liveNow)], to: harness)
+        await waitForRefresh(harness.viewModel)
+        let unmatched = try harness.context.fetchCount(FetchDescriptor<WalkedPoint>(predicate: #Predicate { !$0.isMatched }))
+        #expect(unmatched == 1)
     }
 
     private static func location(
@@ -287,22 +395,22 @@ struct StreetsWalkedViewModelTests {
         harness.viewModel.sceneActivityChanged(isActive: true)
         await waitForRefresh(harness.viewModel)
 
-        harness.viewModel.recordLocations(Self.liveBlockWalk(now: Date()))
+        try await deliver(Self.liveBlockWalk(now: Self.liveNow), to: harness)
         await waitForRefresh(harness.viewModel)
 
         #expect(harness.viewModel.walkedBlockIDs == [100])
-        #expect(try harness.context.fetch(FetchDescriptor<WalkedPoint>()).count == Self.blockWalk.count)
+        #expect(try harness.context.fetch(FetchDescriptor<WalkedPoint>()).count == Self.savedOfBlockWalk)
     }
 
     @Test func anInaccurateLocationIsNotRecordedAndNothingIsWalked() async throws {
         let harness = try makeHarness()
         harness.viewModel.sceneActivityChanged(isActive: true)
-        let now = Date()
+        let now = Self.liveNow
 
-        harness.viewModel.recordLocations([
+        try await deliver([
             Self.location(Self.blockWalk[0], accuracy: 200, timestamp: now.addingTimeInterval(-10)),
             Self.location(Self.blockWalk[1], accuracy: -1, timestamp: now)
-        ])
+        ], to: harness)
         await waitForRefresh(harness.viewModel)
 
         #expect(harness.viewModel.walkedBlockIDs.isEmpty)
@@ -321,8 +429,8 @@ struct StreetsWalkedViewModelTests {
     }
 
     @Test func shouldRequestFullAccuracyOnlyWhenCurrentlyReduced() {
-        #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .reducedAccuracy) == true)
-        #expect(StreetsWalkedViewModel.shouldRequestFullAccuracy(currentAccuracyAuthorization: .fullAccuracy) == false)
+        #expect(LocationPermissionClient.shouldRequestFullAccuracy(currentAccuracyAuthorization: .reducedAccuracy) == true)
+        #expect(LocationPermissionClient.shouldRequestFullAccuracy(currentAccuracyAuthorization: .fullAccuracy) == false)
     }
 
     // MARK: Map content churn (#108 R3 device check)
@@ -363,10 +471,10 @@ struct StreetsWalkedViewModelTests {
     @Test func aBackgroundDeliveryOnlyPersistsRawFixes() async throws {
         let harness = try makeHarness()
 
-        harness.viewModel.recordLocations(Self.liveBlockWalk(now: Date()))
+        try await deliver(Self.liveBlockWalk(now: Self.liveNow), to: harness)
 
         #expect(harness.viewModel.isRefreshing == false)
-        #expect(try harness.context.fetchCount(FetchDescriptor<WalkedPoint>()) == Self.blockWalk.count)
+        #expect(try harness.context.fetchCount(FetchDescriptor<WalkedPoint>()) == Self.savedOfBlockWalk)
         #expect(try harness.context.fetchCount(FetchDescriptor<WalkedBlock>()) == 0)
         #expect(harness.loads.loads == 0)
         #expect(harness.viewModel.hasHistory)
@@ -465,12 +573,12 @@ struct StreetsWalkedViewModelTests {
 
         await harness.viewModel.refreshWalkedBlocks()
         await harness.viewModel.refreshWalkedBlocks()
-        harness.viewModel.recordLocations(Self.liveBlockWalk(now: Date()))
+        try await deliver(Self.liveBlockWalk(now: Self.liveNow), to: harness)
 
         #expect(harness.viewModel.countState == .unavailable)
         #expect(harness.viewModel.walkedRuns.isEmpty)
         #expect(harness.loads.failures == 1)
-        #expect(try harness.context.fetchCount(FetchDescriptor<WalkedPoint>()) == Self.blockWalk.count * 2)
+        #expect(try harness.context.fetchCount(FetchDescriptor<WalkedPoint>()) == Self.blockWalk.count + Self.savedOfBlockWalk)
     }
 
     // MARK: Show on Map (eng R11), counting (design D8), Motion (design D6)
