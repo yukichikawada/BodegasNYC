@@ -57,6 +57,9 @@ struct MapScreenView: View {
     @State var walkedDisplay = WalkedOverlayDisplay()
     /// The Your Blocks sheet (#108 PR 2, design D7).
     @State var showingYourBlocks = false
+    /// This window's identity for the shared Streets Walked view model's
+    /// scene count (#123 eng R5).
+    @State var streetsSceneToken = StreetsWalkedViewModel.SceneToken.make()
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize

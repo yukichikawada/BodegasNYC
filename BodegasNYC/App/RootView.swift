@@ -1,4 +1,3 @@
-import SwiftData
 import SwiftUI
 
 /// The app's composition root: constructs `AppEnvironment` (which requires
@@ -24,10 +23,14 @@ struct RootView: View {
     /// map-only frame before it (spec AC 8).
     @State private var showingOnboarding: Bool
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Streets Walked's owner (#123): `load()` asks it for the one shared
+    /// view model rather than building a recorder or store of its own.
+    private let appDelegate: AppDelegate
 
     /// Defaults to `FirstRunState.shared` so every scene (iPad window)
     /// shares one in-memory state; see `FirstRunState.shared`.
-    init(firstRunState: FirstRunState = .shared) {
+    init(appDelegate: AppDelegate, firstRunState: FirstRunState = .shared) {
+        self.appDelegate = appDelegate
         _firstRunState = State(initialValue: firstRunState)
         _showingOnboarding = State(initialValue: firstRunState.shouldShowOnboarding)
     }
@@ -110,7 +113,10 @@ struct RootView: View {
         // shouldn't take down the app's core Supabase-backed bodega-finding
         // loop over a personal, on-device-only side feature.
         let locationPermissionClient = LocationPermissionClient()
-        let streetsWalkedViewModel = Self.makeStreetsWalkedViewModel(locationPermissionClient: locationPermissionClient)
+        // The same instance on every call, Retry included (#123).
+        let streetsWalkedViewModel = appDelegate.streetsWalkedViewModel(
+            locationPermissionClient: locationPermissionClient
+        )
         do {
             let config = try SupabaseConfig(bundle: .main)
             let supabaseEnvironment = await SupabaseEnvironment(config: config, urlSession: Self.urlSession())
@@ -136,37 +142,8 @@ struct RootView: View {
         #endif
         return .shared
     }
-
-    /// `nil` on a `ModelContainer` failure (rare — corrupt/unavailable
-    /// local store) rather than propagating into `RootView`'s `.failed`
-    /// state, which is otherwise reserved for the Supabase connection.
-    private static func makeStreetsWalkedViewModel(
-        locationPermissionClient: LocationPermissionClient
-    ) -> StreetsWalkedViewModel? {
-        // Walked blocks and the match state (#108) live beside the raw fixes,
-        // so one `save()` can move masks and `isMatched` flips together.
-        guard let container = makeStreetsWalkedContainer() else { return nil }
-        let viewModel = StreetsWalkedViewModel(
-            locationPermissionClient: locationPermissionClient,
-            modelContainer: container
-        )
-        viewModel.resumeTrackingIfPreviouslyEnabled()
-        return viewModel
-    }
-
-    /// The on-disk store, except in a DEBUG build launched with
-    /// `-UITestFixtures -UITestWalkedBlocks`, where it is an in-memory store
-    /// holding the fixture walk (#108 PR 2).
-    private static func makeStreetsWalkedContainer() -> ModelContainer? {
-        #if DEBUG
-        if UITestFixtures.seedsWalkedBlocks {
-            return UITestFixtures.makeWalkedBlocksContainer()
-        }
-        #endif
-        return try? ModelContainer(for: Schema(StreetsWalkedSchema.models))
-    }
 }
 
 #Preview {
-    RootView()
+    RootView(appDelegate: AppDelegate())
 }

@@ -10,6 +10,10 @@ import TipKit
 
 @main
 struct BodegasNYCApp: App {
+    /// Owns Streets Walked's recorder, which starts in `didFinishLaunching`
+    /// so a background relaunch records with no UI scene (#123).
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     init() {
         #if DEBUG
         // QA: launch with `-ResetTips` to wipe TipKit's datastore before it
@@ -35,7 +39,7 @@ struct BodegasNYCApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
+            RootView(appDelegate: appDelegate)
         }
     }
 }

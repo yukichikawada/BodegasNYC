@@ -11,7 +11,9 @@
 //
 
 import CoreLocation
+import Foundation
 import Testing
+import UIKit
 
 @testable import BodegasNYC
 
@@ -48,5 +50,32 @@ struct LocationPermissionClientTests {
             let canRequest = LocationPermissionClient.canRequestCurrentLocation(authorizationStatus: status)
             #expect(canRequest == (status == .authorizedWhenInUse || status == .authorizedAlways), "status: \(status)")
         }
+    }
+
+    /// protects=an Always request whose prompt closes without changing the
+    /// status (Keep Only While Using on the upgrade prompt fires no delegate
+    /// change) returns as soon as the app is active again, with the current
+    /// status, so Start Recording shows its card at once (#123 QA P2);
+    /// fails_when=the request waits for the 30 s timeout, or never returns;
+    /// no_claim=the system prompt itself (a no-op stands in) and the real
+    /// activation (a private NotificationCenter posts it), and that the
+    /// real Core Location status is current at that moment (QA, live).
+    @MainActor
+    @Test func anAlwaysRequestReturnsWhenTheAppIsActiveAgain() async throws {
+        let center = NotificationCenter()
+        var prompts = 0
+        let client = LocationPermissionClient(notificationCenter: center, promptForAlways: { _ in prompts += 1 })
+        try #require(client.authorizationStatus != .authorizedAlways)
+        let before = client.authorizationStatus
+
+        let started = ContinuousClock.now
+        let request = Task { await client.requestAlwaysAuthorization() }
+        while prompts == 0 { await Task.yield() }
+        center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+        let status = await request.value
+
+        #expect(prompts == 1)
+        #expect(status == before)
+        #expect(ContinuousClock.now - started < .seconds(5))
     }
 }

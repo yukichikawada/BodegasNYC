@@ -39,7 +39,7 @@ extension MapScreenView {
             .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
             .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
             .onChange(of: scenePhase, initial: true) { _, phase in
-                streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active)
+                streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active, scene: streetsSceneToken)
             }
             .sheet(isPresented: $showingYourBlocks) {
                 if let streetsWalkedViewModel {

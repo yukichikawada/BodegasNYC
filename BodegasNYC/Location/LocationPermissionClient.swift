@@ -1,5 +1,6 @@
 import CoreLocation
 import Observation
+import UIKit
 
 /// Bridges `CLLocationManager`'s authorization flow to async/await. Owns the
 /// single `CLLocationManager` instance shared by every feature that needs a
@@ -22,6 +23,10 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     private(set) var accuracyAuthorization: CLAccuracyAuthorization
 
     private let manager: CLLocationManager
+    /// Asks the system for Always; injected so a test never shows a prompt.
+    private let promptForAlways: @MainActor (CLLocationManager) -> Void
+    private let notificationCenter: NotificationCenter
+    @ObservationIgnored private nonisolated(unsafe) var activationObserver: (any NSObjectProtocol)?
     /// Keyed rather than a single slot: `requestAlwaysAuthorization()` can be
     /// in flight from one caller while another awaits
     /// `requestWhenInUseAuthorization()` (or the same request twice), and a
@@ -48,13 +53,33 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// a denied/failed fix (`nil`).
     private static let locationFixTimeout: Duration = .seconds(10)
 
-    override init() {
+    /// - Parameters:
+    ///   - notificationCenter: where `didBecomeActiveNotification` arrives:
+    ///     the end of a system prompt (#123), injectable for tests.
+    ///   - promptForAlways: shows the Always prompt; a no-op in tests.
+    init(
+        notificationCenter: NotificationCenter = .default,
+        promptForAlways: @escaping @MainActor (CLLocationManager) -> Void = { $0.requestAlwaysAuthorization() }
+    ) {
         let manager = CLLocationManager()
         self.manager = manager
+        self.notificationCenter = notificationCenter
+        self.promptForAlways = promptForAlways
         self.authorizationStatus = manager.authorizationStatus
         self.accuracyAuthorization = manager.accuracyAuthorization
         super.init()
         manager.delegate = self
+        activationObserver = notificationCenter.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.appDidBecomeActive() }
+        }
+    }
+
+    deinit {
+        if let activationObserver { notificationCenter.removeObserver(activationObserver) }
     }
 
     /// Requests When-In-Use authorization. Skips the actual prompt once the
@@ -81,8 +106,25 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         guard !Self.shouldSkipAlwaysRequest(currentStatus: authorizationStatus) else {
             return authorizationStatus
         }
-        manager.requestAlwaysAuthorization()
+        promptForAlways(manager)
         return await awaitAuthorizationChange()
+    }
+
+    /// Asks for temporary Precise Location when the person chose
+    /// Approximate (Streets Walked's Start Recording, #123 eng R4). No
+    /// prompt when Precise is already on. `purposeKey` must be in
+    /// `Info.plist`'s `NSLocationTemporaryUsageDescriptionDictionary`: an
+    /// unregistered key is a hard crash, not an error. Returns the
+    /// system's error, if any.
+    func requestFullAccuracyIfNeeded(purposeKey: String) async -> Error? {
+        guard Self.shouldRequestFullAccuracy(currentAccuracyAuthorization: manager.accuracyAuthorization) else {
+            return nil
+        }
+        return await withCheckedContinuation { (continuation: CheckedContinuation<Error?, Never>) in
+            manager.requestTemporaryFullAccuracyAuthorization(withPurposeKey: purposeKey) { error in
+                continuation.resume(returning: error)
+            }
+        }
     }
 
     private func awaitAuthorizationChange() async -> CLAuthorizationStatus {
@@ -93,6 +135,22 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
                 try? await Task.sleep(for: Self.authorizationTimeout)
                 self.resumePending(id: id, status: self.authorizationStatus)
             }
+        }
+    }
+
+    /// A system prompt makes the app inactive, so becoming active again
+    /// means it closed. An answer that keeps the status (Keep Only While
+    /// Using on the Always upgrade) fires no delegate change, so a request
+    /// waiting on one resolves here with the status as Core Location has it
+    /// now, instead of at the 30 s timeout (#123 QA). The timeout stays for
+    /// a prompt the system never shows.
+    private func appDidBecomeActive() {
+        guard !pendingContinuations.isEmpty else { return }
+        let status = manager.authorizationStatus
+        authorizationStatus = status
+        accuracyAuthorization = manager.accuracyAuthorization
+        for id in pendingContinuations.keys {
+            resumePending(id: id, status: status)
         }
     }
 
@@ -173,6 +231,11 @@ extension LocationPermissionClient {
 
     nonisolated static func shouldSkipAlwaysRequest(currentStatus: CLAuthorizationStatus) -> Bool {
         currentStatus == .authorizedAlways
+    }
+
+    /// Only Approximate Location asks for Precise.
+    nonisolated static func shouldRequestFullAccuracy(currentAccuracyAuthorization: CLAccuracyAuthorization) -> Bool {
+        currentAccuracyAuthorization == .reducedAccuracy
     }
 
     nonisolated static func canRequestCurrentLocation(authorizationStatus: CLAuthorizationStatus) -> Bool {
