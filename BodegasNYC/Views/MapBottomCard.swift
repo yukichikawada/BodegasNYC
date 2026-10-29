@@ -4,9 +4,10 @@ import TipKit
 /// The one card that sits in the map's bottom slot (eng review R5): empty
 /// states (#24), the first-add card (#25), the inline add tip (#22) and
 /// Streets Walked's recorder problems (#123 design DS1). `select` owns the
-/// precedence so at most one card is ever up, and it's a pure function so the whole table is unit-tested
-/// (`MapBottomCardTests`). The placement bar outranks everything and isn't a
-/// card; `select` returns nil while placing so `MapScreenView` shows the bar.
+/// precedence so at most one card is ever up, and it's a pure function so
+/// the whole table is unit-tested (`MapBottomCardTests`). The placement bar
+/// outranks everything and isn't a card; `select` returns nil while placing
+/// so `MapScreenView` shows the bar.
 ///
 /// Visual contract (design DD13): 16pt inset, `.regularMaterial` rounded
 /// rectangle, 16pt padding, 28pt symbol column, title/body text column,

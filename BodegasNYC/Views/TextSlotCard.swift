@@ -68,7 +68,11 @@ struct TextSlotCard<Symbol: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             if let action {
                 Button(action: onAction) {
+                    // Wraps at the largest sizes rather than truncating
+                    // ("Open Setti…", #123 QA).
                     Text(action)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.bordered)
