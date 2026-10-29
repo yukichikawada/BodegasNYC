@@ -53,7 +53,36 @@ final class FakeWalkBackend: WalkLocationBackend {
 @MainActor
 final class AuthorizationBox {
     var status: CLAuthorizationStatus
+    var isPrecise = true
+    var servicesEnabled = true
     init(_ status: CLAuthorizationStatus) { self.status = status }
+
+    var access: LocationAccess {
+        LocationAccess(status: status, isPrecise: isPrecise, servicesEnabled: servicesEnabled)
+    }
+}
+
+/// A save that fails while `failing` is set (#123 design DS6 saveFailed).
+@MainActor
+final class SaveSwitch {
+    struct InjectedFailure: Error {}
+    var failing = false
+    func save(_ context: ModelContext) throws {
+        if failing { throw InjectedFailure() }
+        try context.save()
+    }
+}
+
+struct ProblemChange: Equatable {
+    let old: RecorderProblem?
+    let new: RecorderProblem?
+}
+
+/// Every top-problem change the recorder reports.
+@MainActor
+final class ProblemChanges {
+    private(set) var log: [ProblemChange] = []
+    func record(_ old: RecorderProblem?, _ new: RecorderProblem?) { log.append(ProblemChange(old: old, new: new)) }
 }
 
 /// Counts producers that are running (started, not yet cancelled).
@@ -110,6 +139,8 @@ struct WalkRecorderTests {
         let recorder: WalkRecorder
         let backend: FakeWalkBackend
         let auth: AuthorizationBox
+        let saves: SaveSwitch
+        let changes: ProblemChanges
         let defaults: UserDefaults
         let context: ModelContext
 
@@ -138,14 +169,26 @@ struct WalkRecorderTests {
         defaults.set(intent, forKey: WalkRecorder.trackingEnabledDefaultsKey)
         let backend = FakeWalkBackend()
         let auth = AuthorizationBox(status)
+        let saves = SaveSwitch()
+        let changes = ProblemChanges()
         let recorder = WalkRecorder(
             modelContainer: container,
             userDefaults: defaults,
-            authorizationStatus: { auth.status },
+            access: { auth.access },
             backend: backend,
-            now: { Self.now }
+            now: { Self.now },
+            saveContext: { try saves.save($0) }
         )
-        return Harness(recorder: recorder, backend: backend, auth: auth, defaults: defaults, context: container.mainContext)
+        recorder.onTopProblemChanged = { changes.record($0, $1) }
+        return Harness(
+            recorder: recorder,
+            backend: backend,
+            auth: auth,
+            saves: saves,
+            changes: changes,
+            defaults: defaults,
+            context: container.mainContext
+        )
     }
 
     private static func fix(north meters: Double, accuracy: CLLocationAccuracy = 10, age: TimeInterval = 0) -> CLLocation {
@@ -299,23 +342,65 @@ struct WalkRecorderTests {
 
     // MARK: Problems (AC 8)
 
-    /// protects=a denial while recording is reported once, with the intent
-    /// and recording kept, so it resumes by itself if Always comes back
-    /// (AC 8); fails_when=the error is re-set by each delivery (the banner
-    /// flickers back after a dismiss), or the denial clears the intent;
-    /// no_claim=the final copy (design review).
+    /// protects=a denial while recording is reported once (one change of
+    /// the top problem, so the card and VoiceOver do not flicker), with the
+    /// intent and recording kept, so it resumes by itself if access comes
+    /// back; a fix with no problem clears it (AC 8, design DS3);
+    /// fails_when=each delivery re-reports it, or the denial clears the
+    /// intent; no_claim=the copy (AppCopyVoiceTests) and the card.
     @Test func aDenialIsReportedOnceAndKeepsTheIntent() async throws {
         let harness = try makeHarness()
         try harness.recorder.start()
 
         await harness.deliver([WalkUpdate(location: nil, problem: .denied)])
-        #expect(harness.recorder.lastError != nil)
-        harness.recorder.dismissError()
         await harness.deliver([WalkUpdate(location: nil, problem: .denied)])
 
-        #expect(harness.recorder.lastError == nil)
+        #expect(harness.changes.log == [ProblemChange(old: nil, new: .denied)])
+        #expect(harness.recorder.topProblem == .denied)
         #expect(harness.recorder.isRecording)
         #expect(harness.recorder.isEnabled)
+
+        await harness.deliver([Self.fix(north: 0)])
+        #expect(harness.recorder.topProblem == nil)
+        #expect(harness.changes.log.count == 2)
+    }
+
+    /// protects=a fix that fails to save is reported as `saveFailed` without
+    /// pausing anything, and the next good save clears it (design DS3, DS6:
+    /// "Recording keeps going."); fails_when=a failed save stops the loop or
+    /// is never reported, or the report outlives a good save; no_claim=what
+    /// makes SwiftData fail (injected).
+    @Test func aFailedSaveIsReportedAndClearedByTheNextSave() async throws {
+        let harness = try makeHarness()
+        try harness.recorder.start()
+
+        harness.saves.failing = true
+        await harness.deliver([Self.fix(north: 0)])
+        #expect(harness.recorder.topProblem == .saveFailed)
+        #expect(harness.recorder.isRecording)
+
+        harness.saves.failing = false
+        await harness.deliver([Self.fix(north: 20)])
+        #expect(harness.recorder.topProblem == nil)
+        #expect(harness.backend.starts == 1)
+    }
+
+    /// protects=one problem at a time, in DS3's order (restricted > denied >
+    /// servicesOff > preciseOff > needsAlways > saveFailed), and each
+    /// authorization state's problems; fails_when=the order drifts, or a
+    /// state maps to the wrong card (Location Services off read as a
+    /// per-app denial, While Using with Approximate missing Precise);
+    /// no_claim=what Core Location reports (device QA).
+    @Test func problemsFollowTheDesignOrder() {
+        #expect(RecorderProblem.allCases.sorted() == [.restricted, .denied, .servicesOff, .preciseOff, .needsAlways, .saveFailed])
+        #expect(LocationAccess(status: .authorizedAlways).problems.isEmpty)
+        #expect(LocationAccess(status: .authorizedAlways, isPrecise: false).problems == [.preciseOff])
+        #expect(LocationAccess(status: .authorizedWhenInUse, isPrecise: false).problems == [.preciseOff, .needsAlways])
+        #expect(LocationAccess(status: .notDetermined).problems == [.needsAlways])
+        #expect(LocationAccess(status: .denied).problems == [.denied])
+        #expect(LocationAccess(status: .denied, servicesEnabled: false).problems == [.servicesOff])
+        #expect(LocationAccess(status: .restricted).problems == [.restricted])
+        #expect(RecorderProblem.allCases.filter { !$0.pausesRecording } == [.saveFailed])
     }
 
     // MARK: Activation (eng O1, R1, R2)
@@ -369,17 +454,37 @@ struct WalkRecorderTests {
         #expect(harness.backend.stops == 1)
         #expect(harness.recorder.isRecording == false)
         #expect(harness.recorder.isEnabled)
-        #expect(harness.recorder.lastError != nil)
-        harness.recorder.dismissError()
+        #expect(harness.recorder.topProblem == .needsAlways)
         harness.recorder.resync()
-        #expect(harness.recorder.lastError == nil)
+        #expect(harness.changes.log == [ProblemChange(old: nil, new: .needsAlways)])
 
         harness.auth.status = .authorizedAlways
         harness.recorder.resync()
         await harness.deliver([Self.fix(north: 0)])
         #expect(harness.backend.starts == 2)
         #expect(harness.recorder.isRecording)
+        #expect(harness.recorder.topProblem == nil)
         #expect(try harness.savedCount() == 1)
+    }
+
+    /// protects=Start Recording under While Using saves the intent without
+    /// taking sessions, and says Always is needed; granting Always later
+    /// starts recording on the next activation (design DS4, eng R1);
+    /// fails_when=the intent is lost (nothing resumes after Settings) or
+    /// sessions are taken without Always; no_claim=the prompts and the
+    /// Settings round trip (QA).
+    @Test func enablingWithoutAlwaysWaitsForIt() throws {
+        let harness = try makeHarness(status: .authorizedWhenInUse)
+
+        harness.recorder.enable()
+        #expect(harness.recorder.isEnabled)
+        #expect(harness.backend.starts == 0)
+        #expect(harness.recorder.topProblem == .needsAlways)
+
+        harness.auth.status = .authorizedAlways
+        harness.recorder.resync()
+        #expect(harness.backend.starts == 1)
+        #expect(harness.recorder.topProblem == nil)
     }
 
     // MARK: Live backend (eng O3)

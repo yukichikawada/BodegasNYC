@@ -2,11 +2,12 @@ import SwiftUI
 import TipKit
 
 /// The one card that sits in the map's bottom slot (eng review R5): empty
-/// states now (#24), the first-add card (#25) and the inline add tip (#22)
-/// later. `select` owns the precedence so at most one card is ever up, and
-/// it's a pure function so the whole table is unit-tested
-/// (`MapBottomCardTests`). The placement bar outranks everything and isn't a
-/// card; `select` returns nil while placing so `MapScreenView` shows the bar.
+/// states (#24), the first-add card (#25), the inline add tip (#22) and
+/// Streets Walked's recorder problems (#123 design DS1). `select` owns the
+/// precedence so at most one card is ever up, and it's a pure function so
+/// the whole table is unit-tested (`MapBottomCardTests`). The placement bar
+/// outranks everything and isn't a card; `select` returns nil while placing
+/// so `MapScreenView` shows the bar.
 ///
 /// Visual contract (design DD13): 16pt inset, `.regularMaterial` rounded
 /// rectangle, 16pt padding, 28pt symbol column, title/body text column,
@@ -40,14 +41,19 @@ struct MapBottomCard: View {
     nonisolated enum Content: Hashable, Sendable {
         case emptyState(EmptyState)
         case firstAdd(FirstAdd)
+        /// Why recording is paused, or that a stretch didn't save (#123).
+        case recorder(RecorderProblem)
         case addTip
     }
 
-    /// Precedence: placement bar (nil) > first-add card > bodega empty
-    /// state (noneNearby, noBodegas, noFilterMatches) > add tip > streets
-    /// banner > zoom in for blocks (#108 design D3, lowest).
+    /// Precedence (#123 design DS2): placement bar (nil) > first-add card >
+    /// recorder problem > bodega empty state (noneNearby, noBodegas,
+    /// noFilterMatches) > add tip > streets banner > zoom in for blocks
+    /// (#108 design D3, lowest).
     ///
     /// - Parameters:
+    ///   - recorder: the Streets Walked problem to show, if any (already
+    ///     without one the person closed).
     ///   - emptyState: the bodega banner that applies, if any (see
     ///     `bodegaEmptyState`).
     ///   - streets: whether the "No streets yet." banner applies (see
@@ -57,6 +63,7 @@ struct MapBottomCard: View {
     nonisolated static func select(
         isPlacing: Bool,
         firstAdd: FirstAdd?,
+        recorder: RecorderProblem? = nil,
         emptyState: EmptyState?,
         addTip: Bool,
         streets: Bool,
@@ -64,6 +71,7 @@ struct MapBottomCard: View {
     ) -> Content? {
         if isPlacing { return nil }
         if let firstAdd { return .firstAdd(firstAdd) }
+        if let recorder { return .recorder(recorder) }
         if let emptyState { return .emptyState(emptyState) }
         if addTip { return .addTip }
         if streets { return .emptyState(.noStreets) }
@@ -112,15 +120,40 @@ struct MapBottomCard: View {
 
     let content: Content
     /// The card's action: the empty state's Add a Bodega or Clear Filters,
-    /// the add tip's Add a Bodega, or the first-add card's Done.
+    /// the add tip's Add a Bodega, the first-add card's Done, or the
+    /// recorder card's Open Settings.
     let onAction: () -> Void
-    /// The close button, shown only for dismissible content (`noStreets`).
+    /// The close button, shown only for dismissible content (`noStreets`,
+    /// every recorder problem).
     let onDismiss: () -> Void
 
     var body: some View {
         switch content {
         case .emptyState(let state):
-            EmptyStateCard(state: state, onAction: onAction, onDismiss: onDismiss)
+            TextSlotCard(
+                title: state.title.copy.text,
+                message: state.body?.copy.text,
+                action: state.action?.copy.text,
+                isDismissible: state.isDismissible,
+                onAction: onAction,
+                onDismiss: onDismiss
+            ) {
+                EmptyStateSymbol(state: state)
+            }
+        case .recorder(let problem):
+            // DS1: 28pt `.secondary` symbol, `.headline` title,
+            // `.subheadline` `.primary` body, `.bordered` Open Settings when
+            // Settings can fix it, and the close.
+            TextSlotCard(
+                title: problem.title.copy.text,
+                message: problem.body.copy.text,
+                action: problem.opensSettings ? AppCopy.YourBlocks.openSettings.copy.text : nil,
+                isDismissible: true,
+                onAction: onAction,
+                onDismiss: onDismiss
+            ) {
+                Image(systemName: problem.symbolName).foregroundStyle(.secondary)
+            }
         case .firstAdd(let firstAdd):
             FirstAddCard(hasCat: firstAdd.hasCat, onDone: onAction)
         case .addTip:
@@ -203,119 +236,6 @@ struct MapBottomCardChrome: ViewModifier {
             card.clipShape(RoundedRectangle(cornerRadius: 16))
         } else {
             card
-        }
-    }
-}
-
-private struct EmptyStateCard: View {
-    let state: MapBottomCard.EmptyState
-    let onAction: () -> Void
-    let onDismiss: () -> Void
-
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    /// 28pt at the default size, growing with the `.title2` symbol so the
-    /// glyph never overflows its column at large sizes.
-    @ScaledMetric(relativeTo: .title2) private var symbolColumnWidth: CGFloat = 28
-    private static let columnSpacing: CGFloat = 12
-
-    var body: some View {
-        Group {
-            if MapBottomCard.usesStackedLayout(for: dynamicTypeSize) {
-                stackedLayout
-            } else {
-                gridLayout
-            }
-        }
-        .modifier(MapBottomCardChrome())
-    }
-
-    /// The DD13 grid: symbol column, text column, trailing close, action
-    /// row under the text.
-    private var gridLayout: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: Self.columnSpacing) {
-                symbolView
-                    .frame(width: symbolColumnWidth)
-                textColumn
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if state.isDismissible {
-                    CardCloseButton(action: onDismiss)
-                        .accessibilitySortPriority(1)
-                }
-            }
-            if let action = state.action {
-                Button(action.copy.text, action: onAction)
-                    .buttonStyle(.bordered)
-                    .padding(.leading, symbolColumnWidth + Self.columnSpacing)
-                    .accessibilitySortPriority(2)
-            }
-        }
-    }
-
-    /// Accessibility sizes (DD16, same treatment as the first-add card):
-    /// symbol above the text with the close top-trailing, then a
-    /// full-width action, so nothing truncates or overflows the card.
-    private var stackedLayout: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top) {
-                symbolView
-                Spacer(minLength: 0)
-                if state.isDismissible {
-                    CardCloseButton(action: onDismiss)
-                        .accessibilitySortPriority(1)
-                }
-            }
-            textColumn
-                .frame(maxWidth: .infinity, alignment: .leading)
-            if let action = state.action {
-                Button(action: onAction) {
-                    Text(action.copy.text)
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.bordered)
-                .accessibilitySortPriority(2)
-            }
-        }
-    }
-
-    private var symbolView: some View {
-        symbol
-            .font(.title2)
-            .accessibilityHidden(true)
-    }
-
-    private var textColumn: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(state.title.copy.text)
-                .font(.headline)
-                .fixedSize(horizontal: false, vertical: true)
-                .accessibilityAddTraits(.isHeader)
-                .accessibilitySortPriority(4)
-            if let body = state.body {
-                Text(body.copy.text)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .lineLimit(4)
-                    .minimumScaleFactor(0.85)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .accessibilitySortPriority(3)
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var symbol: some View {
-        switch state {
-        case .noBodegas:
-            EmptyStateCatSymbol()
-        case .noneNearby, .noneOnBlock:
-            Image(systemName: "mappin.slash").foregroundStyle(.secondary)
-        case .noFilterMatches:
-            Image(systemName: "line.3.horizontal.decrease.circle").foregroundStyle(.secondary)
-        case .noStreets:
-            Image(systemName: "figure.walk").foregroundStyle(.secondary)
-        case .zoomInForBlocks:
-            Image(systemName: "plus.magnifyingglass").foregroundStyle(.secondary)
         }
     }
 }

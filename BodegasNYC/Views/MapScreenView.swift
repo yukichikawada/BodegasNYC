@@ -125,6 +125,7 @@ struct MapScreenView: View {
         MapBottomCard.select(
             isPlacing: isPlacingBodega,
             firstAdd: addCompletion?.firstAddCard.map { MapBottomCard.FirstAdd(hasCat: $0.hasCat) },
+            recorder: streetsWalkedViewModel?.cardProblem,
             emptyState: MapBottomCard.bodegaEmptyState(
                 browseMode: viewModel.browseMode,
                 isLoadedEmpty: viewModel.isLoadedEmpty,
@@ -134,7 +135,8 @@ struct MapScreenView: View {
             addTip: showsAddTip,
             streets: streetsWalkedViewModel.map {
                 MapBottomCard.showsStreetsBanner(
-                    isTrackingEnabled: $0.isTrackingEnabled,
+                    // Never while paused: walking would fill nothing in (#123 DS3).
+                    isTrackingEnabled: $0.recordingState == .recording,
                     hasCounted: $0.hasCounted && $0.countState != .unavailable,
                     hasWalkedBlocks: !$0.walkedBlockIDs.isEmpty,
                     isDismissed: $0.isEmptyBannerDismissed
@@ -147,7 +149,8 @@ struct MapScreenView: View {
     var body: some View {
         MapReader { proxy in
             // Back to front (spec layer order): map, bottom slot, crosshair
-            // (never covered by the card), tracking-error banner.
+            // (never covered by the card). Recorder problems are a bottom
+            // card (#123 design DS1).
             walkedBlockTriggers(locateMeEvents(pinLabelTriggers(map(proxy), proxy: proxy)), proxy: proxy)
                 .onChange(of: showsToolbar) { _, isMapTab in
                     if isMapTab { mapTabDidReturn(proxy) }
@@ -166,13 +169,6 @@ struct MapScreenView: View {
                         clearance: Self.attributionClearance,
                         point: $crosshairPoint
                     )
-                }
-                .overlay(alignment: .top) {
-                    if let error = streetsWalkedViewModel?.lastTrackingError {
-                        TrackingErrorBanner(message: error) {
-                            streetsWalkedViewModel?.dismissTrackingError()
-                        }
-                    }
                 }
         }
         // The List tab's search keyboard must never resize the covered map.
@@ -273,6 +269,8 @@ struct MapScreenView: View {
             onClearFilters()
         case .firstAdd:
             addCompletion?.dismissFirstAddCard()
+        case .recorder(let problem):
+            if problem.opensSettings { openSettings() }
         case .emptyState(.noStreets), .emptyState(.zoomInForBlocks):
             break
         }
@@ -316,7 +314,7 @@ extension MapScreenView {
                 MapBottomCard(
                     content: content,
                     onAction: { performBottomCardAction(for: content) },
-                    onDismiss: { streetsWalkedViewModel?.isEmptyBannerDismissed = true }
+                    onDismiss: { dismissBottomCard(content) }
                 )
                 .id(content)
                 .transition(slotTransition)
@@ -328,6 +326,16 @@ extension MapScreenView {
         .animation(.easeInOut(duration: BrowseMotion.BottomSlot.transitionSeconds), value: bottomSlot)
         // An overlay is otherwise read before the map's content.
         .accessibilitySortPriority(-1)
+    }
+
+    /// The close: the recorder card hides for its problem (DS5); the
+    /// streets banner for this launch.
+    private func dismissBottomCard(_ content: MapBottomCard.Content) {
+        if case .recorder = content {
+            streetsWalkedViewModel?.dismissRecorderCard()
+        } else {
+            streetsWalkedViewModel?.isEmptyBannerDismissed = true
+        }
     }
 
     private var slotTransition: AnyTransition {
@@ -370,15 +378,7 @@ extension MapScreenView {
                         )
                         .disabled(!streetsWalkedViewModel.hasHistory)
                     }
-                    Section {
-                        Button(
-                            streetsWalkedViewModel.isTrackingEnabled
-                                ? AppCopy.stopRecordingAction.copy.text
-                                : AppCopy.startRecordingAction.copy.text
-                        ) {
-                            Task { await toggleStreetsWalked() }
-                        }
-                    }
+                    recordingSection(streetsWalkedViewModel)
                     Section {
                         Button(AppCopy.clearHistoryMenuItem.menuItemWithEllipsis, role: .destructive) {
                             showingClearConfirmation = true

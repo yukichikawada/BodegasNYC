@@ -63,6 +63,43 @@ struct MapBottomCardTests {
         #expect(content == .addTip)
     }
 
+    /// protects=a recorder problem sits under placement and the first-add
+    /// card and over every other card (#123 design DS2); fails_when=a bodega
+    /// banner, the tip or the streets banner hides why recording stopped,
+    /// or the problem covers the placement bar or first-add card;
+    /// no_claim=the card's rendering (QA screenshots).
+    @Test(arguments: RecorderProblem.allCases)
+    func recorderProblemRanksUnderFirstAddAndOverEveryOtherCard(_ problem: RecorderProblem) {
+        let overOthers = Card.select(
+            isPlacing: false,
+            firstAdd: nil,
+            recorder: problem,
+            emptyState: .noBodegas,
+            addTip: true,
+            streets: true,
+            zoomInForBlocks: true
+        )
+        #expect(overOthers == .recorder(problem))
+        let underFirstAdd = Card.select(
+            isPlacing: false,
+            firstAdd: Self.firstAdd,
+            recorder: problem,
+            emptyState: nil,
+            addTip: false,
+            streets: false
+        )
+        #expect(underFirstAdd == .firstAdd(Self.firstAdd))
+        let whilePlacing = Card.select(
+            isPlacing: true,
+            firstAdd: nil,
+            recorder: problem,
+            emptyState: nil,
+            addTip: false,
+            streets: false
+        )
+        #expect(whilePlacing == nil)
+    }
+
     @Test func streetsBannerShowsWhenNothingElseDoes() {
         let content = Card.select(isPlacing: false, firstAdd: nil, emptyState: nil, addTip: false, streets: true)
         #expect(content == .emptyState(.noStreets))

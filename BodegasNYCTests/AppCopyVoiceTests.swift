@@ -113,6 +113,7 @@ struct AppCopyVoiceTests {
         }
         + [120, 140, 141].map { AppCopy.captionCount($0, limit: 140) }
         + AppCopy.YourBlocks.allCases.map(\.copy)
+        + AppCopy.Recorder.allCases.map(\.copy)
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),
@@ -177,6 +178,35 @@ struct AppCopyVoiceTests {
         #expect(plain.body.copy.text == "Been here? Say so.")
         #expect(cat.title.copy.text == "No reviews yet.")
         #expect(plain.title.copy.text == "No reviews yet.")
+    }
+
+    /// protects=the recorder card's copy and symbols are design DS6's table,
+    /// with the one voice-rule change (no app name in the denied body), and
+    /// which problems offer Open Settings; fails_when=the wording, a symbol
+    /// or an action drifts from the table; no_claim=the rendered card (QA).
+    @Test func recorderCardCopyMatchesTheDesignTable() {
+        let table: [(RecorderProblem, String, String, String, Bool)] = [
+            (.needsAlways, "location.slash", "Recording paused.",
+             "Streets Walked needs location set to Always. Your blocks stay.", true),
+            (.denied, "location.slash", "Recording can't see you.",
+             "Location is off for this app. Your blocks stay.", true),
+            (.servicesOff, "location.slash", "Recording can't see you.",
+             "Location Services is off for the whole phone.", true),
+            (.restricted, "location.slash", "Recording isn't allowed here.",
+             "Location is restricted on this phone. Your blocks stay.", false),
+            (.preciseOff, "scope", "Recording paused.", "Blocks need Precise Location, and it's off.", true),
+            (.saveFailed, "exclamationmark.triangle", "That stretch didn't save.",
+             "Recording keeps going. Your other blocks are fine.", false)
+        ]
+        for (problem, symbol, title, body, opensSettings) in table {
+            #expect(problem.symbolName == symbol)
+            #expect(problem.title.copy == CopyString(kind: .title, text: title))
+            #expect(problem.body.copy == CopyString(kind: .body, text: body))
+            #expect(problem.opensSettings == opensSettings)
+        }
+        #expect(AppCopy.Recorder.pausedSection.copy == CopyString(kind: .label, text: "Recording Paused"))
+        #expect(AppCopy.Recorder.resumedAnnouncement.copy == CopyString(kind: .body, text: "Recording again."))
+        #expect(AppCopy.YourBlocks.recordingPaused.copy.text == "Recording is paused. Your blocks stay.")
     }
 
     @Test func placementCardTitleIsAShortSentence() {

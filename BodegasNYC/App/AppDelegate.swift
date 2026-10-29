@@ -1,4 +1,3 @@
-import CoreLocation
 import SwiftData
 import UIKit
 
@@ -14,8 +13,8 @@ import UIKit
 final class AppDelegate: NSObject, UIApplicationDelegate {
     private(set) var streetsWalkedContainer: ModelContainer?
     private(set) var walkRecorder: WalkRecorder?
-    /// Read for its authorization status only (eng C2); never started.
-    private let statusManager = CLLocationManager()
+    /// Authorization status, accuracy and Location Services (eng C2).
+    private let accessReader = LocationAccessReader()
     private var streetsWalkedViewModel: StreetsWalkedViewModel?
 
     func application(
@@ -42,14 +41,16 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // so one `save()` can move masks and `isMatched` flips together.
         guard let container else { return }
         streetsWalkedContainer = container
-        let statusManager = statusManager
+        let accessReader = accessReader
         let recorder = WalkRecorder(
             modelContainer: container,
             userDefaults: userDefaults,
-            authorizationStatus: { statusManager.authorizationStatus },
+            access: { accessReader.access },
             backend: backend
         )
         walkRecorder = recorder
+        // A change re-reads the problems only; sessions move at activation.
+        accessReader.onChange = { [weak recorder] in recorder?.accessDidChange() }
         recorder.resumeIfPreviouslyEnabled(isBackgroundLaunch: isBackgroundLaunch)
     }
 

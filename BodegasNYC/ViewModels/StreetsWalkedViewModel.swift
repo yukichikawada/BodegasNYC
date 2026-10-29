@@ -56,10 +56,20 @@ final class StreetsWalkedViewModel {
     var isOverlayVisible: Bool {
         didSet { userDefaults.set(isOverlayVisible, forKey: Self.overlayVisibleDefaultsKey) }
     }
-    /// The recorder's error first, then this view model's own (match
-    /// failures).
-    var lastTrackingError: String? { recorder.lastError ?? ownError }
-    private var ownError: String?
+    /// The last match or count failure, or a failed Precise ask. Logged,
+    /// never shown as text (design DS1 removed the banner; DESIGN.md: no raw
+    /// error strings): Your Blocks shows a failed first count.
+    private(set) var lastMatchError: String? {
+        didSet {
+            if let lastMatchError {
+                WalkRecorder.logger.error("match: \(lastMatchError, privacy: .public)")
+            }
+        }
+    }
+    /// The recorder card closed for this problem (design DS5): hidden until
+    /// the problem changes or the next cold launch; the problem itself stays
+    /// in the recorder. One view model, so every window shares it.
+    var dismissedRecorderProblem: RecorderProblem?
     /// Motion & Fitness as last read: at launch, when the scene comes
     /// forward (back from Settings), when Your Blocks opens and after an
     /// ask (design D6).
@@ -88,6 +98,8 @@ final class StreetsWalkedViewModel {
     private let modelContext: ModelContext
     let userDefaults: UserDefaults
     let recorder: WalkRecorder
+    /// Posts a VoiceOver announcement (design DS7); injected for tests.
+    let announce: @MainActor (String) -> Void
     private let matcher: BlockMatchingActor
     let motion: any MotionActivityProviding
     private var refreshTask: Task<Void, Never>?
@@ -103,6 +115,7 @@ final class StreetsWalkedViewModel {
     ///     with the bundled street data and CoreMotion.
     ///   - motion: Motion & Fitness, for the one-time ask (design D6).
     ///   - firstCountRetryDelay: before a failed first count's retry (#113).
+    ///   - announce: posts VoiceOver announcements (design DS7).
     init(
         locationPermissionClient: LocationPermissionClient,
         modelContainer: ModelContainer,
@@ -110,8 +123,10 @@ final class StreetsWalkedViewModel {
         userDefaults: UserDefaults = .standard,
         motion: any MotionActivityProviding = CoreMotionActivityProvider(),
         matcher: BlockMatchingActor? = nil,
-        firstCountRetryDelay: Duration = .milliseconds(500)
+        firstCountRetryDelay: Duration = .milliseconds(500),
+        announce: @escaping @MainActor (String) -> Void = StreetsWalkedViewModel.postAnnouncement
     ) {
+        self.announce = announce
         self.firstCountRetryDelay = firstCountRetryDelay
         self.locationPermissionClient = locationPermissionClient
         self.modelContainer = modelContainer
@@ -124,6 +139,9 @@ final class StreetsWalkedViewModel {
         motionAuthorization = motion.authorization
         hasHistory = storedPointCount() > 0
         recorder.onPointsSaved = { [weak self] in self?.pointsSaved() }
+        recorder.onTopProblemChanged = { [weak self] old, new in
+            self?.recorderProblemChanged(from: old, to: new)
+        }
     }
 
     /// Forwards to the shared `LocationPermissionClient` rather than
@@ -146,7 +164,7 @@ final class StreetsWalkedViewModel {
         if let error = await locationPermissionClient.requestFullAccuracyIfNeeded(
             purposeKey: LiveWalkLocationBackend.fullAccuracyPurposeKey
         ) {
-            ownError = error.localizedDescription
+            lastMatchError = error.localizedDescription
         }
     }
 
@@ -201,7 +219,7 @@ final class StreetsWalkedViewModel {
             // A refresh still running settles the state itself.
             if countState != .unavailable, !isRefreshing { countState = .ready }
         } else if case .failed(let message) = outcome {
-            ownError = message
+            lastMatchError = message
             if !hasCounted, countState != .unavailable { countState = .failed }
         }
         hasHistory = storedPointCount() > 0
@@ -222,15 +240,6 @@ final class StreetsWalkedViewModel {
         recorder.resync()
         refreshMotionAuthorization()
         scheduleRefresh()
-    }
-
-    /// Acknowledges/clears the current error so the UI can dismiss whatever
-    /// affordance is showing it. Separate from the condition actually
-    /// resolving — a new failure after this call sets `lastTrackingError`
-    /// again independently.
-    func dismissTrackingError() {
-        recorder.dismissError()
-        ownError = nil
     }
 
     /// Brings the walked blocks up to date with history and waits for it.
@@ -286,7 +295,7 @@ final class StreetsWalkedViewModel {
         case .cancelled:
             countState = hasCounted ? .ready : .idle
         case .failed(let message):
-            ownError = message
+            lastMatchError = message
             countState = hasCounted ? .ready : .failed
         }
     }
