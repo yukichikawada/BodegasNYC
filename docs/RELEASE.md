@@ -48,12 +48,10 @@ Status as of 2026-10-29 is in brackets.
       fields only if the Release build can accept it (it cannot: the
       email/password sign-in is `#if DEBUG`). So say "Sign in with Apple only;
       no demo account needed, all browsing works signed out."
-- [ ] **Screenshots**. `TARGETED_DEVICE_FAMILY` is `1,2`, so App Store Connect
-      requires iPad screenshots as well as iPhone 6.9" and 6.5" (or 6.7"). If
-      the iPad layout has never been QA'd, either set the device family to
-      iPhone only before the first release or do an iPad pass first. Take them
-      from the Simulator (`Cmd-S`) on a build with real data, not UI-test
-      fixtures.
+- [ ] **Screenshots**. The app is iPhone only (`TARGETED_DEVICE_FAMILY = 1`),
+      so App Store Connect needs iPhone 6.9" and 6.5" (or 6.7") sets. Take
+      them from the Simulator (`Cmd-S`) on a build with real data, not UI-test
+      fixtures. Adding iPad back means an iPad layout pass first.
 - [ ] **Hosted Supabase is production**. The Release build reads
       `SUPABASE_URL` / `SUPABASE_ANON_KEY` from the target's build settings
       (same project as Debug: `fdzjfdvotkodwimtsiuu`). Confirm every migration
