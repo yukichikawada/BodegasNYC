@@ -516,9 +516,38 @@ apart, leading, no symbol, inside the section's `VStack`. List-tab empty states 
 secondary and card actions, `.plain` red text for destructive. Disabled is the system 45%
 opacity. No custom button shapes; no gradient fills.
 
-**Forms and sheets:** system `Form`/`List` grouped style, `.navigationBarTitleDisplayMode(.inline)`,
-error text `.footnote` in red inside its section. Sign-in presented from the add flow at
-`.medium` detent on `.regularMaterial`, as is the #20 duplicate sheet.
+**Forms and sheets:** system `Form`/`List` grouped style, `.navigationBarTitleDisplayMode(.inline)`.
+Validation and failure lines are `.footnote` in red inside their section; consequence and
+explanatory copy is `.primary` (#95 D8); system `Form` headers and footers stay `.secondary`
+(#127 DS8). Sign-in presented from the add flow at `.medium` detent on `.regularMaterial`, as
+is the #20 duplicate sheet.
+
+**Account sheet** (`AccountView`, #127 DS1 to DS7): opened by "Your Account…" (signed in; Sign
+In otherwise), alone above the Account menu's divider; Privacy Policy (a `Link`) sits below it
+with Show Intro Again, for everyone. `[.medium, .large]`, `.large` only at accessibility sizes,
+opaque `systemGroupedBackground`, inset-grouped `Form`, inline title "Account", Done. Idle:
+Section A is a plain label-colored Sign Out row with the system footer "Signed in with Apple."
+(DEBUG: the test account's raw email); Section B is the consequence line (`.subheadline`
+`.primary`: reviews, photos and flags go, bodegas stay with no link, walked blocks stay on the
+phone) over Delete Account (`role: .destructive`, red plain text), a failure line `.footnote`
+red under it; Section C is the Privacy Policy link in the tint. One enum-driven confirmation
+dialog serves Sign Out ("Sign out of your account?") and Delete ("Delete your account?", what
+goes and what stays, "This can't be undone.", plus "You'll confirm with Apple first." for an
+Apple user). Apple step: Section B becomes a `.headline` "Delete Account" heading (header
+trait) over "Confirm with Apple to delete your account. Deletion starts right after.", the
+`.continue` Apple button as its own 44pt row (black in light, white in dark, also on the
+sign-in sheet), "Apple couldn't confirm it's you. Try again." under it on a non-cancel error,
+then a plain Cancel; A and C disabled, Done is Cancel, Apple's own cancel keeps the step. The
+swap is a 0.25s ease-in-out opacity, the same under Reduce Motion. Deleting: one row, spinner
+and "Deleting your account…", the form disabled, Done hidden, no swipe-down, announcement
+"Deleting your account.". Deleted: one `.primary` line, "Your account is gone." (or "… A few
+photos may take a while to disappear." after a `202 cleanup_pending`), Done the only control,
+no auto-dismiss. Failures (DS6): before the account is deleted, "Your account wasn't deleted.
+Try again." (Apple mismatch: "Apple didn't confirm this account. Try again."); no answer,
+"Couldn't reach the server. Tap Delete Account to try again."; a 401, "Sign in again, then
+delete.". VoiceOver: focus goes to the step heading, a failure line, the terminal line, and back
+to the Account toolbar item after any dismissal; escape is Cancel before submission and nothing
+while deleting. Every text `fixedSize`, rows 44pt.
 
 **Tips** (`AddBodegaTip`, placement tip, `DistancesTip` first in the loaded list, #68): `BodegaTipStyle` renders no background when inline in
 the card; the card supplies the material. Inline on an opaque container (the add form's
@@ -644,4 +673,5 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-23 | #113 map-height wording: "visible height" (the 400 m / 2 km / 8 km width bands, #67's 400/440 m block zoom, Locate Me's 350 m) means the app's `visibleHeightMeters`, the ground distance across the Map's laid-out frame, measured at about 0.75 of the full screen's height on the iPhone 17 Pro simulator (iOS 26.5, #113 QA; varies with device and safe areas), where an 850 m camera ≈ 350 m measure ≈ 480 m of street on a full screen; no threshold changed | Simulator QA in #113 found the gap; the bands are internally consistent and were tuned on this measure, so the owner kept the numbers and fixed the wording rather than rescale |
 | 2026-10-28 | #123 recording paused: Streets Walked recording is off, recording, or paused for one problem (restricted > denied > servicesOff > preciseOff > needsAlways; a failed save shows a card but keeps recording). The problem is a `MapBottomCard` state under first-add and over every other card, with DS6's symbols and copy (the denied body says "this app", since copy never names the app); the yellow footnote `TrackingErrorBanner` is gone. While paused the menu has a "Recording Paused" section with Open Settings above Stop Recording, Your Blocks says "Recording is paused. Your blocks stay." with Open Settings, and "No streets yet." stays away. Start Recording never jumps to Settings: any answer but Always saves the intent and shows the card, and granting Always later starts recording on return. Closing the card hides it for that problem until it changes or the next cold launch. VoiceOver hears the title when a problem appears and "Recording again." on resume | `/plan-design-review` DS1 to DS7 with two outside voices; owner accepted all. One slot with a defined precedence; the same state everywhere, so a dismissed card still leaves the menu and Your Blocks honest; no status colour or badge (Do's and Don'ts) |
 | 2026-10-29 | #126 intro sheet: page four of the intro as a `.large` sheet on opaque `systemBackground`, presented once per device the first time the map is quiet (1.5 s, camera at rest) and reopened from the Streets Walked menu's "How Streets Walked Works"; `.catPin` `figure.walk` as the fourth spine symbol, the headline as D5's fourth display surface, a `.headline` permission heading over a `.primary` paragraph by authorization status (or the paused problem's line), Start Recording / Not Now, Open Settings `.borderedProminent` while paused for something Settings fixes, no Start Recording when restricted; Start Recording dismisses first, then runs the menu's path | Two outside voices and the native review agreed on the detent, the copy's honesty about iOS timing, the `.primary` consequence copy and the accessibility contract; Codex alone would have kept the grey symbol and plain bold title; the owner extended the spine and D5 by one named surface each so the sheet reads as the intro, not a system alert |
+| 2026-10-30 | #127 Account sheet and account deletion (DS1 to DS8): "Your Account…" in the Account menu opens an inset-grouped sheet with Sign Out, the consequence line and Delete Account, and Privacy Policy; deleting asks once in a dialog, then (Apple users) confirms with Apple in the sheet; a terminal "Your account is gone." line instead of an auto-dismiss; three truthful failure outcomes, including a 202 when the photo sweep lags; Privacy Policy in the menu for everyone | `/plan-design-review` with two outside voices; owner accepted all. App Review 5.1.1(v) and (i); the Apple step must not hide the point of no return, and the copy must never say the account survived when it did not |
 | 2026-10-30 | #141 ATM as the sixth data point: `has_atm` boolean, defaulted false, decoded strictly like the other five (D6); ATM last on every surface, captioned "ATM" with `banknote`, VoiceOver "Has an ATM"; the detail points, the Add/Edit toggles and the onboarding rows derive from `BodegaFilter.Amenity`, whose `caption` is the one label source, so the form's "Hot food" becomes "Hot Food" (D5, DS6); the form toggles carry the Filters sheet's VoiceOver labels (DS4); six detail columns while they fit, stacked at xxxLarge on 375 pt (DS1); Must Have may scroll at `.medium` on 667 pt screens (DS2); the boolean and strikethrough stay, unknown vs no is a P2 TODO (DS3, D9); "ATM" means one inside the store (DS7); rollback keeps the column (D7) | `/plan-eng-review` D5 to D9 and `/plan-design-review` DS1 to DS7 with outside voices; owner accepted all. Deriving from one enum keeps four surfaces from drifting; a drop would break installed strict-decoding builds; a tri-state for ATM alone would diverge from the five |

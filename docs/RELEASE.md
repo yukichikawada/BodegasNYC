@@ -7,9 +7,29 @@ pipeline: this checklist is the pipeline. Work through it top to bottom.
 
 Status as of 2026-10-29 is in brackets.
 
-- [ ] **Account deletion in the app** (#127). App Review guideline 5.1.1(v)
-      requires it for any app with sign-in. Submitting without it is a
-      guaranteed rejection. [not built]
+- [x] **Account deletion in the app** (#127). App Review guideline 5.1.1(v)
+      requires it for any app with sign-in. Built in #127: Account menu →
+      Your Account… → Delete Account, backed by the `delete-account` edge
+      function. The server side needs the steps below before it works.
+- [ ] **Account deletion, server side** (#127, owner only, in this order;
+      the migration must go first, or the first deletion cascades the
+      user's bodegas away):
+      1. `supabase db push --linked --yes` (applies
+         `20261030140000_bodegas_created_by_set_null.sql`; one-way once a
+         bodega has lost its owner).
+      2. Developer portal → Keys → new key with Sign in with Apple enabled.
+         Download the `.p8` once, note the Key ID, and keep the file outside
+         the repo (`~/.config/bodegasnyc/AuthKey_<id>.p8`).
+      3. `supabase secrets set APPLE_CLIENT_ID=Yukichi.BodegasNYC
+         APPLE_TEAM_ID=3BAMVTHBKF APPLE_KEY_ID=<id>
+         APPLE_PRIVATE_KEY="$(cat ~/.config/bodegasnyc/AuthKey_<id>.p8)"`
+      4. `supabase functions deploy delete-account` (`supabase functions
+         list` shows it; `supabase secrets list` shows the four `APPLE_*`
+         names).
+      5. Device test of the Apple path (TestFlight or a dev build against
+         the hosted project): delete a throwaway Apple account, then check
+         Settings → Apple Account → Sign in with Apple no longer lists My
+         Bodegas. Part of #139.
 - [ ] **App record in App Store Connect**: bundle id `Yukichi.BodegasNYC`,
       name "My Bodegas" (check it is free in App Store Connect; names are
       unique across the store), primary category Food & Drink (or Travel), age
@@ -25,8 +45,8 @@ Status as of 2026-10-29 is in brackets.
       `docs/_config.yml` excludes the planning docs). The text is
       `docs/PRIVACY.md`; edit it there and the page updates on merge. Paste
       the URL into App Store Connect → App Information → Privacy Policy URL.
-      Guideline 5.1.1(i) also wants the link reachable inside the app; that
-      is part of #127.
+      Guideline 5.1.1(i) also wants the link reachable inside the app: the
+      Account menu and the Account sheet both carry it (#127).
 - [ ] **App Privacy questionnaire** in App Store Connect. Answer from
       `BodegasNYC/PrivacyInfo.xcprivacy`, which is the source of truth:
       precise location (not linked, app functionality), email address and
@@ -59,7 +79,9 @@ Status as of 2026-10-29 is in brackets.
       `SUPABASE_URL` / `SUPABASE_ANON_KEY` from the target's build settings
       (same project as Debug: `fdzjfdvotkodwimtsiuu`). Confirm every migration
       in `supabase/migrations` has been pushed (`supabase db push --linked
-      --dry-run` prints nothing pending) and that RLS is on for every table.
+      --dry-run` prints nothing pending), that RLS is on for every table, and
+      that every function in `supabase/functions` is deployed (`supabase
+      functions list`) with its secrets set (`supabase secrets list`).
 - [ ] **Encryption**. `ITSAppUsesNonExemptEncryption` is `NO` in `Info.plist`
       (HTTPS only, no custom crypto), so the export-compliance question is
       skipped on each upload.
