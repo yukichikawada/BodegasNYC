@@ -11,7 +11,8 @@ Status as of 2026-10-29 is in brackets.
       requires it for any app with sign-in. Submitting without it is a
       guaranteed rejection. [not built]
 - [ ] **App record in App Store Connect**: bundle id `Yukichi.BodegasNYC`,
-      name "Bodegas NYC", primary category Food & Drink (or Travel), age
+      name "My Bodegas" (check it is free in App Store Connect; names are
+      unique across the store), primary category Food & Drink (or Travel), age
       rating questionnaire (user-generated content: photos and reviews are
       user content, so answer "yes" to UGC and make sure the flag-an-issue flow
       and a way to contact you are in place; that is what Apple checks for

@@ -3,11 +3,11 @@ title: Privacy Policy
 permalink: /privacy/
 ---
 
-# Bodegas NYC Privacy Policy
+# My Bodegas Privacy Policy
 
 _Last updated: October 29, 2026_
 
-Bodegas NYC is a free iOS app for finding and sharing bodegas in New York
+My Bodegas is a free iOS app for finding and sharing bodegas in New York
 City. It is made by one person, has no ads and no analytics, and does not
 sell or share personal data with anyone.
 

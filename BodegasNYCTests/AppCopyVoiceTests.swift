@@ -56,6 +56,7 @@ enum VoiceRule: CaseIterable, CustomTestStringConvertible {
             return text.firstMatch(of: /\b(we|we're|we've|our|us)\b/.ignoresCase()) == nil
         case .noAppName:
             return !text.localizedCaseInsensitiveContains("BodegasNYC")
+                && !text.localizedCaseInsensitiveContains("My Bodegas")
         case .noEmDash:
             return !text.contains("\u{2014}")
         case .titleShape:
