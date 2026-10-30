@@ -70,7 +70,12 @@ final class BodegasNYCUITests: XCTestCase {
         howItWorks.tap()
         XCTAssertTrue(headline.waitForExistence(timeout: 5), "the menu row did not reopen the intro")
 
-        app.navigationBars["Streets Walked"].swipeDown(velocity: .fast)
+        // A drag from the sheet's title bar to the bottom of the screen (a
+        // plain swipeDown on the bar did not move the sheet, 2026-10-29).
+        let bar = app.navigationBars["Streets Walked"]
+        let top = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let bottom = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        top.press(forDuration: 0.1, thenDragTo: bottom, withVelocity: .fast, thenHoldForDuration: 0)
         XCTAssertTrue(headline.waitForNonExistence(timeout: 5), "swipe down left the intro up")
     }
 
