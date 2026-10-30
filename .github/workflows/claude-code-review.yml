@@ -34,6 +34,9 @@ on:
     types: [opened, synchronize]
 jobs:
   review:
+    # Fork PRs have no access to the OAuth token secret; skip them instead of
+    # failing (and never let a stranger's PR spend the owner's subscription).
+    if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     env:
       REVIEW_PROMPT: |

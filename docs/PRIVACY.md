@@ -1,3 +1,8 @@
+---
+title: Privacy Policy
+permalink: /privacy/
+---
+
 # Bodegas NYC Privacy Policy
 
 _Last updated: October 29, 2026_
@@ -42,11 +47,10 @@ uses HTTPS.
 
 ## Deleting your data
 
-<!-- In-app deletion ships with #127; do not publish this section before it does. -->
-You can delete your account from inside the app (the exact location is set by #127; update this sentence when it ships). Deleting the
-account removes your email, user identifier, photos, reviews and flags.
-Bodegas you added stay in the shared map without any link to you. You can
-also email the address below and we will delete the account for you.
+Email the address below from the account you signed in with and we will
+delete your account, including your email, user identifier, photos, reviews
+and flags. Bodegas you added stay in the shared map without any link to you.
+Deleting your account from inside the app is coming in a future update.
 
 ## Children
 
@@ -60,4 +64,4 @@ new date.
 
 ## Contact
 
-[contact email, fill in before hosting]
+yukichikawada@gmail.com
