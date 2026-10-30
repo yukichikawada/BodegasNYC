@@ -218,23 +218,13 @@ extension OnboardingPage where Extra == EmptyView {
     }
 }
 
-/// Page 2's five data points, in `BodegaFilter.Amenity` order with its
-/// symbols; only the short onboarding labels live here.
+/// Page 2's six data points, in `BodegaFilter.Amenity` order with its
+/// captions and symbols.
 private struct AmenityRows: View {
-    private static func label(for amenity: BodegaFilter.Amenity) -> AppCopy {
-        switch amenity {
-        case .hasCat: .onboardingCatLabel
-        case .servesHotFood: .onboardingHotFoodLabel
-        case .sellsCigarettes: .onboardingNicotineLabel
-        case .sellsBeer: .onboardingBeerLabel
-        case .sellsLotto: .onboardingLottoLabel
-        }
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(BodegaFilter.Amenity.allCases) { amenity in
-                Label(Self.label(for: amenity).copy.text, systemImage: amenity.systemImage)
+                Label(amenity.caption.copy.text, systemImage: amenity.systemImage)
                     .font(.title3)
             }
         }

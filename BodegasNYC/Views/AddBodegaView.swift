@@ -53,11 +53,18 @@ struct AddBodegaView: View {
                     TextField("Address (optional)", text: $viewModel.address)
                 }
                 Section("What's Available") {
-                    Toggle(isOn: $viewModel.hasCat) { Label("Cat", systemImage: "cat") }
-                    Toggle(isOn: $viewModel.servesHotFood) { Label("Hot food", systemImage: "flame") }
-                    Toggle(isOn: $viewModel.sellsCigarettes) { Label("Nicotine", systemImage: "cross") }
-                    Toggle(isOn: $viewModel.sellsBeer) { Label("Beer", systemImage: "mug") }
-                    Toggle(isOn: $viewModel.sellsLotto) { Label("Lotto", systemImage: "ticket") }
+                    // One toggle per data point, in `Amenity` order, with the
+                    // shared caption and the Filters sheet's VoiceOver label
+                    // (#141 eng D5, design DS4).
+                    ForEach(BodegaFilter.Amenity.allCases) { amenity in
+                        Toggle(isOn: Binding(
+                            get: { viewModel.isOn(amenity) },
+                            set: { viewModel.setOn(amenity, $0) }
+                        )) {
+                            Label(amenity.caption.copy.text, systemImage: amenity.systemImage)
+                        }
+                        .accessibilityLabel(amenity.accessibilityLabel)
+                    }
                 }
                 // iOS switches ignore the AccentColor asset. Tinted per
                 // section, not on the Form, so the submit ProgressView

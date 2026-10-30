@@ -64,11 +64,15 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case onboardingPage1Body
     case onboardingPage2Title
     case onboardingPage2Body
+    /// The short label for each data point (`BodegaFilter.Amenity.caption`),
+    /// shared by onboarding page 2, the detail data points, the Add/Edit
+    /// form and the Filters sheet; the prefix is historical.
     case onboardingCatLabel
     case onboardingHotFoodLabel
     case onboardingNicotineLabel
     case onboardingBeerLabel
     case onboardingLottoLabel
+    case onboardingAtmLabel
     case onboardingPage3Title
     case onboardingPage3Body
     case onboardingAddAction
@@ -111,7 +115,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
 
     // MARK: Detail data points (#70)
 
-    /// VoiceOver values for the detail screen's five data points, which
+    /// VoiceOver values for the detail screen's six data points, which
     /// otherwise show presence only by color and a struck-through caption.
     case dataPointPresentValue
     case dataPointAbsentValue
@@ -253,13 +257,14 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .onboardingPage2Body:
             CopyString(
                 kind: .body,
-                text: "Cat, hot food, nicotine, beer, lotto. Find the right one before the walk, not after."
+                text: "Cat, hot food, nicotine, beer, lotto, ATM. Find the right one before the walk, not after."
             )
         case .onboardingCatLabel: CopyString(kind: .label, text: "Cat")
         case .onboardingHotFoodLabel: CopyString(kind: .label, text: "Hot Food")
         case .onboardingNicotineLabel: CopyString(kind: .label, text: "Nicotine")
         case .onboardingBeerLabel: CopyString(kind: .label, text: "Beer")
         case .onboardingLottoLabel: CopyString(kind: .label, text: "Lotto")
+        case .onboardingAtmLabel: CopyString(kind: .label, text: "ATM")
         case .onboardingPage3Title: CopyString(kind: .title, text: "You know a spot.")
         case .onboardingPage3Body:
             CopyString(kind: .body, text: "Put the one on your corner on the map. A minute, maybe two.")
