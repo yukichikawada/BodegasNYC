@@ -54,7 +54,7 @@ via the existing `PhotoService.upload` and prepended to the gallery. No backend 
 live-verified in Simulator.
 
 **Edit Existing Bodega UI** — "Edit" in the bodega detail toolbar opens the Add Bodega form
-(`AddBodegaViewModel` with `existingBodega`) pre-filled with the name, address, five data
+(`AddBodegaViewModel` with `existingBodega`) pre-filled with the name, address, data
 points, and hours; Save is sign-in-gated via the same pattern and PATCHes through the existing
 `BodegaService.update`. Edits apply immediately (PRD §4.2 + §9, no approval queue — see
 [`REACH_GOALS.md`](./REACH_GOALS.md)'s "Edit-approval workflow" row if that ever needs

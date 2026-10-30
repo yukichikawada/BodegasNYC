@@ -435,7 +435,8 @@ link. Choosing an order in the sheet scrolls the list to its top. The order is n
 Clear Filters (renamed from Clear) and the toolbar badge ignore it. The sheet opens at `.large`
 only at accessibility sizes. Must Have is six rows (ATM last, #141); on 667 pt screens they run
 past the `.medium` fold and the sheet scrolls, which is accepted; the detents are unchanged.
-VoiceOver: an automatic re-sort while the list is in front (no sheet, no detail) announces "Nearest first now." and keeps focus on the same bodega (on the new first row
+VoiceOver: an automatic re-sort while the list is in front (no sheet, no detail) announces
+"Nearest first now." and keeps focus on the same bodega (on the new first row
 if focus was on the first); a loss is silent. The choice is remembered (`UserDefaults` key
 `listOrder`). The list fetches every row in one request, capped at 1,000 by PostgREST (TODOS.md).
 

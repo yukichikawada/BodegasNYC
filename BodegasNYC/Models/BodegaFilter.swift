@@ -20,8 +20,8 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
         case sellsCigarettes
         case sellsBeer
         case sellsLotto
-        /// Last: the five "what's for sale" points come first, a service
-        /// point after them (#141).
+        /// Last: the five original points keep their order, and ATM, the
+        /// first service point, follows them (#141).
         case hasAtm
 
         var id: Self { self }
