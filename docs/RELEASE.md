@@ -33,14 +33,14 @@ Status as of 2026-10-29 is in brackets.
       Information). Paste something like:
 
       > Finding bodegas uses When-In-Use location only. "Streets Walked" is an
-      > optional feature, off by default, behind its own toggle in the app,
+      > optional feature, off by default, started from its own menu in the app,
       > that records the streets the user walks so they can see them
       > highlighted on their own map. It is the only thing that asks for
       > Always location and the background `location` mode. The walk history
-      > stays on the device (SwiftData) and is never uploaded. To try it:
-      > Settings → Streets Walked → turn on, grant Always, walk or simulate a
-      > route (Features → Location → Freeway Drive on a simulator), reopen the
-      > app.
+      > stays on the device (SwiftData) and is never uploaded. To try it: on
+      > the map, tap the walking-figure "Streets Walked" button in the top bar
+      > → Start Recording, grant Always, walk or simulate a route (Features →
+      > Location → Freeway Drive on a simulator), then reopen the app.
 
       Also give the reviewer a sign-in path. Sign in with Apple works on
       their device, but add the test account email/password from
