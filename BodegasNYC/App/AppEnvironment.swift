@@ -13,6 +13,7 @@ struct AppEnvironment {
     let reviewService: ReviewService
     let photoService: PhotoService
     let flagService: FlagService
+    let accountService: AccountService
     let sessionStore: SessionStore
     let locationPermissionClient: LocationPermissionClient
     /// `nil` if the local SwiftData store failed to open — a rare,
@@ -31,6 +32,12 @@ struct AppEnvironment {
         reviewService = ReviewService(postgrest: supabaseEnvironment.postgrest)
         photoService = PhotoService(postgrest: supabaseEnvironment.postgrest, storage: supabaseEnvironment.storage)
         flagService = FlagService(postgrest: supabaseEnvironment.postgrest)
+        accountService = AccountService(
+            auth: supabaseEnvironment.auth,
+            functionsURL: supabaseEnvironment.functionsURL,
+            anonKey: supabaseEnvironment.anonKey,
+            fetch: supabaseEnvironment.fetch
+        )
         sessionStore = SessionStore(auth: supabaseEnvironment.auth)
         self.locationPermissionClient = locationPermissionClient
         self.streetsWalkedViewModel = streetsWalkedViewModel

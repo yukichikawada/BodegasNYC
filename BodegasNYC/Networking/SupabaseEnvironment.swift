@@ -47,6 +47,13 @@ nonisolated final class SupabaseEnvironment: Sendable {
     let auth: AuthClient
     let postgrest: PostgrestClient
     let storage: SupabaseStorageClient
+    /// The shared transport, the anon key and `<project>/functions/v1`, for
+    /// edge-function calls made as a plain `URLRequest` (no `Functions`
+    /// product is linked): `AccountService` (#127).
+    let fetch: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    private let config: SupabaseConfig
+    var anonKey: String { config.anonKey }
+    var functionsURL: URL { config.projectURL.appendingPathComponent("functions/v1") }
 
     /// `async`: awaits the first `authStateChanges` event (always emitted
     /// immediately, per that property's doc comment) before returning, so
@@ -63,9 +70,9 @@ nonisolated final class SupabaseEnvironment: Sendable {
     init(config: SupabaseConfig, urlSession: URLSession = .shared) async {
         let anonKey = config.anonKey
         let tokenBox = TokenBox(anonKey)
-        let fetch: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { request in
-            try await urlSession.data(for: request)
-        }
+        let fetch: @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await urlSession.data(for: $0) }
+        self.fetch = fetch
+        self.config = config
 
         auth = AuthClient(
             configuration: AuthClient.Configuration(

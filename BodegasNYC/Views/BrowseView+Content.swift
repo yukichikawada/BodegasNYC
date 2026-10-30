@@ -75,6 +75,13 @@ extension BrowseView {
             }
         }
         .animation(.easeInOut(duration: listTransitionSeconds), value: activeTab)
+        // The Account sheet (#127): VoiceOver returns to the Account menu
+        // after any dismissal (DS7).
+        .sheet(
+            isPresented: $showingAccount,
+            onDismiss: { accountMenuFocused = true },
+            content: { AccountView(accountService: accountService, sessionStore: sessionStore) }
+        )
         // Re-read on rotation (any size change); the window inset never
         // includes toolbars or the keyboard.
         .onGeometryChange(for: CGSize.self) { $0.size } action: { _ in

@@ -116,6 +116,7 @@ struct AppCopyVoiceTests {
         + AppCopy.YourBlocks.allCases.map(\.copy)
         + AppCopy.Recorder.allCases.map(\.copy)
         + AppCopy.StreetsWalkedIntro.allCases.map(\.copy)
+        + AppCopy.Account.allCases.map(\.copy)
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),

@@ -48,8 +48,8 @@ struct BrowseView: View {
     /// keeps on both tabs instead of the List tab's search-bar inset (#23).
     @State var deviceBottomInset: CGFloat = 0
     @State private var showingSignIn = false
-    @State private var showingSignOutConfirmation = false
-    @State private var signOutErrorMessage: String?
+    @State var showingAccount = false // the Account sheet (#127)
+    @AccessibilityFocusState var accountMenuFocused: Bool // back here after it closes (DS7)
     @State var isPlacingBodega = false
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var existingToOpen: Bodega? // a duplicate-prompt match (#20)
@@ -74,7 +74,8 @@ struct BrowseView: View {
     private let reviewService: ReviewService
     private let photoService: PhotoService
     private let flagService: FlagService
-    private let sessionStore: SessionStore
+    let accountService: AccountService
+    let sessionStore: SessionStore
     let locationPermissionClient: LocationPermissionClient
     let streetsWalkedViewModel: StreetsWalkedViewModel?
     /// Passed in by `RootView`, which owns it (and the onboarding overlay)
@@ -98,6 +99,7 @@ struct BrowseView: View {
         reviewService: ReviewService,
         photoService: PhotoService,
         flagService: FlagService,
+        accountService: AccountService,
         sessionStore: SessionStore,
         locationPermissionClient: LocationPermissionClient,
         streetsWalkedViewModel: StreetsWalkedViewModel?,
@@ -116,6 +118,7 @@ struct BrowseView: View {
         self.reviewService = reviewService
         self.photoService = photoService
         self.flagService = flagService
+        self.accountService = accountService
         self.sessionStore = sessionStore
         self.locationPermissionClient = locationPermissionClient
         self.streetsWalkedViewModel = streetsWalkedViewModel
@@ -229,32 +232,6 @@ struct BrowseView: View {
                         ProgressView()
                     }
                 }
-                .confirmationDialog(
-                    "Sign out of your account?",
-                    isPresented: $showingSignOutConfirmation,
-                    titleVisibility: .visible
-                ) {
-                    Button("Sign Out", role: .destructive) {
-                        Task {
-                            await sessionStore.signOut()
-                            if sessionStore.isSignedIn {
-                                signOutErrorMessage = sessionStore.lastAuthError
-                            }
-                        }
-                    }
-                    Button("Cancel", role: .cancel) {}
-                }
-                .alert(
-                    "Couldn't Sign Out",
-                    isPresented: Binding(
-                        get: { signOutErrorMessage != nil },
-                        set: { if !$0 { signOutErrorMessage = nil } }
-                    )
-                ) {
-                    Button("OK", role: .cancel) {}
-                } message: {
-                    Text(signOutErrorMessage ?? "")
-                }
         }
     }
 
@@ -313,12 +290,12 @@ struct BrowseView: View {
 extension BrowseView {
     /// Whether the list is the frontmost thing on screen: nothing pushed
     /// and nothing presented over it (Filters, Sign In, Add Bodega, the
-    /// duplicate prompt, the sign-out confirmation). The automatic re-sort's
+    /// duplicate prompt, the Account sheet). The automatic re-sort's
     /// VoiceOver announcement and focus move wait on it (design D3). Here, not
     /// in `BrowseView+Content.swift`, because the presentation flags are private.
     var isListForeground: Bool {
         path.isEmpty && !showingFilters && !showingSignIn && addBodegaViewModel == nil
-            && existingToOpen == nil && !showingSignOutConfirmation
+            && existingToOpen == nil && !showingAccount
     }
 
     /// The map is frontmost (Map tab, the above, no location wait, no
@@ -331,15 +308,13 @@ extension BrowseView {
 // MARK: - First run (#21)
 
 extension BrowseView {
-    /// Account toolbar item: a `Menu` (was a plain button) so it can also
-    /// hold "Show Intro Again" (#21). Same label and accessibility label as
-    /// before, so the #44 toolbar layout is unchanged.
+    /// Account toolbar item: a `Menu` (#21). Signed in, "Your Account…" opens
+    /// the Account sheet (#127 DS1); Privacy Policy is below the divider for
+    /// everyone. Same label as before, so the #44 toolbar layout is unchanged.
     private var accountMenu: some View {
         Menu {
             if sessionStore.isSignedIn {
-                Button("Sign Out…", role: .destructive) {
-                    showingSignOutConfirmation = true
-                }
+                Button(AppCopy.Account.menuItem.menuItemWithEllipsis) { showingAccount = true }
             } else {
                 Button("Sign In") {
                     showingSignIn = true
@@ -351,12 +326,14 @@ extension BrowseView {
                     showingOnboarding = true
                 }
             }
+            Link(AppCopy.Account.privacyPolicy.copy.text, destination: AppCopy.Account.privacyPolicyURL)
         } label: {
             Label(
                 "Account",
                 systemImage: sessionStore.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle"
             )
         }
+        .accessibilityFocused($accountMenuFocused)
     }
 
     /// The single landing rule for every onboarding exit, first run or
