@@ -378,7 +378,10 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     static func addedAnnouncement(name: String) -> CopyString {
         CopyString(kind: .body, text: "\(name) is on the map.")
     }
+}
 
+// Outside the enum body, which sits at SwiftLint's type_body_length limit.
+nonisolated extension AppCopy {
     /// The detail reviews section's empty state: the cat line only when the
     /// bodega has a cat (spec D2, cat use 2 of 2).
     static func noReviews(hasCat: Bool) -> (title: AppCopy, body: AppCopy) {
