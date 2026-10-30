@@ -53,7 +53,8 @@ func makeTestBodega(
     servesHotFood: Bool = false,
     sellsCigarettes: Bool = false,
     sellsBeer: Bool = false,
-    sellsLotto: Bool = false
+    sellsLotto: Bool = false,
+    hasAtm: Bool = false
 ) throws -> Bodega {
     let object: [String: Any] = [
         "id": id.uuidString,
@@ -67,6 +68,7 @@ func makeTestBodega(
         "sells_cigarettes": sellsCigarettes,
         "sells_beer": sellsBeer,
         "sells_lotto": sellsLotto,
+        "has_atm": hasAtm,
         "hours": NSNull(),
         "is_hidden": false,
         "created_at": "2026-07-21T18:30:00.000000+00:00",

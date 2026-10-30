@@ -44,17 +44,30 @@ struct TextContrastTests {
         #expect(Self.hex(color, Self.traits(.dark, .high)) == "AEAEB2")
     }
 
-    /// protects: each of the five points reads its own amenity, in order
-    /// (cat, hot food, cigarettes, beer, lotto).
-    /// fails_when: any two `isPresent` sources are swapped. Three fixtures give
-    /// every point a distinct present/absent signature across them (cat 100,
-    /// hot food 010, cigarettes 001, beer 110, lotto 011); two fixtures
-    /// cannot, since two bits only make four signatures.
+    /// protects: each of the six points reads its own amenity, in order
+    /// (cat, hot food, cigarettes, beer, lotto, ATM), now that the points
+    /// are derived from `BodegaFilter.Amenity` (#141 eng D5).
+    /// fails_when: any two `isPresent` sources are swapped, a point is
+    /// missing or extra, or the order changes. Three fixtures give every
+    /// point a distinct present/absent signature across them (cat 100,
+    /// hot food 010, cigarettes 001, beer 110, lotto 011, ATM 101); two
+    /// fixtures cannot, since two bits only make four signatures. The
+    /// expected arrays stay literal, never derived from `Amenity`.
+    /// no_claim: the captions or symbols (see the other data point tests).
     @Test func dataPointsReadTheirOwnAmenity() throws {
         let fixtures: [(bodega: Bodega, expected: [Bool])] = [
-            (try makeTestBodega(hasCat: true, sellsBeer: true), [true, false, false, true, false]),
-            (try makeTestBodega(servesHotFood: true, sellsBeer: true, sellsLotto: true), [false, true, false, true, true]),
-            (try makeTestBodega(sellsCigarettes: true, sellsLotto: true), [false, false, true, false, true])
+            (
+                try makeTestBodega(hasCat: true, sellsBeer: true, hasAtm: true),
+                [true, false, false, true, false, true]
+            ),
+            (
+                try makeTestBodega(servesHotFood: true, sellsBeer: true, sellsLotto: true),
+                [false, true, false, true, true, false]
+            ),
+            (
+                try makeTestBodega(sellsCigarettes: true, sellsLotto: true, hasAtm: true),
+                [false, false, true, false, true, true]
+            )
         ]
         for fixture in fixtures {
             #expect(DataPointsSection.points(for: fixture.bodega).map(\.isPresent) == fixture.expected)
@@ -65,12 +78,14 @@ struct TextContrastTests {
     /// strikethrough. Absent: not `.primary`, `textMuted`, struck through.
     /// fails_when: an absent point is told apart by color alone, a present
     /// one is muted or struck, or the absent color drifts back to `.primary`.
+    /// no_claim: the rendered strikethrough (a property check, not a render);
+    /// absent count 4 because #141 made it six points.
     @Test func dataPointStyleFollowsPresence() throws {
         let points = DataPointsSection.points(for: try makeTestBodega(hasCat: true, sellsCigarettes: true))
         let present = points.filter(\.isPresent)
         let absent = points.filter { !$0.isPresent }
         #expect(present.count == 2)
-        #expect(absent.count == 3)
+        #expect(absent.count == 4)
         for point in present {
             #expect(point.foreground == Color.primary)
             #expect(point.strikesCaption == false)
@@ -84,7 +99,7 @@ struct TextContrastTests {
 
     /// protects: D9's "slash variant where one exists, else strikethrough"
     /// choice. Every symbol renders and none has a `.slash` variant on this
-    /// runtime, so the strikethrough is the absent cue for all five.
+    /// runtime, so the strikethrough is the absent cue for all six.
     /// fails_when: a symbol name is misspelled, or a future SF Symbols set
     /// adds a `.slash` variant (then switch that point to it, per D9).
     @Test func dataPointSymbolsExistWithoutSlashVariants() throws {

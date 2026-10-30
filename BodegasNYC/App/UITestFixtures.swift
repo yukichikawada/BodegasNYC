@@ -217,6 +217,7 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
       "sells_cigarettes": false,
       "sells_beer": true,
       "sells_lotto": false,
+      "has_atm": true,
       "hours": null,
       "is_hidden": false,
       "created_at": "2026-10-01T12:00:00+00:00",
