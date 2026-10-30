@@ -66,6 +66,12 @@ struct StreetsWalkedIntroTests {
         #expect(!StreetsWalkedIntro.alreadyKnowsFeature(Self.quiet))
     }
 
+    /// Keeps the literal range below honest: a blocker added to the table
+    /// without widening the range would otherwise go untested.
+    @Test func everyBlockerIsCovered() {
+        #expect(Self.blockers.count == 11)
+    }
+
     @Test(arguments: 0..<11)
     func eachInputAloneBlocksTheIntro(_ index: Int) {
         let (name, flip) = Self.blockers[index]
