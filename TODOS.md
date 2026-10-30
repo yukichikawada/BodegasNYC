@@ -32,6 +32,20 @@
 **Priority:** P2
 **Depends on:** PR 2 merged
 
+## Data points
+
+### Unknown vs no for the six data points
+
+**What:** Decide whether each data point should carry unknown / no / yes instead of defaulting to no, and spec it for all six at once: nullable columns, filter semantics, the detail cue, the form control, onboarding copy.
+
+**Why:** A bodega nobody has checked reads "No" for every point and is hidden by every Must Have filter. ATM is the first point whose default is wrong for most rows, since most NYC bodegas have one (#141 reviews).
+
+**Context:** #141 eng D9 and design DS3. `BodegaDetailSections.swift` renders presence by shape plus contrast; `BodegaFilter.Amenity.isSatisfied(by:)` is the filter; the columns are in `20260722043224_create_bodegas_table.sql` and `20261030120000_add_bodega_has_atm.sql`.
+
+**Effort:** L
+**Priority:** P2
+**Depends on:** #141 merged and an owner product decision
+
 ## Photos
 
 ### Edit a photo's caption after upload

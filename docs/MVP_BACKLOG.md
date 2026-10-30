@@ -31,7 +31,7 @@ by the author, sign-in-gated via `AddBodegaViewModel`'s pattern. No backend chan
 existing `unique (bodega_id, author_id)` constraint drives client-side insert-vs-update routing.
 Live-verified in Simulator 2026-08-16.
 
-**Filter/Search** — filter the map and list by any combination of the five data points (AND
+**Filter/Search** — filter the map and list by any combination of the data points (AND
 semantics) plus free-text name/address search (case- and diacritic-insensitive). Applied
 client-side via a pure `BodegaFilter` value type against the bodegas each view model already
 holds — no backend changes, and the `.all`/`.nearby` fetch paths are untouched. `BrowseView`
@@ -74,7 +74,7 @@ cat) and no-photos states. Pins use new `pin`/`catPin` asset colors. No backend 
 Covered by unit tests; live screenshots via QA on the branch simulator.
 
 **Onboarding Flow** (#21) — three screens in the app's voice (every bodega has something; filter
-by the five data points; you know a spot), shown once on first launch over everything, including
+by the data points; you know a spot), shown once on first launch over everything, including
 the loading spinner, so no map frame renders first. Page 3 ends on the map either way: "Add a
 Bodega You Know" lands in placement mode, "Just Look Around" (or Skip) just lands. Never asks for
 location and never changes the browse mode. Replayable from the Account menu, now a `Menu` with
