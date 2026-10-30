@@ -385,6 +385,13 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Account deletion (#127). verify_jwt stays on: the gateway rejects a request
+# without a valid user JWT before the function runs. The function's own
+# imports live in its deno.json.
+[functions.delete-account]
+verify_jwt = true
+import_map = "./functions/delete-account/deno.json"
+
 [analytics]
 enabled = true
 port = 54327
