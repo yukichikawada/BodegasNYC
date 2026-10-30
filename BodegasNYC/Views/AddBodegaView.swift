@@ -55,7 +55,7 @@ struct AddBodegaView: View {
                 Section("What's Available") {
                     Toggle(isOn: $viewModel.hasCat) { Label("Cat", systemImage: "cat") }
                     Toggle(isOn: $viewModel.servesHotFood) { Label("Hot food", systemImage: "flame") }
-                    Toggle(isOn: $viewModel.sellsCigarettes) { Label("Cigarettes", systemImage: "smoke") }
+                    Toggle(isOn: $viewModel.sellsCigarettes) { Label("Nicotine", systemImage: "cross") }
                     Toggle(isOn: $viewModel.sellsBeer) { Label("Beer", systemImage: "mug") }
                     Toggle(isOn: $viewModel.sellsLotto) { Label("Lotto", systemImage: "ticket") }
                 }

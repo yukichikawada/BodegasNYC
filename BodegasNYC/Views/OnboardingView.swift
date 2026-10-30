@@ -224,7 +224,7 @@ private struct AmenityRows: View {
         switch amenity {
         case .hasCat: .onboardingCatLabel
         case .servesHotFood: .onboardingHotFoodLabel
-        case .sellsCigarettes: .onboardingCigarettesLabel
+        case .sellsCigarettes: .onboardingNicotineLabel
         case .sellsBeer: .onboardingBeerLabel
         case .sellsLotto: .onboardingLottoLabel
         }

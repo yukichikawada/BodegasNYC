@@ -174,4 +174,18 @@ struct BodegaFilterTests {
         #expect(!filter.matches(catGrocery))
         #expect(filter.activeCount == 2)
     }
+
+    /// The Filters sheet's section is titled "Must Have", so the visible
+    /// label is the bare noun; the verb lives in the VoiceOver label, which
+    /// is read without the section title.
+    @Test func amenityLabelsAreBareNounsAndAccessibilityLabelsCarryTheVerb() {
+        let verbs = ["Has ", "Sells ", "Serves "]
+        for amenity in BodegaFilter.Amenity.allCases {
+            #expect(!verbs.contains { amenity.label.hasPrefix($0) }, "\(amenity)")
+            #expect(verbs.contains { amenity.accessibilityLabel.hasPrefix($0) }, "\(amenity)")
+            #expect(amenity.accessibilityLabel.hasSuffix(amenity.label), "\(amenity)")
+        }
+        #expect(BodegaFilter.Amenity.sellsCigarettes.label == "Nicotine")
+        #expect(BodegaFilter.Amenity.sellsCigarettes.systemImage == "cross")
+    }
 }
