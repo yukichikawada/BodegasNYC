@@ -102,11 +102,15 @@ final class InMemoryAuthLocalStorage: AuthLocalStorage, @unchecked Sendable {
 
 /// Builds a `Session` via its real memberwise initializer, defaulting to a
 /// long-lived expiry so `AuthClient.session`/`SessionStore` resolve it
-/// without a network refresh call (see `Session.isExpired`).
+/// without a network refresh call (see `Session.isExpired`). `identities`
+/// stays `nil` by default, the shape `SessionStore.signedInWithApple` reads
+/// as "not Apple"; pass `makeTestIdentity(provider:userID:)` values to set
+/// them (#127).
 func makeTestSession(
     userID: UUID = UUID(),
     accessToken: String = "test-access-token",
-    expiresIn: TimeInterval = 3600
+    expiresIn: TimeInterval = 3600,
+    identities: [UserIdentity]? = nil
 ) -> Session {
     Session(
         accessToken: accessToken,
@@ -120,8 +124,24 @@ func makeTestSession(
             userMetadata: [:],
             aud: "authenticated",
             createdAt: Date(),
-            updatedAt: Date()
+            updatedAt: Date(),
+            identities: identities
         )
+    )
+}
+
+/// One `UserIdentity` for `makeTestSession(identities:)`: `provider` is
+/// "apple" or "email".
+func makeTestIdentity(provider: String, userID: UUID) -> UserIdentity {
+    UserIdentity(
+        id: provider == "apple" ? "001234.test-apple-sub.0001" : userID.uuidString,
+        identityId: UUID(),
+        userId: userID,
+        identityData: [:],
+        provider: provider,
+        createdAt: nil,
+        lastSignInAt: nil,
+        updatedAt: nil
     )
 }
 

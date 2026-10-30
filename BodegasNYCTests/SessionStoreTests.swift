@@ -104,6 +104,48 @@ struct SessionStoreTests {
     }
     #endif
 
+    /// protects=an Apple user's Account sheet asks Apple first (#127): a
+    /// stored session with an `apple` identity reads `signedInWithApple`,
+    /// and signing out clears it;
+    /// fails_when=the flag stays false for an Apple user, or survives sign-out;
+    /// no_claim=what GoTrue returns in `identities` for a real Apple sign-in
+    /// (device test under #139).
+    @Test func signedInWithAppleIsTrueForAnAppleIdentity() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data())
+        let userID = UUID()
+        let session = makeTestSession(
+            userID: userID,
+            identities: [
+                makeTestIdentity(provider: "email", userID: userID),
+                makeTestIdentity(provider: "apple", userID: userID)
+            ]
+        )
+        let store = SessionStore(auth: try makeTestAuthClient(session: session))
+        #expect(store.signedInWithApple)
+
+        await store.signOut()
+
+        #expect(store.signedInWithApple == false)
+    }
+
+    /// protects=a DEBUG email user, and a user whose identities are unknown,
+    /// skip the Apple step (eng "code quality": `nil` identities read false);
+    /// fails_when=an email-only or identity-less session reads as Apple;
+    /// no_claim=none beyond protects.
+    @Test func signedInWithAppleIsFalseForEmailOrUnknownIdentities() throws {
+        let userID = UUID()
+        let email = SessionStore(auth: try makeTestAuthClient(session: makeTestSession(
+            userID: userID, identities: [makeTestIdentity(provider: "email", userID: userID)]
+        )))
+        let unknown = SessionStore(auth: try makeTestAuthClient(session: makeTestSession(identities: nil)))
+
+        #expect(email.isSignedIn)
+        #expect(email.signedInWithApple == false)
+        #expect(unknown.isSignedIn)
+        #expect(unknown.signedInWithApple == false)
+    }
+
     @Test func signOutClearsAnEstablishedSession() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(body: Data())

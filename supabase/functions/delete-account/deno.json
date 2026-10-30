@@ -1,0 +1,9 @@
+{
+  "imports": {
+    "jose": "npm:jose@5.9.6",
+    "@std/assert": "jsr:@std/assert@1.0.13"
+  },
+  "fmt": {
+    "lineWidth": 120
+  }
+}

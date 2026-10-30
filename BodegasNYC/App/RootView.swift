@@ -85,6 +85,7 @@ struct RootView: View {
                 reviewService: environment.reviewService,
                 photoService: environment.photoService,
                 flagService: environment.flagService,
+                accountService: environment.accountService,
                 sessionStore: environment.sessionStore,
                 locationPermissionClient: environment.locationPermissionClient,
                 streetsWalkedViewModel: environment.streetsWalkedViewModel,

@@ -6,6 +6,7 @@ import SwiftUI
 /// driving `ASAuthorizationController` by hand.
 struct SignInView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
     private let sessionStore: SessionStore
     @State private var currentNonce: String?
     @State private var errorMessage: String?
@@ -41,7 +42,9 @@ struct SignInView: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
             SignInWithAppleButton(.signIn, onRequest: configure, onCompletion: handle)
-                .signInWithAppleButtonStyle(.black)
+                // White on dark, black on light (#127 DS4, as in the
+                // Account sheet's Apple step).
+                .signInWithAppleButtonStyle(colorScheme == .dark ? .white : .black)
                 .frame(height: 44)
                 .padding(.top, 8)
                 .disabled(isSigningIn)

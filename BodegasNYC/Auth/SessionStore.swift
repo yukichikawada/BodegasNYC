@@ -21,6 +21,14 @@ import Observation
 @Observable
 final class SessionStore {
     private(set) var currentUserID: UUID?
+    /// Whether the signed-in user has an `apple` identity, so deleting the
+    /// account needs Apple's re-confirmation first (#127). `false` when
+    /// signed out or when the user's identities are unknown (`nil`), which
+    /// is the DEBUG email account's case on the local stack.
+    private(set) var signedInWithApple = false
+    /// The signed-in user's email. Only the DEBUG Account sheet shows it, in
+    /// place of "Signed in with Apple." for the test account.
+    private(set) var currentUserEmail: String?
     /// Set by `completeAppleSignIn`/`signOut` (and, in DEBUG builds only,
     /// `signIn(email:password:)`) on failure, cleared at the start of each
     /// — `SignInView` reads this once per attempt rather than binding
@@ -34,10 +42,10 @@ final class SessionStore {
 
     init(auth: AuthClient) {
         self.auth = auth
-        currentUserID = auth.currentSession?.user.id
+        apply(auth.currentSession?.user)
         Task {
             for await (_, session) in auth.authStateChanges {
-                currentUserID = session?.user.id
+                apply(session?.user)
             }
         }
     }
@@ -54,7 +62,7 @@ final class SessionStore {
             let session = try await auth.signInWithIdToken(
                 credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
             )
-            currentUserID = session.user.id
+            apply(session.user)
         } catch {
             lastAuthError = error.localizedDescription
         }
@@ -69,7 +77,7 @@ final class SessionStore {
         lastAuthError = nil
         do {
             let session = try await auth.signIn(email: email, password: password)
-            currentUserID = session.user.id
+            apply(session.user)
         } catch {
             lastAuthError = error.localizedDescription
         }
@@ -80,9 +88,21 @@ final class SessionStore {
         lastAuthError = nil
         do {
             try await auth.signOut()
-            currentUserID = nil
+            apply(nil)
         } catch {
             lastAuthError = error.localizedDescription
         }
+    }
+
+    /// The one place the user-derived state is set, so `currentUserID`,
+    /// `signedInWithApple` and `currentUserEmail` never disagree.
+    private func apply(_ user: User?) {
+        currentUserID = user?.id
+        signedInWithApple = Self.hasAppleIdentity(user)
+        currentUserEmail = user?.email
+    }
+
+    nonisolated static func hasAppleIdentity(_ user: User?) -> Bool {
+        user?.identities?.contains { $0.provider == "apple" } ?? false
     }
 }

@@ -41,7 +41,9 @@ App Store: coming soon.
 - **Supabase** for the backend: Postgres with PostGIS for the nearby query,
   Supabase Auth with Sign in with Apple, Supabase Storage for photos, and
   row-level security on every table. Migrations live in
-  [`supabase/migrations`](supabase/migrations).
+  [`supabase/migrations`](supabase/migrations); the one edge function,
+  `delete-account` (account deletion and Sign in with Apple revocation), lives
+  in [`supabase/functions`](supabase/functions) with its Deno tests.
 - **SwiftData** for the on-device Streets Walked history.
 - **NYC Open Data.** `scripts/build-street-segments.py` turns the city's
   street centerline dataset into the compact `nyc-streets.bin` the app ships
@@ -65,12 +67,13 @@ BodegasNYC/            App target
   Location/            Permission handling, WalkRecorder (background recording)
   Streets/             Street grid, block matching, walked-block store and overlay
   Media/               Photo re-encoding
-  Networking/          Supabase services (bodegas, reviews, photos, flags)
+  Networking/          Supabase services (bodegas, reviews, photos, flags, account)
   Models/  ViewModels/  Views/
   Resources/           nyc-streets.bin
 BodegasNYCTests/       Unit tests (Swift Testing)
 BodegasNYCUITests/     UI tests against fixture data
-supabase/              Hosted project config and migrations
+supabase/              Hosted project config, migrations and edge functions
+  functions/           delete-account (Deno; `deno test` from its folder)
 scripts/               Test runner, simulator helpers, street-data build
 docs/                  PRD, release checklist, privacy policy (served by GitHub Pages)
 ```

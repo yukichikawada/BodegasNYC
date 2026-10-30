@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # My Bodegas Privacy Policy
 
-_Last updated: October 29, 2026_
+_Last updated: October 30, 2026_
 
 My Bodegas is a free iOS app for finding and sharing bodegas in New York
 City. It is made by one person, has no ads and no analytics, and does not
@@ -47,10 +47,19 @@ uses HTTPS.
 
 ## Deleting your data
 
-Email the address below from the account you signed in with and we will
-delete your account, including your email, user identifier, photos, reviews
-and flags. Bodegas you added stay in the shared map without any link to you.
-Deleting your account from inside the app is coming in a future update.
+You can delete your account inside the app: tap the Account button in the
+top bar, choose Your Account, then Delete Account. If you signed in with
+Apple, the app asks you to confirm with Apple once more, and the app's Sign
+in with Apple access is revoked as part of the deletion.
+
+Deleting your account removes your email, user identifier, photos, reviews
+and flags from our server for good. Bodegas you added stay in the shared map
+without any link to you. Your Streets Walked history is kept only on your
+device and is not touched; clear it from the Streets Walked menu or by
+deleting the app.
+
+If you can't use the app, email the address below from the account you
+signed in with and we will delete the account for you.
 
 ## Children
 
