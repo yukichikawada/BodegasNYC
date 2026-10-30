@@ -78,4 +78,35 @@ struct LocationPermissionClientTests {
         #expect(status == before)
         #expect(ContinuousClock.now - started < .seconds(5))
     }
+
+    /// protects=`hasPendingAuthorizationRequest` is true exactly while an
+    /// authorization request awaits its answer, so the Streets Walked intro
+    /// never presents over a location prompt (#126 AC5);
+    /// fails_when=it is false while the request waits, or stays true after
+    /// the request resolves; no_claim=the real system prompt (a no-op stands
+    /// in) and the 30 s timeout path (not waited for here).
+    @MainActor
+    @Test func aPendingRequestIsVisibleUntilItResolves() async throws {
+        let center = NotificationCenter()
+        var prompts = 0
+        let client = LocationPermissionClient(notificationCenter: center, promptForAlways: { _ in prompts += 1 })
+        try #require(client.authorizationStatus != .authorizedAlways)
+        #expect(client.hasPendingAuthorizationRequest == false)
+
+        // The real CLLocationManager reports its status once, shortly after
+        // the delegate is set, and that callback resolves whatever request
+        // is waiting. It fires once, so of up to three requests at least one
+        // waits until the activation below (run 2026-10-29: the first
+        // request was resolved by it before it could be observed).
+        var sawPending = false
+        for attempt in 1...3 where !sawPending {
+            let request = Task { await client.requestAlwaysAuthorization() }
+            while prompts < attempt { await Task.yield() }
+            sawPending = client.hasPendingAuthorizationRequest
+            center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
+            _ = await request.value
+            #expect(client.hasPendingAuthorizationRequest == false, "attempt \(attempt)")
+        }
+        #expect(sawPending)
+    }
 }

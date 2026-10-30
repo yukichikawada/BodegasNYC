@@ -39,6 +39,12 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// (#68) refresh on every tab switch and navigation change.
     private var pendingLocationContinuations: [UUID: CheckedContinuation<CLLocation?, Never>] = [:]
 
+    /// An authorization request (Locate Me's When-In-Use ask, Start
+    /// Recording's Always ask) is awaiting its answer, so a system prompt
+    /// is up or about to be. Read-only; the Streets Walked intro waits on
+    /// it (#126) so a sheet never stacks on a prompt.
+    var hasPendingAuthorizationRequest: Bool { !pendingContinuations.isEmpty }
+
     /// CLLocationManager's Always-upgrade prompt is documented to be
     /// presentable only once per install; a second call while still
     /// `.authorizedWhenInUse` silently no-ops with no delegate callback at

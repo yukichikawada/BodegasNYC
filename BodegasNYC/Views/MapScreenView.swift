@@ -33,7 +33,7 @@ struct MapScreenView: View {
     /// then MapKit's delayed selection opened a member now under the finger.
     @State var selectedItemID: MapDisplayItem.ID?
     @State var lastVisibleRegion: MKCoordinateRegion?
-    @State private var showingClearConfirmation = false
+    @State var showingClearConfirmation = false
     /// A settle held back under the List tab, and the last one delivered:
     /// the held one is replayed on return only if the camera really moved.
     @State var pendingSettledRegion: MKCoordinateRegion?
@@ -57,6 +57,10 @@ struct MapScreenView: View {
     @State var walkedDisplay = WalkedOverlayDisplay()
     /// The Your Blocks sheet (#108 PR 2, design D7).
     @State var showingYourBlocks = false
+    /// The Streets Walked intro (#126, `MapScreenView+StreetsWalkedIntro.swift`).
+    @State var showingStreetsWalkedIntro = false
+    @State var introStartsRecording = false
+    @AccessibilityFocusState var isStreetsWalkedMenuFocused: Bool
     /// This window's identity for the shared Streets Walked view model's
     /// scene count (#123 eng R5).
     @State var streetsSceneToken = StreetsWalkedViewModel.SceneToken.make()
@@ -82,6 +86,11 @@ struct MapScreenView: View {
     /// The List tab or a pushed detail is up (live, from `BrowseView`): a
     /// pending Locate Me is cancelled (#84).
     let hasLeftMap: Bool
+    /// The map is frontmost in the window (`BrowseView.isMapForeground`):
+    /// the Streets Walked intro may present only then (#126).
+    let isForeground: Bool
+    /// The intro's seen flag; `nil` (previews) presents nothing on its own.
+    let firstRunState: FirstRunState?
 
     init(
         viewModel: BodegaMapViewModel,
@@ -96,7 +105,9 @@ struct MapScreenView: View {
         showsAddTip: Bool = false,
         addCompletion: AddCompletionCoordinator? = nil,
         showsToolbar: Bool = true,
-        hasLeftMap: Bool = false
+        hasLeftMap: Bool = false,
+        isForeground: Bool = false,
+        firstRunState: FirstRunState? = nil
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -111,6 +122,8 @@ struct MapScreenView: View {
         self.addCompletion = addCompletion
         self.showsToolbar = showsToolbar
         self.hasLeftMap = hasLeftMap
+        self.isForeground = isForeground
+        self.firstRunState = firstRunState
     }
 
     /// The bottom slot's one occupant: the placement card while placing,
@@ -359,35 +372,6 @@ extension MapScreenView {
                 locateMeLabel
             }
         }
-        if let streetsWalkedViewModel {
-            ToolbarItem(placement: .topBarTrailing) {
-                // Design D5: Your Blocks, Show on Map, Start/Stop Recording,
-                // Clear History…, each in its own section.
-                Menu {
-                    Section {
-                        Button(AppCopy.YourBlocks.title.copy.text) { showingYourBlocks = true }
-                            .accessibilityHint(AppCopy.YourBlocks.menuHint.copy.text)
-                    }
-                    Section {
-                        Toggle(
-                            AppCopy.showOnMapToggle.copy.text,
-                            isOn: Binding(
-                                get: { streetsWalkedViewModel.isOverlayVisible },
-                                set: { streetsWalkedViewModel.isOverlayVisible = $0 }
-                            )
-                        )
-                        .disabled(!streetsWalkedViewModel.hasHistory)
-                    }
-                    recordingSection(streetsWalkedViewModel)
-                    Section {
-                        Button(AppCopy.clearHistoryMenuItem.menuItemWithEllipsis, role: .destructive) {
-                            showingClearConfirmation = true
-                        }
-                    }
-                } label: {
-                    Label(AppCopy.streetsWalkedMenuLabel.copy.text, systemImage: "figure.walk")
-                }
-            }
-        }
+        streetsWalkedToolbarItem
     }
 }

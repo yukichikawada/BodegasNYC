@@ -79,7 +79,7 @@ struct BrowseView: View {
     let streetsWalkedViewModel: StreetsWalkedViewModel?
     /// Passed in by `RootView`, which owns it (and the onboarding overlay)
     /// rather than putting it on `AppEnvironment`; see `RootView`.
-    private let firstRunState: FirstRunState
+    let firstRunState: FirstRunState
     /// `RootView`'s overlay flag: the Account menu's "Show Intro Again"
     /// sets it, and it going false is this view's cue to land on the map.
     @Binding private var showingOnboarding: Bool
@@ -319,6 +319,12 @@ extension BrowseView {
     var isListForeground: Bool {
         path.isEmpty && !showingFilters && !showingSignIn && addBodegaViewModel == nil
             && existingToOpen == nil && !showingSignOutConfirmation
+    }
+
+    /// The map is frontmost (Map tab, the above, no location wait, no
+    /// onboarding): the Streets Walked intro presents only then (#126).
+    var isMapForeground: Bool {
+        isListForeground && !isResolvingCurrentLocation && activeTab == .map && !showingOnboarding
     }
 }
 

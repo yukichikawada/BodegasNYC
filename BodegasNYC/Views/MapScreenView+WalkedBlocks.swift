@@ -35,17 +35,22 @@ extension MapScreenView {
     /// (`cameraDidSettle`). The scene coming forward runs a catch-up pass
     /// (eng A2).
     func walkedBlockTriggers(_ content: some View, proxy: MapProxy) -> some View {
-        content
-            .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
-            .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
-            .onChange(of: scenePhase, initial: true) { _, phase in
-                streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active, scene: streetsSceneToken)
-            }
-            .sheet(isPresented: $showingYourBlocks) {
-                if let streetsWalkedViewModel {
-                    YourBlocksSheet(viewModel: streetsWalkedViewModel)
+        // The intro's sheet sits beside Your Blocks' sheet, whose flag is in
+        // the intro's gate, so the two never compete for one presentation
+        // (#126 eng).
+        streetsWalkedIntro(
+            content
+                .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
+                .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
+                .onChange(of: scenePhase, initial: true) { _, phase in
+                    streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active, scene: streetsSceneToken)
                 }
-            }
+                .sheet(isPresented: $showingYourBlocks) {
+                    if let streetsWalkedViewModel {
+                        YourBlocksSheet(viewModel: streetsWalkedViewModel)
+                    }
+                }
+        )
     }
 
     /// Recomputes what the walked layer draws for the settled region; a
@@ -75,6 +80,44 @@ extension MapScreenView {
     }
 
     // MARK: Menu actions (design D5, D6, D11)
+
+    /// The Streets Walked toolbar menu (design D5): Your Blocks with How
+    /// Streets Walked Works under it (#126), Show on Map, Start/Stop
+    /// Recording, Clear History…, each in its own section. VoiceOver returns
+    /// here after the intro closes (#126 design D8).
+    @ToolbarContentBuilder
+    var streetsWalkedToolbarItem: some ToolbarContent {
+        if let streetsWalkedViewModel {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    Section {
+                        Button(AppCopy.YourBlocks.title.copy.text) { showingYourBlocks = true }
+                            .accessibilityHint(AppCopy.YourBlocks.menuHint.copy.text)
+                        Button(AppCopy.StreetsWalkedIntro.menuItem.copy.text) { presentStreetsWalkedIntro() }
+                    }
+                    Section {
+                        Toggle(
+                            AppCopy.showOnMapToggle.copy.text,
+                            isOn: Binding(
+                                get: { streetsWalkedViewModel.isOverlayVisible },
+                                set: { streetsWalkedViewModel.isOverlayVisible = $0 }
+                            )
+                        )
+                        .disabled(!streetsWalkedViewModel.hasHistory)
+                    }
+                    recordingSection(streetsWalkedViewModel)
+                    Section {
+                        Button(AppCopy.clearHistoryMenuItem.menuItemWithEllipsis, role: .destructive) {
+                            showingClearConfirmation = true
+                        }
+                    }
+                } label: {
+                    Label(AppCopy.streetsWalkedMenuLabel.copy.text, systemImage: "figure.walk")
+                }
+                .accessibilityFocused($isStreetsWalkedMenuFocused)
+            }
+        }
+    }
 
     /// The menu's recording section by state (#123 design DS3): Start
     /// Recording when off, Stop Recording when recording, and while paused

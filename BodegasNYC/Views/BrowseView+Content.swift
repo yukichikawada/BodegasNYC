@@ -26,7 +26,9 @@ extension BrowseView {
                 showsAddTip: showsAddTip,
                 addCompletion: addCompletion,
                 showsToolbar: activeTab == .map,
-                hasLeftMap: !path.isEmpty || activeTab == .list
+                hasLeftMap: !path.isEmpty || activeTab == .list,
+                isForeground: isMapForeground,
+                firstRunState: firstRunState
             )
             // Pin → detail (#23 T1): the held pin's state and the zoom's
             // namespace, and the pop / placement / List tab events it reacts to.

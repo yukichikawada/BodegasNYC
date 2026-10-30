@@ -89,6 +89,7 @@ A personal feature, separate from the bodega data model: the app tracks the stre
 
 ### 5.2 Privacy & permission implications
 - Requires **Always** location authorization (`NSLocationAlwaysAndWhenInUseUsageDescription`), requested as its own distinct, clearly-explained prompt — never bundled with the core app's When-In-Use ask (Section 4.2).
+- The Always ask is preceded by an in-app explanation of iOS's two-step flow (While Using first, Always later from iOS): the one-time Streets Walked intro sheet, also reachable from the Streets Walked menu (#126).
 - **Assumption:** tracking technique defaults to continuous background location updates with a distance filter, not the coarser significant-change API — street-level resolution needs more precision than "moved to a new cell tower." This has real, currently-unmeasured battery cost and is worth revisiting once it's built and profiled on-device.
 - App Store review scrutinizes background-location justifications closely; the strictly opt-in, separately-requested framing above exists specifically to keep that justification honest and narrow (this feature, not the whole app, needs it) rather than convenient.
 
