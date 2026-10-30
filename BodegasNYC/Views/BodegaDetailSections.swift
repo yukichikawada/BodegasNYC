@@ -19,7 +19,7 @@ struct DataPointsSection: View {
         /// and a struck-through caption in `textMuted`, never dimmed by
         /// opacity (#95 design D9). D9 asks for the symbol's `.slash` variant
         /// where one exists; none of the five has one in iOS 26 (`cat.slash`,
-        /// `flame.slash`, `smoke.slash`, `mug.slash` and `ticket.slash` are
+        /// `flame.slash`, `cross.slash`, `mug.slash` and `ticket.slash` are
         /// not SF Symbols), so the strikethrough is the shape cue for all.
         var foreground: Color { isPresent ? .primary : .textMuted }
         var strikesCaption: Bool { !isPresent }
