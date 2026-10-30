@@ -31,7 +31,7 @@ struct DataPointsSection: View {
         [
             DataPoint(label: .onboardingCatLabel, systemImage: "cat", isPresent: bodega.hasCat),
             DataPoint(label: .onboardingHotFoodLabel, systemImage: "flame", isPresent: bodega.servesHotFood),
-            DataPoint(label: .onboardingCigarettesLabel, systemImage: "smoke", isPresent: bodega.sellsCigarettes),
+            DataPoint(label: .onboardingNicotineLabel, systemImage: "cross", isPresent: bodega.sellsCigarettes),
             DataPoint(label: .onboardingBeerLabel, systemImage: "mug", isPresent: bodega.sellsBeer),
             DataPoint(label: .onboardingLottoLabel, systemImage: "ticket", isPresent: bodega.sellsLotto)
         ]

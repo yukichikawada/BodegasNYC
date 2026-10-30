@@ -66,7 +66,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case onboardingPage2Body
     case onboardingCatLabel
     case onboardingHotFoodLabel
-    case onboardingCigarettesLabel
+    case onboardingNicotineLabel
     case onboardingBeerLabel
     case onboardingLottoLabel
     case onboardingPage3Title
@@ -253,11 +253,11 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .onboardingPage2Body:
             CopyString(
                 kind: .body,
-                text: "Cat, hot food, cigarettes, beer, lotto. Find the right one before the walk, not after."
+                text: "Cat, hot food, nicotine, beer, lotto. Find the right one before the walk, not after."
             )
         case .onboardingCatLabel: CopyString(kind: .label, text: "Cat")
         case .onboardingHotFoodLabel: CopyString(kind: .label, text: "Hot Food")
-        case .onboardingCigarettesLabel: CopyString(kind: .label, text: "Cigarettes")
+        case .onboardingNicotineLabel: CopyString(kind: .label, text: "Nicotine")
         case .onboardingBeerLabel: CopyString(kind: .label, text: "Beer")
         case .onboardingLottoLabel: CopyString(kind: .label, text: "Lotto")
         case .onboardingPage3Title: CopyString(kind: .title, text: "You know a spot.")

@@ -382,7 +382,7 @@ reserved as an empty line and the sentence fades in over it (0.2s `easeOut`, opa
 the sections below never shift. A load failure under the sections is `.footnote` `.primary`
 (consequence copy, #95 D8).
 
-**Data points** (`DataPointsSection`, #70, #95 D9): five amenities (cat, hot food, cigarettes,
+**Data points** (`DataPointsSection`, #70, #95 D9): five amenities (cat, hot food, nicotine,
 beer, lotto), symbol over a `.caption2` caption, or one symbol-and-caption row per point when the
 columns do not fit and at accessibility sizes. Presence is shape plus contrast: present, symbol
 and caption `.primary`; absent, the same symbol and a struck-through caption in `textMuted`, with

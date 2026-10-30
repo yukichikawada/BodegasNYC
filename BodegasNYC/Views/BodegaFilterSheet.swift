@@ -34,6 +34,7 @@ struct BodegaFilterSheet: View {
                         Toggle(isOn: binding(for: amenity)) {
                             Label(amenity.label, systemImage: amenity.systemImage)
                         }
+                        .accessibilityLabel(amenity.accessibilityLabel)
                     }
                 }
                 // iOS switches ignore the AccentColor asset (DESIGN.md Colors).

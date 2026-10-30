@@ -21,11 +21,25 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
 
         var id: Self { self }
 
+        /// What the Filters sheet shows. The section is titled "Must Have",
+        /// so the verb ("Has", "Sells") would only repeat it.
         var label: String {
+            switch self {
+            case .hasCat: "Cat"
+            case .servesHotFood: "Hot Food"
+            case .sellsCigarettes: "Nicotine"
+            case .sellsBeer: "Beer"
+            case .sellsLotto: "Lotto"
+            }
+        }
+
+        /// What VoiceOver reads for the same toggle: the section title is
+        /// not spoken with each row, so the verb carries the meaning there.
+        var accessibilityLabel: String {
             switch self {
             case .hasCat: "Has a Cat"
             case .servesHotFood: "Serves Hot Food"
-            case .sellsCigarettes: "Sells Cigarettes"
+            case .sellsCigarettes: "Sells Nicotine"
             case .sellsBeer: "Sells Beer"
             case .sellsLotto: "Sells Lotto"
             }
@@ -35,7 +49,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             switch self {
             case .hasCat: "cat"
             case .servesHotFood: "flame"
-            case .sellsCigarettes: "smoke"
+            case .sellsCigarettes: "cross"
             case .sellsBeer: "mug"
             case .sellsLotto: "ticket"
             }
