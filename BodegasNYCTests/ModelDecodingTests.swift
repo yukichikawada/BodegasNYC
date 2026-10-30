@@ -57,6 +57,43 @@ struct ModelDecodingTests {
         #expect(bodega.hours?.tue == nil)
     }
 
+    /// protects: map/list/detail load with an ownerless bodega.
+    /// fails_when: `Bodega.init(from:)` returns to `decode(UUID.self)`.
+    /// why_new: no other literal here has a null owner (#127: `created_by` is
+    /// `ON DELETE SET NULL`).
+    /// no_claim: none beyond protects.
+    @Test func decodesBodegaWithNullOwner() throws {
+        let json = """
+        {
+          "id": "8f14e45f-ceea-467e-adc9-15476f4eaa15",
+          "created_by": null,
+          "name": "El Sol Deli & Grocery",
+          "latitude": 40.7291,
+          "longitude": -73.9965,
+          "address": "123 E 7th St, New York, NY",
+          "has_cat": true,
+          "serves_hot_food": true,
+          "sells_cigarettes": true,
+          "sells_beer": true,
+          "sells_lotto": false,
+          "has_atm": true,
+          "hours": null,
+          "is_hidden": false,
+          "created_at": "2026-07-21T18:30:00.123456+00:00",
+          "updated_at": "2026-07-22T00:15:59.000042+00:00"
+        }
+        """
+        let bodega = try PostgRESTDecoding.makeDecoder().decode(Bodega.self, from: Data(json.utf8))
+
+        #expect(bodega.createdBy == nil)
+        #expect(bodega.name == "El Sol Deli & Grocery")
+
+        let encoded = try JSONEncoder().encode(bodega)
+        let object = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(object["created_by"] == nil)
+        #expect(object["id"] as? String == bodega.id.uuidString)
+    }
+
     @Test func decodesReviewWithWholeSecondTimestamps() throws {
         let json = """
         {

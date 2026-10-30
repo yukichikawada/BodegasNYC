@@ -60,6 +60,24 @@
 **Priority:** P3
 **Depends on:** #107
 
+## Accounts
+
+### Apple server-to-server notifications for Sign in with Apple
+
+**What:** An edge function registered as the Sign in with Apple server-to-server notification endpoint (developer portal → the app's Sign in with Apple configuration) that receives Apple's signed JWT events (`consent-revoked`, `account-delete`, `email-disabled`/`email-enabled`) and, for `consent-revoked` and `account-delete`, runs the same server-side deletion as `delete-account` (#127) for the matching Apple identity.
+
+**Why:** When a user removes My Bodegas from their Apple ID in Settings instead of deleting in the app, nothing tells us today; their Supabase account, reviews, photos and flags stay until they sign in again and delete.
+
+**Pros:** Closes the one deletion path that bypasses the app; reuses the #127 sweep and `deleteUser` code.
+
+**Cons:** A public endpoint to register and secure (verify Apple's JWT signature against Apple's JWKS); a second function to deploy by hand; no user has hit the case yet.
+
+**Context:** #127 eng review D9 (2026-10-30). Start from `supabase/functions/delete-account` once it exists: factor the revoke-free part (sweep + `deleteUser`) into a shared helper and call it from the new function after verifying the event JWT. Apple's events arrive as a JSON body with a `payload` JWT whose `events` claim names the type and the user's `sub`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** #127 merged and the `delete-account` function deployed
+
 ## Completed
 
 ### Paginate `BodegaService.fetchAll` past the 1,000-row PostgREST cap (done 2026-10-21)

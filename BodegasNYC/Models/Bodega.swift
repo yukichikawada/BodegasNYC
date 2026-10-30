@@ -10,7 +10,12 @@ import Foundation
 /// nothing to decode yet.
 nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
     var id: UUID
-    var createdBy: UUID
+    /// The user who added the bodega. NULL once that user deletes their
+    /// account: `bodegas.created_by` is `ON DELETE SET NULL` (#127), so the
+    /// row outlives its owner. Never compare it to `SessionStore.currentUserID`
+    /// with a bare `==`: both can be `nil`, and `nil == nil` would make a
+    /// signed-out user "own" every ownerless bodega. Unwrap both sides first.
+    var createdBy: UUID?
     var name: String
     var coordinate: Coordinate
     var address: String?
@@ -43,7 +48,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         id = try container.decode(UUID.self, forKey: .id)
-        createdBy = try container.decode(UUID.self, forKey: .createdBy)
+        createdBy = try container.decodeIfPresent(UUID.self, forKey: .createdBy)
         name = try container.decode(String.self, forKey: .name)
         coordinate = Coordinate(
             latitude: try container.decode(Double.self, forKey: .latitude),
@@ -65,7 +70,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
     func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(id, forKey: .id)
-        try container.encode(createdBy, forKey: .createdBy)
+        try container.encodeIfPresent(createdBy, forKey: .createdBy)
         try container.encode(name, forKey: .name)
         try container.encode(coordinate.latitude, forKey: .latitude)
         try container.encode(coordinate.longitude, forKey: .longitude)
