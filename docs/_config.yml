@@ -1,6 +1,6 @@
 # GitHub Pages (Jekyll) settings for the docs/ site:
 # https://yukichikawada.github.io/BodegasNYC/
-title: Bodegas NYC
+title: My Bodegas
 description: Find and share bodegas in New York City. iOS app.
 theme: jekyll-theme-primer
 exclude:

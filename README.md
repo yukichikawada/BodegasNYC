@@ -1,4 +1,4 @@
-# Bodegas NYC
+# My Bodegas
 
 A native iOS app for finding and sharing New York City bodegas: the corner
 stores that Apple Maps and Google Maps treat as an afterthought. The map is

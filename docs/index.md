@@ -1,8 +1,8 @@
 ---
-title: Bodegas NYC
+title: My Bodegas
 ---
 
-# Bodegas NYC
+# My Bodegas
 
 An iOS app for finding and sharing bodegas in New York City: a map of
 corner stores with photos, reviews and hours, plus an optional "Streets
