@@ -25,9 +25,14 @@ final class FirstRunState {
 
     nonisolated static let hasCompletedOnboardingKey = "firstRun.hasCompletedOnboarding"
     nonisolated static let hasAddedFirstBodegaKey = "firstRun.hasAddedFirstBodega"
+    nonisolated static let hasSeenStreetsWalkedIntroKey = "firstRun.hasSeenStreetsWalkedIntro"
 
     private(set) var hasCompletedOnboarding: Bool
     private(set) var hasAddedFirstBodega: Bool
+    /// The Streets Walked intro sheet (#126) was shown, or the person
+    /// already knew the feature (recording or history when the map was
+    /// first quiet). Never reset, not even by Show Intro Again.
+    private(set) var hasSeenStreetsWalkedIntro: Bool
 
     /// Set when onboarding ends with "Add a Bodega You Know"; `BrowseView`
     /// consumes it (enters placement mode, then clears it). Not persisted:
@@ -43,10 +48,11 @@ final class FirstRunState {
         self.userDefaults = userDefaults
         hasCompletedOnboarding = userDefaults.bool(forKey: Self.hasCompletedOnboardingKey)
         hasAddedFirstBodega = userDefaults.bool(forKey: Self.hasAddedFirstBodegaKey)
+        hasSeenStreetsWalkedIntro = userDefaults.bool(forKey: Self.hasSeenStreetsWalkedIntroKey)
     }
 
     /// Every onboarding exit, first run or replay. Never touches
-    /// `hasAddedFirstBodega`.
+    /// `hasAddedFirstBodega` or `hasSeenStreetsWalkedIntro`.
     func completeOnboarding(wantsToAdd: Bool) {
         hasCompletedOnboarding = true
         userDefaults.set(true, forKey: Self.hasCompletedOnboardingKey)
@@ -61,5 +67,13 @@ final class FirstRunState {
         hasAddedFirstBodega = true
         userDefaults.set(true, forKey: Self.hasAddedFirstBodegaKey)
         return true
+    }
+
+    /// The Streets Walked intro was presented (automatically or from the
+    /// menu row, eng D4) or is never needed (#126). Idempotent.
+    func markStreetsWalkedIntroSeen() {
+        guard !hasSeenStreetsWalkedIntro else { return }
+        hasSeenStreetsWalkedIntro = true
+        userDefaults.set(true, forKey: Self.hasSeenStreetsWalkedIntroKey)
     }
 }

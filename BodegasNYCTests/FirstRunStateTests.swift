@@ -2,14 +2,15 @@
 //  FirstRunStateTests.swift
 //  BodegasNYCTests
 //
-//  `FirstRunState`'s two persisted flags and the onboarding gate (spec AC 2
-//  and the pure-logic half of AC 8). A fresh `FirstRunState` over the same
-//  `UserDefaults` suite stands in for a relaunch.
+//  `FirstRunState`'s three persisted flags and the onboarding gate (spec AC 2
+//  and the pure-logic half of AC 8; #126 AC9 for the Streets Walked intro
+//  flag). A fresh `FirstRunState` over the same `UserDefaults` suite stands
+//  in for a relaunch.
 //
-//  protects: both flags persist; `markFirstBodegaAdded` flips exactly once
-//  per suite; replaying onboarding never resets the first-add flag;
-//  `shouldShowOnboarding` is the negation of completion, which `RootView`
-//  seeds its overlay from at init.
+//  protects: every flag persists; `markFirstBodegaAdded` flips exactly once
+//  per suite; replaying onboarding never resets the first-add flag or the
+//  Streets Walked intro flag; `shouldShowOnboarding` is the negation of
+//  completion, which `RootView` seeds its overlay from at init.
 //  fails_when: a flag fails to persist, flips twice, or replay resets it.
 //  no_claim: UI; `UserDefaults(suiteName:)` stands in for `.standard`.
 //
@@ -104,5 +105,42 @@ struct FirstRunStateTests {
     @Test func storageKeysMatchTheSpec() {
         #expect(FirstRunState.hasCompletedOnboardingKey == "firstRun.hasCompletedOnboarding")
         #expect(FirstRunState.hasAddedFirstBodegaKey == "firstRun.hasAddedFirstBodega")
+        // The UI tests set this one by name (#126).
+        #expect(FirstRunState.hasSeenStreetsWalkedIntroKey == "firstRun.hasSeenStreetsWalkedIntro")
+    }
+
+    /// protects=the Streets Walked intro's flag starts false, persists once
+    /// set, and is untouched by the other flags (#126 AC9);
+    /// fails_when=it starts true, fails to persist, or completing
+    /// onboarding or a first add sets it; no_claim=the UI that sets it.
+    @Test func streetsWalkedIntroFlagPersists() throws {
+        try Self.withSuite { defaults in
+            let state = FirstRunState(userDefaults: defaults)
+            #expect(state.hasSeenStreetsWalkedIntro == false)
+            state.completeOnboarding(wantsToAdd: false)
+            state.markFirstBodegaAdded()
+            #expect(state.hasSeenStreetsWalkedIntro == false)
+
+            state.markStreetsWalkedIntroSeen()
+            #expect(state.hasSeenStreetsWalkedIntro == true)
+            state.markStreetsWalkedIntroSeen()
+            #expect(state.hasSeenStreetsWalkedIntro == true)
+            #expect(FirstRunState(userDefaults: defaults).hasSeenStreetsWalkedIntro == true)
+        }
+    }
+
+    /// protects=Show Intro Again never brings the Streets Walked intro back
+    /// (#126 AC9); fails_when=replaying onboarding resets the flag in memory
+    /// or on disk; no_claim=the Account menu wiring.
+    @Test func replayingOnboardingKeepsTheStreetsWalkedIntroSeen() throws {
+        try Self.withSuite { defaults in
+            let state = FirstRunState(userDefaults: defaults)
+            state.completeOnboarding(wantsToAdd: false)
+            state.markStreetsWalkedIntroSeen()
+
+            state.completeOnboarding(wantsToAdd: true)
+            #expect(state.hasSeenStreetsWalkedIntro == true)
+            #expect(FirstRunState(userDefaults: defaults).hasSeenStreetsWalkedIntro == true)
+        }
     }
 }

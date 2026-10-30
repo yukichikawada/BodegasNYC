@@ -114,6 +114,7 @@ struct AppCopyVoiceTests {
         + [120, 140, 141].map { AppCopy.captionCount($0, limit: 140) }
         + AppCopy.YourBlocks.allCases.map(\.copy)
         + AppCopy.Recorder.allCases.map(\.copy)
+        + AppCopy.StreetsWalkedIntro.allCases.map(\.copy)
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),
@@ -207,6 +208,24 @@ struct AppCopyVoiceTests {
         #expect(AppCopy.Recorder.pausedSection.copy == CopyString(kind: .label, text: "Recording Paused"))
         #expect(AppCopy.Recorder.resumedAnnouncement.copy == CopyString(kind: .body, text: "Recording again."))
         #expect(AppCopy.YourBlocks.recordingPaused.copy.text == "Recording is paused. Your blocks stay.")
+    }
+
+    /// protects=the Streets Walked intro's labels and headings are design
+    /// D7's words and kinds (the UI test finds the sheet and the menu row by
+    /// them, #126); fails_when=a label, the headline or the heading drifts
+    /// or changes kind; no_claim=the body paragraphs' wording (the content
+    /// table in StreetsWalkedIntroTests) and the rendered sheet.
+    @Test func streetsWalkedIntroLabelsMatchTheDesignTable() {
+        typealias Intro = AppCopy.StreetsWalkedIntro
+        #expect(Intro.menuItem.copy == CopyString(kind: .label, text: "How Streets Walked Works"))
+        #expect(Intro.notNowAction.copy == CopyString(kind: .label, text: "Not Now"))
+        #expect(Intro.title.copy == CopyString(kind: .label, text: "Streets Walked"))
+        #expect(Intro.headline.copy == CopyString(kind: .title, text: "The blocks you walk, drawn in."))
+        #expect(
+            Intro.permissionHeading.copy == CopyString(kind: .title, text: "Recording needs location set to Always.")
+        )
+        #expect(AppCopy.startRecordingAction.copy == CopyString(kind: .label, text: "Start Recording"))
+        #expect(Intro.allCases.count == 13)
     }
 
     @Test func placementCardTitleIsAShortSentence() {

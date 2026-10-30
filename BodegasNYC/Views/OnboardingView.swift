@@ -159,7 +159,8 @@ struct OnboardingView: View {
     }
 }
 
-private enum OnboardingLayout {
+/// Shared with the Streets Walked intro sheet, the intro's fourth page (#126).
+enum OnboardingLayout {
     /// Keeps lines readable on iPad and in landscape (design DD1).
     static let maxContentWidth: CGFloat = 560
 }

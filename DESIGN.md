@@ -13,7 +13,7 @@ colors:
   text-tertiary: "#C4C4C6"    # tertiaryLabel flattened; dark #48484A. Non-text only (decorative chevrons), never on text (#95 D7)
   separator: "#C6C6C8"        # separator; dark #38383A
   accent: "#FF3B30"           # pin, systemRed asset color; dark #FF453A. Bodega pins and the mappin symbol
-  accent-cat: "#FF9500"       # catPin, systemOrange asset color; dark #FF9F0A. Cat symbol everywhere, cat pins
+  accent-cat: "#FF9500"       # catPin, systemOrange asset color; dark #FF9F0A. Cat symbol everywhere, cat pins, the onboarding spine and the Streets Walked intro's symbol (#126)
   star: "#FFCC00"             # systemYellow; dark #FFD60A. Rating stars only
   walked: "#5856D6"           # walked asset (#108 D1); dark #7D7AFF, Increase Contrast #3634A3 / #A5A3FF. Walked blocks only
   cluster: "#8E8E93"          # systemGray. Cluster badge fill
@@ -140,7 +140,7 @@ a New Yorker." Every decision below serves that: the data and the words carry th
 - Only four saturated colors exist and all four are data: pin red, cat orange, star yellow,
   walked indigo.
 - One tint, Deli Green, for every control. It never means data, status, or success.
-- System face everywhere; one display register (heavy, condensed) on three surfaces.
+- System face everywhere; one display register (heavy, condensed) on four surfaces.
 - Copy is in voice (see `AppCopy`), one symbol per surface, the cat appears sparingly.
 
 ## Colors
@@ -181,7 +181,7 @@ corner at night; the map tiles already switch, so the chrome follows the system 
 - Red appears in two forms that never share a surface at the same size: filled 28pt pin circles
   on the map, and plain text for form errors and destructive actions in sheets.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
-  first-add card, the noBodegas empty state). Yellow is stars and only stars.
+  first-add card, the noBodegas empty state), and the Streets Walked intro's symbol (#126 D3). Yellow is stars and only stars.
 - Indigo is walked blocks and only walked blocks (#108 D1): the `walked` asset, #5856D6 light and
   #7D7AFF dark, with Increase Contrast slots #3634A3 / #A5A3FF, at full opacity with round caps and
   joins. Each walked block is a line on its street's centerline, chained into runs, drawn above
@@ -213,8 +213,9 @@ MapKit's own labels, and should move like Apple built it. A bundled face would c
 plumbing and read as a web app. There is no font to load.
 
 **Display register (D5, 2026-10-20):** weight `.heavy`, width `.condensed` (`Font.Width`), on
-exactly three surfaces: onboarding page titles (`.largeTitle`), the first-add card title
-(`.headline`), and the bodega name in the detail header (`.title`). In SwiftUI:
+exactly four surfaces: onboarding page titles (`.largeTitle`), the first-add card title
+(`.headline`), the bodega name in the detail header (`.title`), and the Streets Walked intro
+headline (`.largeTitle`, #126 D4). In SwiftUI:
 `.font(.display(.largeTitle))`. The register lives only in `Font.display(_:)`
 (`BodegasNYC/Views/Font+Display.swift`); never write the width chain inline. This amends DD1's
 `.largeTitle.bold()`. Condensed, not compressed: compressed heavy degrades at accessibility
@@ -499,6 +500,8 @@ Someone already recording whose Motion & Fitness was never asked gets an Allow M
 after a denial it is Open Settings. VoiceOver: each row is one element, "Manhattan, 412 of 9,300
 blocks, 4 percent."; "<1%" reads "less than 1 percent", "—" reads "counting".
 
+**Streets Walked intro sheet** (`StreetsWalkedIntroSheet`, #126): the intro's fourth page, delivered as a sheet the first time the map is quiet after onboarding (1.5 s after the gate holds, camera at rest, active scene, nothing presented, no first-add choreography, recording off, no history; once per device; reopened any time from the Streets Walked menu's "How Streets Walked Works"). `.large` only, opaque `systemBackground`, inline title "Streets Walked", Done. The onboarding page composition at the compact 16pt top inset: 44pt `figure.walk` in `.catPin` (the fourth spine symbol), headline in the display register (D5's fourth surface) with the header trait, body `.title3` `textMuted`, a `.headline` permission heading "Recording needs location set to Always.", the permission paragraph in `.primary` (consequence copy, #95 D8) chosen by authorization status (notDetermined, whenInUse, denied, restricted, always) or, while paused, the recorder problem's own line, then "It lives under Streets Walked, the walking figure in the map's toolbar." in `textMuted`; `VStack(spacing: 12)`, 24pt inset, 560 max width. On reopen the status line ("Recording is on." `textMuted`, or "Recording is paused. Your blocks stay." `.primary`) sits under the headline. Bottom `safeAreaInset` bar on the same opaque ground, `.controlSize(.large)`, 12pt apart: off → Start Recording (`.borderedProminent`) and Not Now (`.bordered`); off and restricted → Not Now; recording → none; paused for something Settings fixes → Open Settings (`.borderedProminent`); paused otherwise → none. Start Recording dismisses the sheet, then runs the menu's exact path (#123 DS4). VoiceOver: symbol hidden; headline and permission heading are headers; order headline, status, paragraphs, buttons; each paragraph its own element; escape dismisses without starting; focus returns to the Streets Walked toolbar control after a manual close. Every text `fixedSize`, no caps, labels wrap; where the pinned bar would leave under 200pt of reading space (AX sizes in compact height) the bar moves to the end of the scroll. System sheet motion only. Swipe-down is Not Now.
+
 **Section empty state** (DD9, amended by #95 D7): title `.subheadline` `textMuted`, body
 `.footnote` `textMuted` (never `.tertiary`), 2pt
 apart, leading, no symbol, inside the section's `VStack`. List-tab empty states use
@@ -635,3 +638,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-23 | #113 D10 fade dropped: walked-block changes swap in place at camera rest, no 0.2s fade, and Reduce Motion needs nothing special; mid-gesture writes and unchanged writes are still skipped | MapKit does not animate `MapPolyline` changes; verified on simulator in #113 (an `easeOut(0.2)` transaction around the write landed within one frame for Show on Map, data changes and the first count) |
 | 2026-10-23 | #113 map-height wording: "visible height" (the 400 m / 2 km / 8 km width bands, #67's 400/440 m block zoom, Locate Me's 350 m) means the app's `visibleHeightMeters`, the ground distance across the Map's laid-out frame, measured at about 0.75 of the full screen's height on the iPhone 17 Pro simulator (iOS 26.5, #113 QA; varies with device and safe areas), where an 850 m camera ≈ 350 m measure ≈ 480 m of street on a full screen; no threshold changed | Simulator QA in #113 found the gap; the bands are internally consistent and were tuned on this measure, so the owner kept the numbers and fixed the wording rather than rescale |
 | 2026-10-28 | #123 recording paused: Streets Walked recording is off, recording, or paused for one problem (restricted > denied > servicesOff > preciseOff > needsAlways; a failed save shows a card but keeps recording). The problem is a `MapBottomCard` state under first-add and over every other card, with DS6's symbols and copy (the denied body says "this app", since copy never names the app); the yellow footnote `TrackingErrorBanner` is gone. While paused the menu has a "Recording Paused" section with Open Settings above Stop Recording, Your Blocks says "Recording is paused. Your blocks stay." with Open Settings, and "No streets yet." stays away. Start Recording never jumps to Settings: any answer but Always saves the intent and shows the card, and granting Always later starts recording on return. Closing the card hides it for that problem until it changes or the next cold launch. VoiceOver hears the title when a problem appears and "Recording again." on resume | `/plan-design-review` DS1 to DS7 with two outside voices; owner accepted all. One slot with a defined precedence; the same state everywhere, so a dismissed card still leaves the menu and Your Blocks honest; no status colour or badge (Do's and Don'ts) |
+| 2026-10-29 | #126 intro sheet: page four of the intro as a `.large` sheet on opaque `systemBackground`, presented once per device the first time the map is quiet (1.5 s, camera at rest) and reopened from the Streets Walked menu's "How Streets Walked Works"; `.catPin` `figure.walk` as the fourth spine symbol, the headline as D5's fourth display surface, a `.headline` permission heading over a `.primary` paragraph by authorization status (or the paused problem's line), Start Recording / Not Now, Open Settings `.borderedProminent` while paused for something Settings fixes, no Start Recording when restricted; Start Recording dismisses first, then runs the menu's path | Two outside voices and the native review agreed on the detent, the copy's honesty about iOS timing, the `.primary` consequence copy and the accessibility contract; Codex alone would have kept the grey symbol and plain bold title; the owner extended the spine and D5 by one named surface each so the sheet reads as the intro, not a system alert |

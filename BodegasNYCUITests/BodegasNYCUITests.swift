@@ -22,17 +22,61 @@ final class BodegasNYCUITests: XCTestCase {
         continueAfterFailure = false
     }
 
-    /// Launches past onboarding, onto the map, with the fixture bodega.
+    /// Launches past onboarding, onto the map, with the fixture bodega, and
+    /// past the Streets Walked intro (#126) unless `seenStreetsWalkedIntro`
+    /// is false.
     @MainActor
-    private func launchWithFixtures(_ extraArguments: [String] = []) -> XCUIApplication {
+    private func launchWithFixtures(
+        _ extraArguments: [String] = [],
+        seenStreetsWalkedIntro: Bool = true
+    ) -> XCUIApplication {
         let app = XCUIApplication()
         app.launchArguments += [
             "-UITestFixtures",
             // NSArgumentDomain overrides UserDefaults: skip onboarding.
-            "-firstRun.hasCompletedOnboarding", "YES"
+            "-firstRun.hasCompletedOnboarding", "YES",
+            "-firstRun.hasSeenStreetsWalkedIntro", seenStreetsWalkedIntro ? "YES" : "NO"
         ] + extraArguments
         app.launch()
         return app
+    }
+
+    /// protects: on a map that has never shown the Streets Walked intro, with recording off, the sheet presents on
+    /// its own; Not Now closes it with no permission prompt; the menu's How Streets Walked Works reopens it; a
+    /// swipe down closes it (#126 AC1, AC7, AC8).
+    /// fails_when: the sheet never appears, Not Now or the swipe leaves it up, Not Now shows a system location
+    /// alert, or the menu has no How Streets Walked Works row.
+    /// no_claim: the 1.5 s timing, the gate's other inputs (unit tests), that it shows only once across launches
+    /// (the argument domain overrides the persisted flag), Start Recording's prompts (live QA), the layout. The
+    /// pinned device's on-disk walk store is assumed empty and recording off (`-streetsWalked.isTrackingEnabled NO`).
+    @MainActor
+    func testStreetsWalkedIntroPresentsClosesAndReopens() throws {
+        let app = launchWithFixtures(["-streetsWalked.isTrackingEnabled", "NO"], seenStreetsWalkedIntro: false)
+
+        let headline = app.staticTexts["The blocks you walk, drawn in."]
+        XCTAssertTrue(headline.waitForExistence(timeout: 20), "the intro never presented")
+        let notNow = app.buttons["Not Now"]
+        XCTAssertTrue(notNow.exists, "the intro has no Not Now")
+        XCTAssertTrue(app.buttons["Start Recording"].exists, "the intro has no Start Recording")
+        notNow.tap()
+        XCTAssertTrue(headline.waitForNonExistence(timeout: 5), "Not Now left the intro up")
+        XCTAssertFalse(app.alerts.firstMatch.exists, "Not Now raised an alert")
+
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "Streets Walked menu never appeared")
+        menu.tap()
+        let howItWorks = app.buttons["How Streets Walked Works"].firstMatch
+        XCTAssertTrue(howItWorks.waitForExistence(timeout: 5), "the menu has no How Streets Walked Works")
+        howItWorks.tap()
+        XCTAssertTrue(headline.waitForExistence(timeout: 5), "the menu row did not reopen the intro")
+
+        // A drag from the sheet's title bar to the bottom of the screen (a
+        // plain swipeDown on the bar did not move the sheet, 2026-10-29).
+        let bar = app.navigationBars["Streets Walked"]
+        let top = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        let bottom = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        top.press(forDuration: 0.1, thenDragTo: bottom, withVelocity: .fast, thenHoldForDuration: 0)
+        XCTAssertTrue(headline.waitForNonExistence(timeout: 5), "swipe down left the intro up")
     }
 
     /// Tapping a bodega's pin pushes its detail (the Marker-to-Annotation
