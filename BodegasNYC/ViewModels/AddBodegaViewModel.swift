@@ -69,6 +69,7 @@ final class AddBodegaViewModel: Identifiable {
     var sellsCigarettes = false
     var sellsBeer = false
     var sellsLotto = false
+    var hasAtm = false
     var dayEntries: [DayEntry] = AddBodegaViewModel.defaultDayEntries
 
     private(set) var submissionState: SubmissionState = .idle
@@ -108,6 +109,7 @@ final class AddBodegaViewModel: Identifiable {
             sellsCigarettes = existingBodega.sellsCigarettes
             sellsBeer = existingBodega.sellsBeer
             sellsLotto = existingBodega.sellsLotto
+            hasAtm = existingBodega.hasAtm
             dayEntries = Self.dayEntries(from: existingBodega.hours)
         }
     }
@@ -230,6 +232,7 @@ final class AddBodegaViewModel: Identifiable {
                 sellsCigarettes: sellsCigarettes,
                 sellsBeer: sellsBeer,
                 sellsLotto: sellsLotto,
+                hasAtm: hasAtm,
                 hours: hours
             ))
         }
@@ -244,6 +247,7 @@ final class AddBodegaViewModel: Identifiable {
             sellsCigarettes: sellsCigarettes,
             sellsBeer: sellsBeer,
             sellsLotto: sellsLotto,
+            hasAtm: hasAtm,
             hours: hours,
             fieldsToClear: fieldsToClear
         ))

@@ -19,6 +19,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
     var sellsCigarettes: Bool
     var sellsBeer: Bool
     var sellsLotto: Bool
+    var hasAtm: Bool
     var hours: BodegaHours?
     var isHidden: Bool
     var createdAt: Date
@@ -33,6 +34,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
         case sellsCigarettes = "sells_cigarettes"
         case sellsBeer = "sells_beer"
         case sellsLotto = "sells_lotto"
+        case hasAtm = "has_atm"
         case isHidden = "is_hidden"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
@@ -53,6 +55,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
         sellsCigarettes = try container.decode(Bool.self, forKey: .sellsCigarettes)
         sellsBeer = try container.decode(Bool.self, forKey: .sellsBeer)
         sellsLotto = try container.decode(Bool.self, forKey: .sellsLotto)
+        hasAtm = try container.decode(Bool.self, forKey: .hasAtm)
         hours = try container.decodeIfPresent(BodegaHours.self, forKey: .hours)
         isHidden = try container.decode(Bool.self, forKey: .isHidden)
         createdAt = try container.decode(Date.self, forKey: .createdAt)
@@ -72,6 +75,7 @@ nonisolated struct Bodega: Identifiable, Codable, Sendable, Hashable {
         try container.encode(sellsCigarettes, forKey: .sellsCigarettes)
         try container.encode(sellsBeer, forKey: .sellsBeer)
         try container.encode(sellsLotto, forKey: .sellsLotto)
+        try container.encode(hasAtm, forKey: .hasAtm)
         try container.encodeIfPresent(hours, forKey: .hours)
         try container.encode(isHidden, forKey: .isHidden)
         try container.encode(createdAt, forKey: .createdAt)
