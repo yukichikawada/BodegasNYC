@@ -29,6 +29,11 @@ struct BodegaFilterTests {
         #expect(BodegaFilter.none.activeCount == 0)
     }
 
+    /// protects: requiring one amenity keeps a bodega with that data point
+    /// and drops one without it, for all six (ATM since #141).
+    /// fails_when: an amenity's `isSatisfied(by:)` reads another field or
+    /// none, or requiring it does not count once in the badge.
+    /// no_claim: combinations (see `combinedAmenitiesUseANDSemantics`).
     @Test(arguments: BodegaFilter.Amenity.allCases)
     func eachAmenityRequiresItsOwnDataPoint(_ amenity: BodegaFilter.Amenity) throws {
         let without = try makeTestBodega()
@@ -37,7 +42,8 @@ struct BodegaFilterTests {
             servesHotFood: amenity == .servesHotFood,
             sellsCigarettes: amenity == .sellsCigarettes,
             sellsBeer: amenity == .sellsBeer,
-            sellsLotto: amenity == .sellsLotto
+            sellsLotto: amenity == .sellsLotto,
+            hasAtm: amenity == .hasAtm
         )
         var filter = BodegaFilter.none
         filter.setRequired(amenity, true)
@@ -178,14 +184,27 @@ struct BodegaFilterTests {
     /// The Filters sheet's section is titled "Must Have", so the visible
     /// label is the bare noun; the verb lives in the VoiceOver label, which
     /// is read without the section title.
+    ///
+    /// protects: the bare-noun / verb split, ATM's label, VoiceOver label,
+    /// symbol and last place (#141), and one label source per amenity:
+    /// `label` is its `caption` text (#141 design DS6).
+    /// fails_when: a label gains a verb, a VoiceOver label loses it, ATM's
+    /// strings or symbol drift, ATM moves off the end, or `label` and
+    /// `caption` diverge.
+    /// no_claim: how the strings render on any surface.
     @Test func amenityLabelsAreBareNounsAndAccessibilityLabelsCarryTheVerb() {
         let verbs = ["Has ", "Sells ", "Serves "]
         for amenity in BodegaFilter.Amenity.allCases {
             #expect(!verbs.contains { amenity.label.hasPrefix($0) }, "\(amenity)")
             #expect(verbs.contains { amenity.accessibilityLabel.hasPrefix($0) }, "\(amenity)")
             #expect(amenity.accessibilityLabel.hasSuffix(amenity.label), "\(amenity)")
+            #expect(amenity.label == amenity.caption.copy.text, "\(amenity)")
         }
         #expect(BodegaFilter.Amenity.sellsCigarettes.label == "Nicotine")
         #expect(BodegaFilter.Amenity.sellsCigarettes.systemImage == "cross")
+        #expect(BodegaFilter.Amenity.hasAtm.label == "ATM")
+        #expect(BodegaFilter.Amenity.hasAtm.accessibilityLabel == "Has an ATM")
+        #expect(BodegaFilter.Amenity.hasAtm.systemImage == "banknote")
+        #expect(BodegaFilter.Amenity.allCases.last == .hasAtm)
     }
 }

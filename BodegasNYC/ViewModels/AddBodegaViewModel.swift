@@ -69,6 +69,7 @@ final class AddBodegaViewModel: Identifiable {
     var sellsCigarettes = false
     var sellsBeer = false
     var sellsLotto = false
+    var hasAtm = false
     var dayEntries: [DayEntry] = AddBodegaViewModel.defaultDayEntries
 
     private(set) var submissionState: SubmissionState = .idle
@@ -108,6 +109,7 @@ final class AddBodegaViewModel: Identifiable {
             sellsCigarettes = existingBodega.sellsCigarettes
             sellsBeer = existingBodega.sellsBeer
             sellsLotto = existingBodega.sellsLotto
+            hasAtm = existingBodega.hasAtm
             dayEntries = Self.dayEntries(from: existingBodega.hours)
         }
     }
@@ -230,6 +232,7 @@ final class AddBodegaViewModel: Identifiable {
                 sellsCigarettes: sellsCigarettes,
                 sellsBeer: sellsBeer,
                 sellsLotto: sellsLotto,
+                hasAtm: hasAtm,
                 hours: hours
             ))
         }
@@ -244,6 +247,7 @@ final class AddBodegaViewModel: Identifiable {
             sellsCigarettes: sellsCigarettes,
             sellsBeer: sellsBeer,
             sellsLotto: sellsLotto,
+            hasAtm: hasAtm,
             hours: hours,
             fieldsToClear: fieldsToClear
         ))
@@ -350,5 +354,32 @@ extension AddBodegaViewModel {
     func cancelSubmit() {
         submitTask?.cancel()
         submitTask = nil
+    }
+}
+
+// MARK: - What's Available toggles (#141)
+
+extension AddBodegaViewModel {
+    /// The form's per-amenity read, so `AddBodegaView` can build one toggle
+    /// per `BodegaFilter.Amenity` (eng D5). The six stored Bools stay the
+    /// source of truth: `makeRequest(userID:)` reads them directly.
+    func isOn(_ amenity: BodegaFilter.Amenity) -> Bool {
+        self[keyPath: Self.field(for: amenity)]
+    }
+
+    /// The matching write; touches only that amenity's stored Bool.
+    func setOn(_ amenity: BodegaFilter.Amenity, _ isOn: Bool) {
+        self[keyPath: Self.field(for: amenity)] = isOn
+    }
+
+    private static func field(for amenity: BodegaFilter.Amenity) -> ReferenceWritableKeyPath<AddBodegaViewModel, Bool> {
+        switch amenity {
+        case .hasCat: \.hasCat
+        case .servesHotFood: \.servesHotFood
+        case .sellsCigarettes: \.sellsCigarettes
+        case .sellsBeer: \.sellsBeer
+        case .sellsLotto: \.sellsLotto
+        case .hasAtm: \.hasAtm
+        }
     }
 }

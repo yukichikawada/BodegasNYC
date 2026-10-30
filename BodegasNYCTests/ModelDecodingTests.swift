@@ -14,6 +14,12 @@ import Foundation
 
 struct ModelDecodingTests {
 
+    /// protects: a PostgREST `bodegas` row decodes, including the six data
+    /// points; `has_atm: true` lands in `hasAtm` (#141).
+    /// fails_when: a key name or a field mapping is wrong, or `has_atm` is
+    /// decoded into the wrong field.
+    /// no_claim: that a row without `has_atm` fails to decode (strict decode
+    /// is by inspection, like the other five).
     @Test func decodesBodegaWithFractionalSecondTimestamps() throws {
         let json = """
         {
@@ -28,6 +34,7 @@ struct ModelDecodingTests {
           "sells_cigarettes": true,
           "sells_beer": true,
           "sells_lotto": false,
+          "has_atm": true,
           "hours": {
             "mon": { "open": "06:00", "close": "23:00", "isClosed": false },
             "sun": { "open": "00:00", "close": "00:00", "isClosed": true }
@@ -44,6 +51,7 @@ struct ModelDecodingTests {
         #expect(bodega.coordinate.longitude == -73.9965)
         #expect(bodega.hasCat == true)
         #expect(bodega.sellsLotto == false)
+        #expect(bodega.hasAtm == true)
         #expect(bodega.hours?.mon?.open == "06:00")
         #expect(bodega.hours?.sun?.isClosed == true)
         #expect(bodega.hours?.tue == nil)

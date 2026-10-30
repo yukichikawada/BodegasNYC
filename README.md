@@ -4,7 +4,7 @@ A native iOS app for finding and sharing New York City bodegas: the corner
 stores that Apple Maps and Google Maps treat as an afterthought. The map is
 crowdsourced by the people who use them, with the things a business listing
 never tells you: is there a cat, is there hot food, do they sell beer, lotto,
-cigarettes, and are the hours actually right.
+cigarettes, is there an ATM, and are the hours actually right.
 
 Privacy policy: <https://yukichikawada.github.io/BodegasNYC/privacy/>
 App Store: coming soon.
@@ -12,7 +12,7 @@ App Store: coming soon.
 ## What it does
 
 - **Map and list of bodegas** near you, with pins clustered at low zoom and
-  capsule labels at block zoom. Tap a pin for the detail screen: the five
+  capsule labels at block zoom. Tap a pin for the detail screen: the six
   signature data points, hours, photos, rating and reviews.
 - **Add a bodega** by dropping a pin or using your location, with a proximity
   check that catches duplicates before they are saved.

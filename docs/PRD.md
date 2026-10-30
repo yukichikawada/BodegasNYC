@@ -48,7 +48,7 @@ Everything in this section is bodega-specific. Generalizing to other POI types i
 
 ### 4.1 Core data model
 Each bodega has:
-- **The five signature data points** (each independently settable, community-editable): has a cat, serves hot food, sells cigarettes, sells beer, sells lotto tickets.
+- **The six signature data points** (each independently settable, community-editable): has a cat, serves hot food, sells cigarettes, sells beer, sells lotto tickets, has an ATM. "Has an ATM" means an ATM inside the store; cash back at the counter or a machine next door does not count; a yes describes the amenity, not whether it works today.
 - Address (geocoded to a map pin).
 - Hours of operation.
 - Photos (host-uploaded by any user, not just the original submitter).
@@ -56,9 +56,9 @@ Each bodega has:
 - Reviews (persistent text, tied to a user).
 
 ### 4.2 Functional requirements
-- **Add a bodega:** any authenticated user can submit a new bodega (name, location via map-pin-drop or current location, the five data points, hours). Basic proximity check on submit to catch obvious duplicates (**Assumption:** exact duplicate-resolution UX — merge vs. reject vs. flag-for-review — is left as an implementation detail, not specified here).
+- **Add a bodega:** any authenticated user can submit a new bodega (name, location via map-pin-drop or current location, the six data points, hours). Basic proximity check on submit to catch obvious duplicates (**Assumption:** exact duplicate-resolution UX — merge vs. reject vs. flag-for-review — is left as an implementation detail, not specified here).
 - **Browse:** map view (pins) and list view, togglable, of nearby/all bodegas.
-- **Filter/search:** by any combination of the five data points ("show me bodegas with a cat and hot food nearby") plus free-text name/address search.
+- **Filter/search:** by any combination of the six data points ("show me bodegas with a cat and hot food nearby") plus free-text name/address search.
 - **Bodega detail page:** all data points, hours, address, photo gallery, reviews, aggregate rating, an "Add a review" / "Add a photo" / "Flag an issue" action set.
 - **Reviews & ratings:** persistent (unlike chat — see Section 6), one review per user per bodega, editable by the author.
 - **Photo uploads:** any authenticated user can add photos to a bodega's gallery.

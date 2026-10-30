@@ -31,6 +31,7 @@ struct BodegaListViewModelTests {
           "sells_cigarettes": false,
           "sells_beer": false,
           "sells_lotto": false,
+          "has_atm": false,
           "hours": null,
           "is_hidden": false,
           "created_at": "2026-07-21T18:30:00.123456+00:00",

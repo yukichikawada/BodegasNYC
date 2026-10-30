@@ -113,7 +113,7 @@ components:
 ## Overview
 
 **Creative North Star:** Signage on the system shell. A native iOS map app whose identity lives in
-its data (red and orange pins, five amenities) and its voice (dry New Yorker), not in its chrome.
+its data (red and orange pins, six amenities) and its voice (dry New Yorker), not in its chrome.
 The chrome is quiet, translucent where it floats, and typeset in the system face; the one
 typographic flourish is a heavy condensed title that reads like awning lettering.
 
@@ -383,14 +383,17 @@ reserved as an empty line and the sentence fades in over it (0.2s `easeOut`, opa
 the sections below never shift. A load failure under the sections is `.footnote` `.primary`
 (consequence copy, #95 D8).
 
-**Data points** (`DataPointsSection`, #70, #95 D9): five amenities (cat, hot food, nicotine,
-beer, lotto), symbol over a `.caption2` caption, or one symbol-and-caption row per point when the
-columns do not fit and at accessibility sizes. Presence is shape plus contrast: present, symbol
-and caption `.primary`; absent, the same symbol and a struck-through caption in `textMuted`, with
-no opacity dimming. D9 prefers a symbol's `.slash` variant, but none of the five has one in
-iOS 26 (checked against the runtime's SF Symbols list; `TextContrastTests` fails if one appears),
-so the strikethrough is the shape cue for all. VoiceOver reads the caption with a Yes or No value;
-the symbol is hidden. Hours times and review dates are `textMuted` too.
+**Data points** (`DataPointsSection`, #70, #95 D9, #141): six amenities (cat, hot food, nicotine,
+beer, lotto, ATM), in `BodegaFilter.Amenity` order on every surface, each with one caption shared by
+onboarding, detail, the Add/Edit form and the Filters sheet. Symbol over a `.caption2` caption, six
+columns while they fit: at xxxLarge on a 375 pt phone they stack, 402 pt phones hold six through
+xxxLarge. Otherwise, and always at accessibility sizes, one symbol-and-caption row per point.
+Presence is shape plus contrast: present, symbol and caption `.primary`; absent, the same symbol and
+a struck-through caption in `textMuted`, with no opacity dimming. D9 prefers a symbol's `.slash`
+variant, but none of the six has one in iOS 26 (`banknote.slash` does not exist either; checked
+against the runtime's SF Symbols list; `TextContrastTests` fails if one appears), so the
+strikethrough is the shape cue for all. VoiceOver reads the caption with a Yes or No value; the
+symbol is hidden. Hours times and review dates are `textMuted` too.
 
 **List row** (`BodegaRow`, #68): name `.headline`, address `.subheadline` `textMuted` (#95 D6), both wrapping
 at every size and never truncating. The distance (`AppCopy.distanceValue`, `.value` kind) is
@@ -430,8 +433,10 @@ Nearest first needs to know where you are." otherwise (denied, restricted, Preci
 a fix pending or expired); no footer under Newest First, and never a button, symbol or Settings
 link. Choosing an order in the sheet scrolls the list to its top. The order is not a filter:
 Clear Filters (renamed from Clear) and the toolbar badge ignore it. The sheet opens at `.large`
-only at accessibility sizes. VoiceOver: an automatic re-sort while the list is in front (no sheet,
-no detail) announces "Nearest first now." and keeps focus on the same bodega (on the new first row
+only at accessibility sizes. Must Have is six rows (ATM last, #141); on 667 pt screens they run
+past the `.medium` fold and the sheet scrolls, which is accepted; the detents are unchanged.
+VoiceOver: an automatic re-sort while the list is in front (no sheet, no detail) announces
+"Nearest first now." and keeps focus on the same bodega (on the new first row
 if focus was on the first); a loss is silent. The choice is remembered (`UserDefaults` key
 `listOrder`). The list fetches every row in one request, capped at 1,000 by PostgREST (TODOS.md).
 
@@ -639,3 +644,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-23 | #113 map-height wording: "visible height" (the 400 m / 2 km / 8 km width bands, #67's 400/440 m block zoom, Locate Me's 350 m) means the app's `visibleHeightMeters`, the ground distance across the Map's laid-out frame, measured at about 0.75 of the full screen's height on the iPhone 17 Pro simulator (iOS 26.5, #113 QA; varies with device and safe areas), where an 850 m camera ≈ 350 m measure ≈ 480 m of street on a full screen; no threshold changed | Simulator QA in #113 found the gap; the bands are internally consistent and were tuned on this measure, so the owner kept the numbers and fixed the wording rather than rescale |
 | 2026-10-28 | #123 recording paused: Streets Walked recording is off, recording, or paused for one problem (restricted > denied > servicesOff > preciseOff > needsAlways; a failed save shows a card but keeps recording). The problem is a `MapBottomCard` state under first-add and over every other card, with DS6's symbols and copy (the denied body says "this app", since copy never names the app); the yellow footnote `TrackingErrorBanner` is gone. While paused the menu has a "Recording Paused" section with Open Settings above Stop Recording, Your Blocks says "Recording is paused. Your blocks stay." with Open Settings, and "No streets yet." stays away. Start Recording never jumps to Settings: any answer but Always saves the intent and shows the card, and granting Always later starts recording on return. Closing the card hides it for that problem until it changes or the next cold launch. VoiceOver hears the title when a problem appears and "Recording again." on resume | `/plan-design-review` DS1 to DS7 with two outside voices; owner accepted all. One slot with a defined precedence; the same state everywhere, so a dismissed card still leaves the menu and Your Blocks honest; no status colour or badge (Do's and Don'ts) |
 | 2026-10-29 | #126 intro sheet: page four of the intro as a `.large` sheet on opaque `systemBackground`, presented once per device the first time the map is quiet (1.5 s, camera at rest) and reopened from the Streets Walked menu's "How Streets Walked Works"; `.catPin` `figure.walk` as the fourth spine symbol, the headline as D5's fourth display surface, a `.headline` permission heading over a `.primary` paragraph by authorization status (or the paused problem's line), Start Recording / Not Now, Open Settings `.borderedProminent` while paused for something Settings fixes, no Start Recording when restricted; Start Recording dismisses first, then runs the menu's path | Two outside voices and the native review agreed on the detent, the copy's honesty about iOS timing, the `.primary` consequence copy and the accessibility contract; Codex alone would have kept the grey symbol and plain bold title; the owner extended the spine and D5 by one named surface each so the sheet reads as the intro, not a system alert |
+| 2026-10-30 | #141 ATM as the sixth data point: `has_atm` boolean, defaulted false, decoded strictly like the other five (D6); ATM last on every surface, captioned "ATM" with `banknote`, VoiceOver "Has an ATM"; the detail points, the Add/Edit toggles and the onboarding rows derive from `BodegaFilter.Amenity`, whose `caption` is the one label source, so the form's "Hot food" becomes "Hot Food" (D5, DS6); the form toggles carry the Filters sheet's VoiceOver labels (DS4); six detail columns while they fit, stacked at xxxLarge on 375 pt (DS1); Must Have may scroll at `.medium` on 667 pt screens (DS2); the boolean and strikethrough stay, unknown vs no is a P2 TODO (DS3, D9); "ATM" means one inside the store (DS7); rollback keeps the column (D7) | `/plan-eng-review` D5 to D9 and `/plan-design-review` DS1 to DS7 with outside voices; owner accepted all. Deriving from one enum keeps four surfaces from drifting; a drop would break installed strict-decoding builds; a tri-state for ATM alone would diverge from the five |

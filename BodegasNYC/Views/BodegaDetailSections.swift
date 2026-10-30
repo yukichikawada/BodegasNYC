@@ -8,8 +8,9 @@ import SwiftUI
 struct DataPointsSection: View {
     let bodega: Bodega
 
-    /// The caption is the same `AppCopy` label onboarding uses for the
-    /// amenity, so the two screens never drift ("Hot Food" in both).
+    /// The caption is the amenity's one `AppCopy` label
+    /// (`BodegaFilter.Amenity.caption`), shared by onboarding, the detail
+    /// screen and the Add/Edit form, so they never drift ("Hot Food" in all).
     struct DataPoint {
         let label: AppCopy
         let systemImage: String
@@ -18,28 +19,31 @@ struct DataPointsSection: View {
         /// Present: symbol and caption in `.primary`. Absent: the same symbol
         /// and a struck-through caption in `textMuted`, never dimmed by
         /// opacity (#95 design D9). D9 asks for the symbol's `.slash` variant
-        /// where one exists; none of the five has one in iOS 26 (`cat.slash`,
-        /// `flame.slash`, `cross.slash`, `mug.slash` and `ticket.slash` are
-        /// not SF Symbols), so the strikethrough is the shape cue for all.
+        /// where one exists; none of the six has one in iOS 26 (`cat.slash`,
+        /// `flame.slash`, `cross.slash`, `mug.slash`, `ticket.slash` and
+        /// `banknote.slash` are not SF Symbols), so the strikethrough is the
+        /// shape cue for all.
         var foreground: Color { isPresent ? .primary : .textMuted }
         var strikesCaption: Bool { !isPresent }
     }
 
     private var points: [DataPoint] { Self.points(for: bodega) }
 
+    /// One point per `BodegaFilter.Amenity`, in its order (#141 eng D5).
     static func points(for bodega: Bodega) -> [DataPoint] {
-        [
-            DataPoint(label: .onboardingCatLabel, systemImage: "cat", isPresent: bodega.hasCat),
-            DataPoint(label: .onboardingHotFoodLabel, systemImage: "flame", isPresent: bodega.servesHotFood),
-            DataPoint(label: .onboardingNicotineLabel, systemImage: "cross", isPresent: bodega.sellsCigarettes),
-            DataPoint(label: .onboardingBeerLabel, systemImage: "mug", isPresent: bodega.sellsBeer),
-            DataPoint(label: .onboardingLottoLabel, systemImage: "ticket", isPresent: bodega.sellsLotto)
-        ]
+        BodegaFilter.Amenity.allCases.map { amenity in
+            DataPoint(
+                label: amenity.caption,
+                systemImage: amenity.systemImage,
+                isPresent: amenity.isSatisfied(by: bodega)
+            )
+        }
     }
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    /// Five icon-over-caption columns while they fit at their ideal widths;
+    /// Six icon-over-caption columns while they fit at their ideal widths
+    /// (through xxxLarge on a 402 pt phone, through xxLarge on 375 pt);
     /// otherwise, and always at the accessibility sizes (DD16, the same
     /// threshold as the map card), one leading icon-and-caption row per
     /// point, so no caption is squeezed into broken lines ("Ho/t/foo/d")

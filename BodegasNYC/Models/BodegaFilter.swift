@@ -1,7 +1,7 @@
 import Foundation
 
 /// What the browse surfaces (map and list) narrow their already-fetched
-/// bodegas down to: any combination of the five data points, plus a
+/// bodegas down to: any combination of the six data points, plus a
 /// free-text name/address search. Applied entirely client-side against the
 /// in-memory set each view model already holds — deliberately not pushed
 /// into `BodegaService`'s queries, so `.nearby`'s radius refetches and the
@@ -11,27 +11,38 @@ import Foundation
 /// shared by both browse screens, owned by `BrowseView` so switching tabs
 /// never loses it.
 nonisolated struct BodegaFilter: Equatable, Sendable {
-    /// One of `Bodega`'s five yes/no data points.
+    /// One of `Bodega`'s six yes/no data points. `allCases` order is the
+    /// display order on every surface: the Filters sheet, the Add/Edit
+    /// form, the detail screen and onboarding page 2.
     nonisolated enum Amenity: String, CaseIterable, Identifiable, Sendable {
         case hasCat
         case servesHotFood
         case sellsCigarettes
         case sellsBeer
         case sellsLotto
+        /// Last: the five original points keep their order, and ATM, the
+        /// first service point, follows them (#141).
+        case hasAtm
 
         var id: Self { self }
 
-        /// What the Filters sheet shows. The section is titled "Must Have",
-        /// so the verb ("Has", "Sells") would only repeat it.
-        var label: String {
+        /// The one source of each amenity's short label (#141 design DS6):
+        /// onboarding page 2, the detail data points, the Add/Edit form and,
+        /// through `label`, the Filters sheet all read it.
+        var caption: AppCopy {
             switch self {
-            case .hasCat: "Cat"
-            case .servesHotFood: "Hot Food"
-            case .sellsCigarettes: "Nicotine"
-            case .sellsBeer: "Beer"
-            case .sellsLotto: "Lotto"
+            case .hasCat: .onboardingCatLabel
+            case .servesHotFood: .onboardingHotFoodLabel
+            case .sellsCigarettes: .onboardingNicotineLabel
+            case .sellsBeer: .onboardingBeerLabel
+            case .sellsLotto: .onboardingLottoLabel
+            case .hasAtm: .onboardingAtmLabel
             }
         }
+
+        /// What the Filters sheet shows. The section is titled "Must Have",
+        /// so the verb ("Has", "Sells") would only repeat it.
+        var label: String { caption.copy.text }
 
         /// What VoiceOver reads for the same toggle: the section title is
         /// not spoken with each row, so the verb carries the meaning there.
@@ -42,6 +53,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             case .sellsCigarettes: "Sells Nicotine"
             case .sellsBeer: "Sells Beer"
             case .sellsLotto: "Sells Lotto"
+            case .hasAtm: "Has an ATM"
             }
         }
 
@@ -52,6 +64,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             case .sellsCigarettes: "cross"
             case .sellsBeer: "mug"
             case .sellsLotto: "ticket"
+            case .hasAtm: "banknote"
             }
         }
 
@@ -62,6 +75,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             case .sellsCigarettes: bodega.sellsCigarettes
             case .sellsBeer: bodega.sellsBeer
             case .sellsLotto: bodega.sellsLotto
+            case .hasAtm: bodega.hasAtm
             }
         }
     }
