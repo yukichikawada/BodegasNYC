@@ -19,11 +19,13 @@ Status as of 2026-10-29 is in brackets.
 - [ ] **Sign in with Apple** is on for the App ID in the developer portal.
       Automatic signing adds it; confirm under Certificates, Identifiers &
       Profiles → Identifiers → BodegasNYC → Capabilities.
-- [ ] **Privacy policy URL**. The policy text is `docs/PRIVACY.md`. This repo
-      is private, so GitHub Pages is not available on the free plan; host it
-      as a public gist or in a tiny public `bodegasnyc-site` repo with Pages
-      on. Paste the URL into App Store Connect → App Privacy and into the app
-      listing. [not hosted]
+- [x] **Privacy policy URL**: <https://yukichikawada.github.io/BodegasNYC/privacy/>,
+      served by GitHub Pages from `docs/` on `main` (the repo is public;
+      `docs/_config.yml` excludes the planning docs). The text is
+      `docs/PRIVACY.md`; edit it there and the page updates on merge. Paste
+      the URL into App Store Connect → App Information → Privacy Policy URL.
+      Guideline 5.1.1(i) also wants the link reachable inside the app; that
+      is part of #127.
 - [ ] **App Privacy questionnaire** in App Store Connect. Answer from
       `BodegasNYC/PrivacyInfo.xcprivacy`, which is the source of truth:
       precise location (not linked, app functionality), email address and
