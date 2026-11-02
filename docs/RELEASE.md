@@ -35,9 +35,10 @@ Status as of 2026-10-29 is in brackets.
       2 is done, and an empty key skips that vendor with a log line.
       1. [DSN committed] Sentry: sign up at sentry.io (US region), create an org and a
          project with platform "Apple iOS" (`my-bodegas-ios`), copy the DSN.
-         Create an organization auth token with `project:releases` and
-         `project:write`, save it to `~/.config/bodegasnyc/sentry-token`
-         (`chmod 600`), and `brew install getsentry/tools/sentry-cli`.
+         Create an organization token (Settings → Organization Tokens; its
+         fixed `org:ci` scope covers debug-file upload and release creation),
+         save it to `~/.config/bodegasnyc/sentry-token` (`chmod 600`), and
+         `brew install getsentry/tools/sentry-cli`.
       2. PostHog: sign up at us.posthog.com, create a project "My Bodegas",
          copy the project API key (starts with `phc_`). Leave session replay
          and autocapture off in the project settings; the SDK has them off
