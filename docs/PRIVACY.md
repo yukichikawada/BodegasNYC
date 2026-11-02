@@ -5,11 +5,12 @@ permalink: /privacy/
 
 # My Bodegas Privacy Policy
 
-_Last updated: October 30, 2026_
+_Last updated: November 1, 2026_
 
 My Bodegas is a free iOS app for finding and sharing bodegas in New York
-City. It is made by one person, has no ads and no analytics, and does not
-sell or share personal data with anyone.
+City. It is made by one person, has no ads, and does not sell personal data.
+Two service providers, named below, process usage and crash reports on our
+behalf.
 
 ## What the app collects
 
@@ -39,11 +40,33 @@ Photos are resized and re-encoded before upload, which removes location and
 camera metadata. Posted bodegas, photos and reviews are public to other users
 of the app.
 
+## Usage and crash reports
+
+The app sends us a short record of how it is used: which features were used
+and how often, which bodega was opened, the app version, and your device
+model and iOS version. It also sends crash and hang reports so bugs can be
+fixed. Sharing is on by default. These reports never include your precise
+location or walked routes, your photos, or anything you type. When you are
+signed in they carry your user identifier; otherwise they are anonymous.
+
+Sentry handles the crash reports and PostHog the usage reports, both in the
+United States. Neither is used for advertising or tracking.
+
+You can turn this off on any device, signed in or not: tap the Account
+button in the top bar and uncheck Share Usage and Diagnostics. From then on
+nothing more is sent from that device and no crash is recorded. A crash is
+reported only if sharing was on when it happened and still on the next time
+the app opened after it.
+
+Usage reports tied to your account are deleted from our analytics within
+30 days of deleting your account. Crash reports expire after 90 days.
+
 ## Where data is stored
 
 Account data and posted content are stored with Supabase, our hosting
-provider, in the United States. All traffic between the app and the server
-uses HTTPS.
+provider, in the United States. Usage and crash reports are stored with
+Sentry and PostHog, also in the United States. All traffic between the app
+and the server uses HTTPS.
 
 ## Deleting your data
 

@@ -30,6 +30,28 @@ Status as of 2026-10-29 is in brackets.
          the hosted project): delete a throwaway Apple account, then check
          Settings → Apple Account → Sign in with Apple no longer lists My
          Bodegas. Part of #139.
+- [ ] **Sentry and PostHog projects** (#147, owner only). `SENTRY_DSN` is
+      committed (org `heerheer`); `POSTHOG_API_KEY` stays empty until step
+      2 is done, and an empty key skips that vendor with a log line.
+      1. [DSN committed] Sentry: sign up at sentry.io (US region), create an org and a
+         project with platform "Apple iOS" (`my-bodegas-ios`), copy the DSN.
+         Create an organization auth token with `project:releases` and
+         `project:write`, save it to `~/.config/bodegasnyc/sentry-token`
+         (`chmod 600`), and `brew install getsentry/tools/sentry-cli`.
+      2. PostHog: sign up at us.posthog.com, create a project "My Bodegas",
+         copy the project API key (starts with `phc_`). Leave session replay
+         and autocapture off in the project settings; the SDK has them off
+         too.
+      3. Put the DSN and key into the `SENTRY_DSN` and `POSTHOG_API_KEY`
+         build settings (Debug and Release, target BodegasNYC) and commit.
+         `POSTHOG_HOST` is already `https://us.i.posthog.com`.
+      4. PostHog → Settings → Personal API keys: create a key scoped to
+         `person:read` and `person:write` for the My Bodegas project, and note
+         the project id from the project settings URL. Then `supabase secrets
+         set POSTHOG_PERSONAL_API_KEY=… POSTHOG_PROJECT_ID=…` on the linked
+         project and redeploy `delete-account`. Until set, the function logs
+         "analytics cleanup skipped" and the runbook below covers deletions
+         by hand.
 - [ ] **App record in App Store Connect**: bundle id `Yukichi.BodegasNYC`,
       name "My Bodegas" (check it is free in App Store Connect; names are
       unique across the store), primary category Food & Drink (or Travel), age
@@ -50,8 +72,13 @@ Status as of 2026-10-29 is in brackets.
 - [ ] **App Privacy questionnaire** in App Store Connect. Answer from
       `BodegasNYC/PrivacyInfo.xcprivacy`, which is the source of truth:
       precise location (not linked, app functionality), email address and
-      user id (linked), photos and other user content (linked). No tracking.
-      Change the manifest first if the answers change.
+      user id (linked), photos and other user content (linked), and for
+      Share Usage and Diagnostics (#147): crash data, performance data and
+      other diagnostic data (linked = yes, tracking = no, app
+      functionality), product interaction and other usage data (linked =
+      yes, tracking = no, analytics). Linked because a signed-in user's
+      reports carry their user id. No tracking. Change the manifest first if
+      the answers change.
 - [ ] **App Review notes** (App Store Connect → version → App Review
       Information). Paste something like:
 
@@ -106,11 +133,13 @@ Status as of 2026-10-29 is in brackets.
      -derivedDataPath build/dd -skipPackagePluginValidation \
      CODE_SIGNING_ALLOWED=NO build
    ```
-   Then confirm the built `Info.plist` has `SUPABASE_URL` set and
-   `TEST_ACCOUNT_EMAIL` empty:
+   Then confirm the built `Info.plist` has `SUPABASE_URL`, `SENTRY_DSN`,
+   `POSTHOG_API_KEY` and `POSTHOG_HOST` set and `TEST_ACCOUNT_EMAIL` empty
+   (an empty `SENTRY_DSN` or `POSTHOG_API_KEY` ships a build that sends no
+   crash or usage reports):
    ```sh
    plutil -p build/dd/Build/Products/Release-iphonesimulator/BodegasNYC.app/Info.plist \
-     | grep -E 'SUPABASE_URL|TEST_ACCOUNT|CFBundleShortVersionString|CFBundleVersion'
+     | grep -E 'SUPABASE_URL|SENTRY_DSN|POSTHOG|TEST_ACCOUNT|CFBundleShortVersionString|CFBundleVersion'
    ```
 4. **Smoke test on a device**, Release scheme: Xcode → Product → Scheme →
    Edit Scheme → Run → Build Configuration → Release, run on your iPhone,
@@ -121,6 +150,22 @@ Status as of 2026-10-29 is in brackets.
 6. **Upload**: Organizer → Distribute App → App Store Connect → Upload.
    Keep "Upload your app's symbols" on. Automatic signing handles the
    distribution certificate and profile.
+6a. **Upload debug symbols to Sentry** (#147 D6), so crash reports name
+   `BodegasNYC` functions instead of addresses. Find the archive in
+   Organizer (right-click → Show in Finder), then:
+   ```sh
+   export SENTRY_AUTH_TOKEN=$(cat ~/.config/bodegasnyc/sentry-token)
+   ARCHIVE=~/Library/Developer/Xcode/Archives/<date>/<archive>.xcarchive
+   sentry-cli debug-files upload --org heerheer --project my-bodegas-ios "$ARCHIVE/dSYMs"
+   ```
+6b. **Check the symbols match the binary** (#147 E8, AC 15; required on the
+   first TestFlight build, a spot check after): the UUIDs of the archived app
+   binary must be listed under Sentry → Settings → Debug Files.
+   ```sh
+   dwarfdump --uuid "$ARCHIVE/Products/Applications/BodegasNYC.app/BodegasNYC"
+   ```
+   A UUID missing from Debug Files means the upload took the wrong dSYMs;
+   upload again from this archive before relying on crash reports.
 7. **Tag the commit** you archived from, so the build maps back to source:
    ```sh
    git tag -a v1.0-1 -m "App Store build 1 of 1.0" && git push origin v1.0-1
@@ -132,6 +177,23 @@ Status as of 2026-10-29 is in brackets.
 9. **TestFlight first** if the change touched location, sign-in or photo
    upload: install the processed build via TestFlight on your own phone
    before submitting. It is the same binary App Review will see.
+
+## Runbook: analytics cleanup after account deletion
+
+`delete-account` deletes the user's PostHog person with its events right
+after the account (#147 DS4). It never fails the deletion over it: a missing
+`POSTHOG_*` secret or a PostHog error is logged instead, with the user id
+hashed. Weekly, and within 30 days of any deletion (the privacy policy's
+promise):
+
+1. Supabase dashboard → Edge Functions → `delete-account` → Logs, search for
+   `analytics cleanup failed` and `analytics cleanup skipped`.
+2. For each line, take the deleted user's id from Supabase → Authentication
+   → Logs at the same time (the `user_deleted` entry), check it matches the
+   logged hash (`printf %s <user-id> | shasum -a 256 | cut -c1-12`), then in
+   PostHog → People search that id and delete the person with "Delete
+   events" checked.
+3. Crash reports in Sentry need no action: they expire after 90 days.
 
 ## After approval
 
@@ -151,5 +213,12 @@ grep -rnE 'UserDefaults|systemUptime|mach_absolute_time|modificationDate|creatio
   build/dd/SourcePackages/checkouts/<package>/Sources
 ```
 
-Packages that ship their own `PrivacyInfo.xcprivacy` (swift-crypto does) are
-covered by Xcode when it aggregates the manifests at archive time.
+Packages that ship their own `PrivacyInfo.xcprivacy` (swift-crypto,
+sentry-cocoa and posthog-ios do) are covered by Xcode when it aggregates the
+manifests at archive time. After bumping Sentry or PostHog, compare their
+manifests' collected data types and required-reason APIs with
+`BodegasNYC/PrivacyInfo.xcprivacy` and the App Privacy answers above (#147):
+```sh
+find build/dd/SourcePackages -name PrivacyInfo.xcprivacy -path '*entry*' -o \
+  -name PrivacyInfo.xcprivacy -path '*osthog*'
+```
