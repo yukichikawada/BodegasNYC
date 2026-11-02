@@ -137,7 +137,9 @@ struct BrowseView: View {
                 picker
             } label: {
                 // The principal slot gives a bare icon (no glass button), so the
-                // label carries its own 44 pt target.
+                // label carries its own target: 44 pt wide, and as tall as the
+                // toolbar allows (it caps items at 36 pt, the same as the
+                // system Filters button), so taps near the glyph's edge count.
                 Label(activeTab.label, systemImage: activeTab.systemImage)
                     .labelStyle(.iconOnly)
                     .frame(minWidth: 44, minHeight: 44)
