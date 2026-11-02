@@ -30,20 +30,20 @@ Status as of 2026-10-29 is in brackets.
          the hosted project): delete a throwaway Apple account, then check
          Settings → Apple Account → Sign in with Apple no longer lists My
          Bodegas. Part of #139.
-- [ ] **Sentry and PostHog projects** (#147, owner only). `SENTRY_DSN` is
-      committed (org `heerheer`); `POSTHOG_API_KEY` stays empty until step
-      2 is done, and an empty key skips that vendor with a log line.
+- [ ] **Sentry and PostHog projects** (#147, owner only). `SENTRY_DSN` and
+      `POSTHOG_API_KEY` are committed (Sentry org `heerheer`; both are public
+      client keys). An empty key would skip that vendor with a log line.
       1. [DSN committed] Sentry: sign up at sentry.io (US region), create an org and a
          project with platform "Apple iOS" (`my-bodegas-ios`), copy the DSN.
          Create an organization token (Settings → Organization Tokens; its
          fixed `org:ci` scope covers debug-file upload and release creation),
          save it to `~/.config/bodegasnyc/sentry-token` (`chmod 600`), and
          `brew install getsentry/tools/sentry-cli`.
-      2. PostHog: sign up at us.posthog.com, create a project "My Bodegas",
+      2. [token committed] PostHog: sign up at us.posthog.com, create a project "My Bodegas",
          copy the project API key (starts with `phc_`). Leave session replay
          and autocapture off in the project settings; the SDK has them off
          too.
-      3. Put the DSN and key into the `SENTRY_DSN` and `POSTHOG_API_KEY`
+      3. [done] Put the DSN and key into the `SENTRY_DSN` and `POSTHOG_API_KEY`
          build settings (Debug and Release, target BodegasNYC) and commit.
          `POSTHOG_HOST` is already `https://us.i.posthog.com`.
       4. PostHog → Settings → Personal API keys: create a key scoped to

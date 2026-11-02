@@ -465,7 +465,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkempmZHZvdGtvZHdpbXRzaXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3Mjc0NDIsImV4cCI6MjEwMDMwMzQ0Mn0._h4m1B9oYu8LNR78a-RezEJesGonIRjxjTP28eH0zG8";
-				POSTHOG_API_KEY = "";
+				POSTHOG_API_KEY = phc_pnmX4NSeaRPU3Laqbuvhv6mxoXY4fpT28qc2TzAUfHRY;
 				POSTHOG_HOST = "https://us.i.posthog.com";
 				SENTRY_DSN = "https://d8bd1fb08d2262ec888fca74dc594120@o4512155836809216.ingest.us.sentry.io/4512359861649408";
 				SUPABASE_URL = "https://fdzjfdvotkodwimtsiuu.supabase.co";
@@ -499,7 +499,7 @@
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZkempmZHZvdGtvZHdpbXRzaXV1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ3Mjc0NDIsImV4cCI6MjEwMDMwMzQ0Mn0._h4m1B9oYu8LNR78a-RezEJesGonIRjxjTP28eH0zG8";
-				POSTHOG_API_KEY = "";
+				POSTHOG_API_KEY = phc_pnmX4NSeaRPU3Laqbuvhv6mxoXY4fpT28qc2TzAUfHRY;
 				POSTHOG_HOST = "https://us.i.posthog.com";
 				SENTRY_DSN = "https://d8bd1fb08d2262ec888fca74dc594120@o4512155836809216.ingest.us.sentry.io/4512359861649408";
 				SUPABASE_URL = "https://fdzjfdvotkodwimtsiuu.supabase.co";
