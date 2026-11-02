@@ -33,15 +33,23 @@ final class AddReviewViewModel: Identifiable {
 
     private let reviewService: ReviewService
     private let sessionStore: SessionStore
+    private let telemetry: Telemetry
     private var submitTask: Task<Void, Never>?
 
     var isRatingValid: Bool { (1...5).contains(rating) }
 
-    init(bodegaId: UUID, existingReview: Review?, reviewService: ReviewService, sessionStore: SessionStore) {
+    init(
+        bodegaId: UUID,
+        existingReview: Review?,
+        reviewService: ReviewService,
+        sessionStore: SessionStore,
+        telemetry: Telemetry = Telemetry(sinks: [])
+    ) {
         self.bodegaId = bodegaId
         self.existingReview = existingReview
         self.reviewService = reviewService
         self.sessionStore = sessionStore
+        self.telemetry = telemetry
         self.rating = existingReview?.rating ?? 0
         self.body = existingReview?.body ?? ""
     }
@@ -58,7 +66,7 @@ final class AddReviewViewModel: Identifiable {
         submitTask?.cancel()
         submissionState = .submitting
         let trimmedBody = body.trimmingCharacters(in: .whitespacesAndNewlines)
-        submitTask = Task { [reviewService, bodegaId, existingReview, rating, trimmedBody, userID] in
+        submitTask = Task { [reviewService, bodegaId, existingReview, rating, trimmedBody, userID, telemetry] in
             do {
                 let saved: Review
                 if let existingReview {
@@ -77,8 +85,11 @@ final class AddReviewViewModel: Identifiable {
                     )
                 }
                 guard !Task.isCancelled else { return }
+                // A new review only; an edit is not an add (#147 table).
+                if existingReview == nil { telemetry.capture(.reviewAdded) }
                 submissionState = .submitted(saved)
             } catch {
+                telemetry.record(error, context: "review.submit")
                 guard !Task.isCancelled else { return }
                 submissionState = .failed(error.localizedDescription)
             }

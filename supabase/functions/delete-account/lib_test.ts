@@ -11,9 +11,12 @@ import {
   type AppleConfig,
   buildClientSecret,
   type Deps,
+  envFrom,
   handleRequest,
+  hashedUserID,
   LIST_PAGE_SIZE,
   parseAppleCode,
+  POSTHOG_API_URL,
 } from "./lib.ts";
 
 const SUPABASE_URL = "http://supabase.test";
@@ -385,4 +388,166 @@ Deno.test("a deleteUser failure answers 502 and sweeps nothing", async () => {
   assert(backend.userExists);
   assertEquals(backend.objects, ["b/1.jpg"]);
   assertEquals(backend.callsTo("/rpc/storage_paths_owned_by").length, 0);
+});
+
+// MARK: - Analytics cleanup (#147 DS4)
+
+const POSTHOG_KEY = "phx_personal_key_for_tests";
+const POSTHOG_PROJECT = "4242";
+const PERSON_UUID = "0190a1b2-c3d4-7e5f-8a9b-0c1d2e3f4a5b";
+const PERSONS_URL = `${POSTHOG_API_URL}/api/projects/${POSTHOG_PROJECT}/persons/`;
+
+/**
+ * PostHog's persons API in front of the Supabase fake: the lookup by
+ * distinct id and the delete, each scriptable (a status, or a thrown network
+ * error). Everything else goes to `backend`.
+ */
+class FakePostHog {
+  lookupStatus = 200;
+  deleteStatus = 204;
+  throwOnRequest = false;
+  people: unknown[] = [{ id: 7, uuid: PERSON_UUID, distinct_ids: [USER_ID] }];
+  calls: { method: string; url: string; authorization: string | null; accountExisted: boolean }[] = [];
+
+  constructor(private backend: FakeBackend) {}
+
+  fetch = (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
+    const url = String(input);
+    if (!url.startsWith(POSTHOG_API_URL)) return this.backend.fetch(input, init);
+    const method = init?.method ?? "GET";
+    const authorization = new Headers(init?.headers).get("Authorization");
+    this.calls.push({ method, url, authorization, accountExisted: this.backend.userExists });
+    if (this.throwOnRequest) return Promise.reject(new TypeError("network down"));
+    if (method === "GET") {
+      return Promise.resolve(
+        new Response(JSON.stringify({ results: this.people }), { status: this.lookupStatus }),
+      );
+    }
+    return Promise.resolve(new Response(null, { status: this.deleteStatus }));
+  };
+}
+
+async function makePostHogDeps(
+  backend: FakeBackend,
+  posthog: FakePostHog,
+  lines: string[],
+  configured = true,
+): Promise<Deps> {
+  const deps = await makeDeps(backend, false);
+  return {
+    ...deps,
+    env: { ...deps.env, posthog: configured ? { personalApiKey: POSTHOG_KEY, projectId: POSTHOG_PROJECT } : null },
+    fetch: posthog.fetch,
+    log: (line) => lines.push(line),
+  };
+}
+
+function emailUserBackend(): FakeBackend {
+  const backend = new FakeBackend();
+  backend.identities = [emailIdentity];
+  backend.objects = ["b/1.jpg"];
+  return backend;
+}
+
+// protects=DS4: after deleteUser, the person found by distinct id (the user
+//   id) is deleted with its events, using the personal API key, and the
+//   response is the usual 204;
+// fails_when=the lookup is not by the user id, the delete lacks
+//   delete_events=true or the bearer key, it runs before deleteUser, or the
+//   response changes;
+// no_claim=PostHog's real API (the owner's first live deletion, RELEASE.md).
+Deno.test("analytics cleanup deletes the PostHog person and its events after the account", async () => {
+  const backend = emailUserBackend();
+  const posthog = new FakePostHog(backend);
+  const lines: string[] = [];
+  const response = await handleRequest(deleteRequest(null), await makePostHogDeps(backend, posthog, lines));
+
+  assertEquals(response.status, 204);
+  assert(!backend.userExists);
+  assertEquals(posthog.calls.map((call) => [call.method, call.url]), [
+    ["GET", `${PERSONS_URL}?distinct_id=${USER_ID}`],
+    ["DELETE", `${PERSONS_URL}${PERSON_UUID}/?delete_events=true`],
+  ]);
+  assert(posthog.calls.every((call) => call.authorization === `Bearer ${POSTHOG_KEY}`));
+  assert(posthog.calls.every((call) => !call.accountExisted), "the cleanup must run after deleteUser");
+  assertEquals(lines, []);
+});
+
+// protects=a 4xx from PostHog (lookup or delete) never changes the outcome:
+//   204, account deleted, one "analytics cleanup failed" line carrying the
+//   hashed user id and the status, never the raw id or the key;
+// fails_when=the response becomes an error, the line is missing, or it leaks
+//   the user id or key;
+// no_claim=which statuses PostHog really returns for a bad key.
+Deno.test("a PostHog 4xx is logged with a hashed id and leaves the response alone", async () => {
+  const hash = await hashedUserID(USER_ID);
+  for (const step of ["lookup", "delete"] as const) {
+    const backend = emailUserBackend();
+    const posthog = new FakePostHog(backend);
+    if (step === "lookup") posthog.lookupStatus = 401;
+    else posthog.deleteStatus = 403;
+    const lines: string[] = [];
+    const response = await handleRequest(deleteRequest(null), await makePostHogDeps(backend, posthog, lines));
+
+    assertEquals(response.status, 204, step);
+    assert(!backend.userExists);
+    assertEquals(lines.length, 1, step);
+    assert(lines[0].includes("analytics cleanup failed"), lines[0]);
+    assert(lines[0].includes(hash) && lines[0].includes(step === "lookup" ? "401" : "403"), lines[0]);
+    assert(!lines[0].includes(USER_ID) && !lines[0].includes(POSTHOG_KEY), lines[0]);
+  }
+});
+
+// protects=a network failure reaching PostHog is logged and swallowed: the
+//   account is still deleted and the client still gets 204 (or 202 when the
+//   sweep also failed, unchanged);
+// fails_when=the error propagates into a 5xx or the sweep outcome changes;
+// no_claim=the 5 s timeout's behaviour on the real runtime.
+Deno.test("a PostHog network failure is logged and the response is unchanged", async () => {
+  const backend = emailUserBackend();
+  const posthog = new FakePostHog(backend);
+  posthog.throwOnRequest = true;
+  const lines: string[] = [];
+  const response = await handleRequest(deleteRequest(null), await makePostHogDeps(backend, posthog, lines));
+  assertEquals(response.status, 204);
+  assert(!backend.userExists);
+  assertEquals(lines.length, 1);
+  assert(lines[0].includes("analytics cleanup failed"), lines[0]);
+
+  const failingSweep = emailUserBackend();
+  failingSweep.failures.list = [503, 503];
+  const posthog2 = new FakePostHog(failingSweep);
+  posthog2.throwOnRequest = true;
+  const pending = await handleRequest(deleteRequest(null), await makePostHogDeps(failingSweep, posthog2, []));
+  assertEquals(pending.status, 202);
+  assertEquals((await pending.json()).code, "cleanup_pending");
+});
+
+// protects=without the POSTHOG_* secrets the step makes no request and logs
+//   "analytics cleanup skipped" with the hashed id; envFrom only builds the
+//   config when both secrets are set;
+// fails_when=a request goes out with an empty key, the line is missing, or
+//   one secret alone enables the step;
+// no_claim=none beyond protects.
+Deno.test("missing PostHog secrets skip the cleanup with a log line", async () => {
+  const backend = emailUserBackend();
+  const posthog = new FakePostHog(backend);
+  const lines: string[] = [];
+  const response = await handleRequest(
+    deleteRequest(null),
+    await makePostHogDeps(backend, posthog, lines, false),
+  );
+  assertEquals(response.status, 204);
+  assertEquals(posthog.calls, []);
+  assertEquals(lines, [
+    `delete-account: analytics cleanup skipped (POSTHOG_* secrets not set) for user ${await hashedUserID(USER_ID)}`,
+  ]);
+
+  const env = (values: Record<string, string>) => envFrom((name) => values[name]);
+  assertEquals(env({ POSTHOG_PERSONAL_API_KEY: "k" }).posthog, null);
+  assertEquals(env({ POSTHOG_PROJECT_ID: "1" }).posthog, null);
+  assertEquals(env({ POSTHOG_PERSONAL_API_KEY: "k", POSTHOG_PROJECT_ID: "1" }).posthog, {
+    personalApiKey: "k",
+    projectId: "1",
+  });
 });

@@ -18,11 +18,15 @@
 //      up to 1,000. On failure, once more; then 202 cleanup_pending, since
 //      the account itself is gone. (This replaces the spec's 502
 //      storage_remove_failed: after deleteUser, a 5xx would be untrue.)
-//   5. 204.
+//   5. Analytics cleanup (#147 DS4), best effort: look the PostHog person up
+//      by distinct id (the user id) and delete it with its events. A missing
+//      secret or any failure is logged with a hashed user id and never
+//      changes the response; the RELEASE.md runbook finishes those by hand.
+//   6. 204.
 //
 // Every step is idempotent, so the client simply calls again after an error.
 // Never log the authorization code, tokens or the key: log lines carry the
-// step and an HTTP status only.
+// step and an HTTP status only, and the analytics step a hashed user id.
 
 import { importPKCS8, SignJWT } from "jose";
 
@@ -36,11 +40,19 @@ export interface AppleConfig {
   privateKey: string;
 }
 
+export interface PostHogAdminConfig {
+  /** A personal API key with person read and write scopes. */
+  personalApiKey: string;
+  projectId: string;
+}
+
 export interface Env {
   supabaseUrl: string;
   serviceRoleKey: string;
   /** Absent when the APPLE_* secrets are not set (the local QA stack). */
   apple: AppleConfig | null;
+  /** Absent (or null) until the owner sets the POSTHOG_* secrets (#147 DS4). */
+  posthog?: PostHogAdminConfig | null;
 }
 
 export interface Deps {
@@ -60,6 +72,10 @@ export const REMOVE_BATCH_SIZE = 1000;
 export const LIST_PAGE_SIZE = 1000;
 /** The client secret lives five minutes: it is built per call. */
 export const CLIENT_SECRET_LIFETIME_SECONDS = 300;
+/** PostHog's private API for the US cloud (the app ingests at us.i.posthog.com). */
+export const POSTHOG_API_URL = "https://us.posthog.com";
+/** Each PostHog request gets this long; the deletion has already happened. */
+export const POSTHOG_TIMEOUT_MS = 5000;
 
 export type ErrorCode =
   | "bad_request"
@@ -122,7 +138,10 @@ export function envFrom(get: (name: string) => string | undefined): Env {
   const keyId = get("APPLE_KEY_ID");
   const privateKey = get("APPLE_PRIVATE_KEY");
   const apple = clientId && teamId && keyId && privateKey ? { clientId, teamId, keyId, privateKey } : null;
-  return { supabaseUrl: supabaseUrl.replace(/\/+$/, ""), serviceRoleKey, apple };
+  const personalApiKey = get("POSTHOG_PERSONAL_API_KEY");
+  const projectId = get("POSTHOG_PROJECT_ID");
+  const posthog = personalApiKey && projectId ? { personalApiKey, projectId } : null;
+  return { supabaseUrl: supabaseUrl.replace(/\/+$/, ""), serviceRoleKey, apple, posthog };
 }
 
 // MARK: - Request validation
@@ -411,6 +430,70 @@ async function sweepOwnedObjects(deps: Deps, owner: string): Promise<boolean> {
   return false;
 }
 
+// MARK: - Analytics cleanup (#147 DS4)
+
+/** The first 12 hex digits of the user id's SHA-256: enough to match log lines, not to recover the id. */
+export async function hashedUserID(userID: string): Promise<string> {
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(userID));
+  return Array.from(new Uint8Array(digest).slice(0, 6), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+export type AnalyticsCleanup = "deleted" | "no_person" | "skipped" | "failed";
+
+/**
+ * Deletes the user's PostHog person and its events (`delete_events=true`).
+ * Best effort: never throws, and the response never depends on it. The app
+ * identifies with the lowercased user id, which is the id GoTrue returns.
+ */
+export async function cleanUpAnalytics(deps: Deps, userID: string): Promise<AnalyticsCleanup> {
+  const log = deps.log ?? console.error;
+  const user = await hashedUserID(userID);
+  const posthog = deps.env.posthog;
+  if (!posthog) {
+    log(`delete-account: analytics cleanup skipped (POSTHOG_* secrets not set) for user ${user}`);
+    return "skipped";
+  }
+  const project = `${POSTHOG_API_URL}/api/projects/${encodeURIComponent(posthog.projectId)}`;
+  const headers = { Authorization: `Bearer ${posthog.personalApiKey}` };
+  try {
+    const lookup = await deps.fetch(`${project}/persons/?distinct_id=${encodeURIComponent(userID)}`, {
+      headers,
+      signal: AbortSignal.timeout(POSTHOG_TIMEOUT_MS),
+    });
+    if (!lookup.ok) {
+      await lookup.body?.cancel();
+      log(`delete-account: analytics cleanup failed (person lookup returned ${lookup.status}) for user ${user}`);
+      return "failed";
+    }
+    const body = await lookup.json() as { results?: unknown };
+    const people = Array.isArray(body?.results) ? body.results : null;
+    if (people === null) {
+      log(`delete-account: analytics cleanup failed (person lookup returned a malformed body) for user ${user}`);
+      return "failed";
+    }
+    const uuids = people
+      .map((person) => (person as { uuid?: unknown })?.uuid)
+      .filter((uuid): uuid is string => typeof uuid === "string" && uuid.length > 0);
+    if (uuids.length === 0) return "no_person";
+    for (const uuid of uuids) {
+      const removal = await deps.fetch(`${project}/persons/${encodeURIComponent(uuid)}/?delete_events=true`, {
+        method: "DELETE",
+        headers,
+        signal: AbortSignal.timeout(POSTHOG_TIMEOUT_MS),
+      });
+      await removal.body?.cancel();
+      if (!removal.ok) {
+        log(`delete-account: analytics cleanup failed (person delete returned ${removal.status}) for user ${user}`);
+        return "failed";
+      }
+    }
+    return "deleted";
+  } catch {
+    log(`delete-account: analytics cleanup failed (request error) for user ${user}`);
+    return "failed";
+  }
+}
+
 // MARK: - Handler
 
 export async function handleRequest(request: Request, deps: Deps): Promise<Response> {
@@ -464,6 +547,13 @@ export async function handleRequest(request: Request, deps: Deps): Promise<Respo
   return await finishWithSweep(deps, user.id);
 }
 
+/**
+ * Everything after the account is gone (a fresh delete, or the gone path of
+ * a lost 204): the photo sweep, then the analytics cleanup, which runs in
+ * both cases and never changes the response.
+ */
 async function finishWithSweep(deps: Deps, userID: string): Promise<Response> {
-  return (await sweepOwnedObjects(deps, userID)) ? new Response(null, { status: 204 }) : cleanupPendingResponse();
+  const swept = await sweepOwnedObjects(deps, userID);
+  await cleanUpAnalytics(deps, userID);
+  return swept ? new Response(null, { status: 204 }) : cleanupPendingResponse();
 }

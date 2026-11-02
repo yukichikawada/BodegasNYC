@@ -88,6 +88,7 @@ final class BodegaMapViewModel {
     }
 
     private let bodegaService: BodegaService
+    private let telemetry: Telemetry
     private var loadedBodegas: [Bodega] = []
     private var lastRegion: MKCoordinateRegion?
     private var fetchTask: Task<Void, Never>?
@@ -105,8 +106,9 @@ final class BodegaMapViewModel {
 
     private static let nearbyRadiusRange: ClosedRange<Double> = 200...5000
 
-    init(bodegaService: BodegaService) {
+    init(bodegaService: BodegaService, telemetry: Telemetry = Telemetry(sinks: [])) {
         self.bodegaService = bodegaService
+        self.telemetry = telemetry
     }
 
     /// Fetches once in `.all` mode if nothing has loaded yet. Safe to call
@@ -192,6 +194,7 @@ final class BodegaMapViewModel {
                     recluster(region: lastRegion)
                 }
             } catch {
+                telemetry.record(error, context: "map.fetch")
                 guard generation == currentFetchGeneration else { return }
                 pendingLocalChanges = PendingBodegaChanges()
                 loadState = .failed(error.localizedDescription)

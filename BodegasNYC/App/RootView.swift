@@ -63,6 +63,7 @@ struct RootView: View {
     /// it doesn't exist yet, it picks the pending add up when it appears.
     private func finishOnboarding(wantsToAdd: Bool) {
         firstRunState.completeOnboarding(wantsToAdd: wantsToAdd)
+        appDelegate.telemetry.capture(.onboardingCompleted(wantsToAdd: wantsToAdd))
         withAnimation(OnboardingView.animation(reduceMotion: reduceMotion)) {
             showingOnboarding = false
         }
@@ -90,7 +91,8 @@ struct RootView: View {
                 locationPermissionClient: environment.locationPermissionClient,
                 streetsWalkedViewModel: environment.streetsWalkedViewModel,
                 firstRunState: firstRunState,
-                showingOnboarding: $showingOnboarding
+                showingOnboarding: $showingOnboarding,
+                telemetry: environment.telemetry
             )
         case .failed(let message):
             VStack(spacing: 12) {
@@ -124,10 +126,12 @@ struct RootView: View {
             let environment = AppEnvironment(
                 supabaseEnvironment: supabaseEnvironment,
                 locationPermissionClient: locationPermissionClient,
-                streetsWalkedViewModel: streetsWalkedViewModel
+                streetsWalkedViewModel: streetsWalkedViewModel,
+                telemetry: appDelegate.telemetry
             )
             state = .ready(environment)
         } catch {
+            appDelegate.telemetry.record(error, context: "root.load")
             state = .failed(error.localizedDescription)
         }
     }

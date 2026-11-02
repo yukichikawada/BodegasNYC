@@ -47,13 +47,46 @@ struct AddReviewViewModelTests {
         updatedAt: Date(timeIntervalSince1970: 0)
     )
 
-    private func makeViewModel(existingReview: Review? = nil, session: Session?) throws -> AddReviewViewModel {
+    private func makeViewModel(
+        existingReview: Review? = nil,
+        session: Session?,
+        telemetry: Telemetry = Telemetry(sinks: [])
+    ) throws -> AddReviewViewModel {
         AddReviewViewModel(
             bodegaId: Self.bodegaID,
             existingReview: existingReview,
             reviewService: ReviewService(postgrest: makeTestPostgrestClient()),
-            sessionStore: SessionStore(auth: try makeTestAuthClient(session: session))
+            sessionStore: SessionStore(auth: try makeTestAuthClient(session: session)),
+            telemetry: telemetry
         )
+    }
+
+    /// protects=a new review captures `review_added` (no properties, eng
+    /// E4) once, and an edit or a failure captures nothing (#147);
+    /// fails_when=an edit counts as an add, a failed insert emits, or the
+    /// event carries a bodega id; no_claim=delivery to PostHog (live QA).
+    @Test func aNewReviewCapturesReviewAddedAndAnEditDoesNot() async throws {
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(body: Data(Self.reviewJSON.utf8))
+        MockURLProtocol.stub(body: Data(Self.reviewJSON.utf8))
+        MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))
+        let (telemetry, sink) = makeRecordingTelemetry()
+        let session = makeTestSession(userID: Self.authorID)
+
+        let added = try makeViewModel(session: session, telemetry: telemetry)
+        added.rating = 4
+        added.submit()
+        await added.waitForPendingSubmitForTesting()
+        let edited = try makeViewModel(existingReview: Self.existingReview, session: session, telemetry: telemetry)
+        edited.submit()
+        await edited.waitForPendingSubmitForTesting()
+        let failed = try makeViewModel(session: session, telemetry: telemetry)
+        failed.rating = 4
+        failed.submit()
+        await failed.waitForPendingSubmitForTesting()
+
+        #expect(sink.events == [.reviewAdded])
+        #expect(sink.reports.map(\.context) == ["review.submit"])
     }
 
     @Test func submitIsRejectedWithoutARating() async throws {

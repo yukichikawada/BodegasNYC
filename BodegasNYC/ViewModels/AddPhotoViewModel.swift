@@ -126,6 +126,7 @@ final class AddPhotoViewModel: Identifiable {
     private let photoService: PhotoService
     /// Also what the sheet's sign-in prompt signs in to.
     let sessionStore: SessionStore
+    private let telemetry: Telemetry
     private let onUploaded: (Photo) -> Void
     private var hasStartedLoading = false
     private var stopRequested = false
@@ -142,6 +143,7 @@ final class AddPhotoViewModel: Identifiable {
         itemIDs: [UUID]? = nil,
         photoService: PhotoService,
         sessionStore: SessionStore,
+        telemetry: Telemetry = Telemetry(sinks: []),
         onUploaded: @escaping (Photo) -> Void = { _ in }
     ) {
         precondition(itemIDs == nil || itemIDs?.count == sources.count, "one item id per source")
@@ -151,6 +153,7 @@ final class AddPhotoViewModel: Identifiable {
         self.items = (itemIDs ?? sources.map { _ in UUID() }).map { Item(id: $0) }
         self.photoService = photoService
         self.sessionStore = sessionStore
+        self.telemetry = telemetry
         self.onUploaded = onUploaded
     }
 
@@ -296,8 +299,10 @@ final class AddPhotoViewModel: Identifiable {
                         id: itemID, bodegaId: bodegaId, uploadedBy: userID, data: jpeg, caption: caption
                     )
                     onUploaded(photo)
+                    telemetry.capture(.photoAdded(hasCaption: caption != nil))
                     result = .uploaded(photo)
                 } catch {
+                    telemetry.record(error, context: "photo.upload")
                     result = .failed
                 }
                 if let index = items.firstIndex(where: { $0.id == itemID }) {

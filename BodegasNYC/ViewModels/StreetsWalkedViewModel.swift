@@ -100,6 +100,7 @@ final class StreetsWalkedViewModel {
     let recorder: WalkRecorder
     /// Posts a VoiceOver announcement (design DS7); injected for tests.
     let announce: @MainActor (String) -> Void
+    @ObservationIgnored private let telemetry: Telemetry // walk_started/stopped (#147)
     private let matcher: BlockMatchingActor
     let motion: any MotionActivityProviding
     private var refreshTask: Task<Void, Never>?
@@ -124,9 +125,11 @@ final class StreetsWalkedViewModel {
         motion: any MotionActivityProviding = CoreMotionActivityProvider(),
         matcher: BlockMatchingActor? = nil,
         firstCountRetryDelay: Duration = .milliseconds(500),
-        announce: @escaping @MainActor (String) -> Void = StreetsWalkedViewModel.postAnnouncement
+        announce: @escaping @MainActor (String) -> Void = StreetsWalkedViewModel.postAnnouncement,
+        telemetry: Telemetry = Telemetry(sinks: [])
     ) {
         self.announce = announce
+        self.telemetry = telemetry
         self.firstCountRetryDelay = firstCountRetryDelay
         self.locationPermissionClient = locationPermissionClient
         self.modelContainer = modelContainer
@@ -181,8 +184,10 @@ final class StreetsWalkedViewModel {
         do {
             try recorder.start()
         } catch {
+            telemetry.record(error, context: "streets_walked.enable_tracking")
             throw StreetsWalkedError.authorizationNotGranted
         }
+        telemetry.capture(.walkStarted)
         scheduleRefresh()
     }
 
@@ -190,6 +195,7 @@ final class StreetsWalkedViewModel {
     /// an explicit, separate, destructive action (`clearHistory()`).
     func disableTracking() {
         recorder.stop()
+        telemetry.capture(.walkStopped)
     }
 
     /// Re-reads Motion & Fitness; writes only on a change. The asks are in

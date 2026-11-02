@@ -135,7 +135,8 @@ struct StreetsWalkedViewModelTests {
         gridLoads: Bool = true,
         failingCommits: Int = 0,
         failingAt: BlockMatchingActor.CommitPoint = .beforeCheck,
-        seam: @escaping @Sendable (BlockMatchingActor.CommitPoint) -> Void = { _ in }
+        seam: @escaping @Sendable (BlockMatchingActor.CommitPoint) -> Void = { _ in },
+        telemetry: Telemetry = Telemetry(sinks: [])
     ) throws -> Harness {
         let container = try container ?? makeInMemoryModelContainer()
         let defaults = try defaults ?? #require(UserDefaults(suiteName: "StreetsWalkedViewModelTests.\(UUID().uuidString)"))
@@ -173,7 +174,8 @@ struct StreetsWalkedViewModelTests {
             motion: motion,
             matcher: matcher,
             firstCountRetryDelay: .zero,
-            announce: { announcements.texts.append($0) }
+            announce: { announcements.texts.append($0) },
+            telemetry: telemetry
         )
         return Harness(
             viewModel: viewModel,
@@ -263,6 +265,21 @@ struct StreetsWalkedViewModelTests {
         #expect(try harness.context.fetch(FetchDescriptor<WalkedBlock>()).isEmpty)
         #expect(harness.viewModel.boroughProgress.allSatisfy { $0.walked == 0 })
         #expect(harness.viewModel.hasHistory == false)
+    }
+
+    /// protects=Stop Recording captures `walk_stopped`, and a Start that
+    /// fails for want of Always captures no `walk_started` (#147);
+    /// fails_when=a refused start counts as a walk, or a stop is missed;
+    /// no_claim=`walk_started` on a granted start, which needs Always from
+    /// the real `LocationPermissionClient` (live QA).
+    @Test func stopCapturesWalkStoppedAndARefusedStartCapturesNothing() async throws {
+        let (telemetry, sink) = makeRecordingTelemetry()
+        let harness = try makeHarness(telemetry: telemetry)
+
+        try? await harness.viewModel.enableTracking()
+        harness.viewModel.disableTracking()
+
+        #expect(sink.events == [.walkStopped])
     }
 
     @Test func enableTrackingThrowsWithoutAlwaysAuthorization() async throws {

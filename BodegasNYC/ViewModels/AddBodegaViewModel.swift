@@ -76,6 +76,7 @@ final class AddBodegaViewModel: Identifiable {
 
     private let bodegaService: BodegaService
     private let sessionStore: SessionStore
+    private let telemetry: Telemetry
     private let clock: any Clock<Duration>
     private var submitTask: Task<Void, Never>?
     /// Set by `confirmNew()` and never reset: the pin can't move, so once
@@ -94,12 +95,14 @@ final class AddBodegaViewModel: Identifiable {
         existingBodega: Bodega? = nil,
         bodegaService: BodegaService,
         sessionStore: SessionStore,
+        telemetry: Telemetry = Telemetry(sinks: []),
         clock: any Clock<Duration> = ContinuousClock()
     ) {
         self.coordinate = coordinate
         self.existingBodega = existingBodega
         self.bodegaService = bodegaService
         self.sessionStore = sessionStore
+        self.telemetry = telemetry
         self.clock = clock
         if let existingBodega {
             name = existingBodega.name
@@ -197,6 +200,7 @@ final class AddBodegaViewModel: Identifiable {
             guard !Task.isCancelled else { return }
             submissionState = .submitted(saved)
         } catch {
+            telemetry.record(error, context: "add_bodega.submit")
             guard !Task.isCancelled else { return }
             submissionState = .failed(error.localizedDescription)
         }

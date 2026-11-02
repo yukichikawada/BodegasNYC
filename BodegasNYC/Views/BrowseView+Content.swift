@@ -28,7 +28,8 @@ extension BrowseView {
                 showsToolbar: activeTab == .map,
                 hasLeftMap: !path.isEmpty || activeTab == .list,
                 isForeground: isMapForeground,
-                firstRunState: firstRunState
+                firstRunState: firstRunState,
+                telemetry: telemetry
             )
             // Pin → detail (#23 T1): the held pin's state and the zoom's
             // namespace, and the pop / placement / List tab events it reacts to.
@@ -80,7 +81,7 @@ extension BrowseView {
         .sheet(
             isPresented: $showingAccount,
             onDismiss: { accountMenuFocused = true },
-            content: { AccountView(accountService: accountService, sessionStore: sessionStore) }
+            content: { AccountView(accountService: accountService, sessionStore: sessionStore, telemetry: telemetry) }
         )
         // Re-read on rotation (any size change); the window inset never
         // includes toolbars or the keyboard.
@@ -121,6 +122,7 @@ extension BrowseView {
     /// and the card rises over a map that is already uncovered (design
     /// review 3A). From the Map tab it starts at once, as before.
     func requestPlacement() {
+        addRoute.userStartsPlacement()
         guard activeTab == .list else {
             isPlacingBodega = true
             return

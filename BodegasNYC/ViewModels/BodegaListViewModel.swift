@@ -170,6 +170,7 @@ final class BodegaListViewModel {
     }
 
     private let bodegaService: BodegaService
+    private let telemetry: Telemetry
     private var fetchTask: Task<Void, Never>?
     /// Guards against a stale fetch's result overwriting a newer one — same
     /// rationale as `BodegaMapViewModel.currentFetchGeneration`, kept even
@@ -182,8 +183,9 @@ final class BodegaListViewModel {
     private var hasLoadedOnce = false
     private var pendingLocalChanges = PendingBodegaChanges()
 
-    init(bodegaService: BodegaService) {
+    init(bodegaService: BodegaService, telemetry: Telemetry = Telemetry(sinks: [])) {
         self.bodegaService = bodegaService
+        self.telemetry = telemetry
     }
 
     /// Safe to call on every view appearance — a no-op once `loadState` has
@@ -285,6 +287,7 @@ final class BodegaListViewModel {
                 hasLoadedOnce = true
                 loadState = .loaded
             } catch {
+                telemetry.record(error, context: "list.fetch")
                 guard generation == currentFetchGeneration else { return }
                 pendingLocalChanges = PendingBodegaChanges()
                 loadState = .failed(error.localizedDescription)

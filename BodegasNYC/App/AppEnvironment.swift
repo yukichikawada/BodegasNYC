@@ -21,11 +21,16 @@ struct AppEnvironment {
     /// shouldn't take down the app's core (Supabase-backed) bodega-finding
     /// loop. See `RootView.load()`.
     let streetsWalkedViewModel: StreetsWalkedViewModel?
+    /// `AppDelegate`'s one instance (#147), handed to `SessionStore` (which
+    /// identifies and resets it) and down to the views and view models that
+    /// capture events or record errors.
+    let telemetry: Telemetry
 
     init(
         supabaseEnvironment: SupabaseEnvironment,
         locationPermissionClient: LocationPermissionClient,
-        streetsWalkedViewModel: StreetsWalkedViewModel?
+        streetsWalkedViewModel: StreetsWalkedViewModel?,
+        telemetry: Telemetry
     ) {
         self.supabaseEnvironment = supabaseEnvironment
         bodegaService = BodegaService(postgrest: supabaseEnvironment.postgrest)
@@ -38,8 +43,9 @@ struct AppEnvironment {
             anonKey: supabaseEnvironment.anonKey,
             fetch: supabaseEnvironment.fetch
         )
-        sessionStore = SessionStore(auth: supabaseEnvironment.auth)
+        sessionStore = SessionStore(auth: supabaseEnvironment.auth, telemetry: telemetry)
         self.locationPermissionClient = locationPermissionClient
         self.streetsWalkedViewModel = streetsWalkedViewModel
+        self.telemetry = telemetry
     }
 }

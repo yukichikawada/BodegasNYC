@@ -42,11 +42,13 @@ final class AccountViewModel {
 
     private let accountService: AccountService
     private let sessionStore: SessionStore
+    private let telemetry: Telemetry
     private var deleteTask: Task<Void, Never>?
 
-    init(accountService: AccountService, sessionStore: SessionStore) {
+    init(accountService: AccountService, sessionStore: SessionStore, telemetry: Telemetry = Telemetry(sinks: [])) {
         self.accountService = accountService
         self.sessionStore = sessionStore
+        self.telemetry = telemetry
     }
 
     /// Whether deletion goes through Apple first.
@@ -122,14 +124,19 @@ final class AccountViewModel {
 
     private func delete(appleAuthorizationCode: String?) {
         state = .deleting
-        deleteTask = Task { [accountService, sessionStore] in
+        deleteTask = Task { [accountService, sessionStore, telemetry] in
             do throws(AccountService.Error) {
                 let outcome = try await accountService.deleteAccount(appleAuthorizationCode: appleAuthorizationCode)
                 // The server user is gone; the SDK clears the local session
                 // first and ignores the 401/403/404 from /logout.
-                await sessionStore.signOut()
+                await sessionStore.signOut(emitsEvent: false)
+                // After the sign-out's telemetry reset, so the event is
+                // anonymous: the function has already deleted the analytics
+                // person (#147 DS4), and an identified event would recreate it.
+                telemetry.capture(.accountDeleted)
                 state = .deleted(outcome)
             } catch {
+                telemetry.record(error, context: "account.delete")
                 state = .failed(Self.failureMessage(for: error))
             }
         }

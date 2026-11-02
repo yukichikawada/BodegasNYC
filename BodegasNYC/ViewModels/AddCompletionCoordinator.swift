@@ -93,6 +93,7 @@ final class AddCompletionCoordinator {
     @ObservationIgnored private let isVoiceOverRunning: () -> Bool
     @ObservationIgnored private let announce: (String) -> Void
     @ObservationIgnored private let onFirstAdd: () -> Void
+    @ObservationIgnored private let telemetry: Telemetry
     @ObservationIgnored private let clock: any Clock<Duration>
 
     /// The add in progress: its bodega, whether it is the first, and the
@@ -113,6 +114,7 @@ final class AddCompletionCoordinator {
         isVoiceOverRunning: @escaping () -> Bool = { UIAccessibility.isVoiceOverRunning },
         announce: @escaping (String) -> Void = { AddCompletionCoordinator.postHighPriorityAnnouncement($0) },
         onFirstAdd: @escaping () -> Void = {},
+        telemetry: Telemetry = Telemetry(sinks: []),
         clock: any Clock<Duration> = ContinuousClock()
     ) {
         self.firstRunState = firstRunState
@@ -122,6 +124,7 @@ final class AddCompletionCoordinator {
         self.isVoiceOverRunning = isVoiceOverRunning
         self.announce = announce
         self.onFirstAdd = onFirstAdd
+        self.telemetry = telemetry
         self.clock = clock
     }
 
@@ -148,6 +151,8 @@ final class AddCompletionCoordinator {
             // The first add ends the tutorial (#22).
             onFirstAdd()
         }
+        let amenityCount = BodegaFilter.Amenity.allCases.filter { $0.isSatisfied(by: bodega) }.count
+        telemetry.capture(.bodegaAdded(isFirst: isFirstAdd, amenityCount: amenityCount))
 
         current = bodega
         currentIsFirstAdd = isFirstAdd
@@ -155,12 +160,14 @@ final class AddCompletionCoordinator {
         moveCamera(Self.cameraCenter(for: bodega.coordinate))
 
         let clock = clock
+        let telemetry = telemetry
         task = Task { [weak self] in
             // The previous add was cancelled above; let it unwind first.
             await previous?.value
             do {
                 try await clock.sleep(for: Self.settleFallback)
             } catch {
+                telemetry.record(error, context: "add_completion.settle")
                 return
             }
             self?.beginDrop(of: bodega.id)
@@ -226,6 +233,7 @@ final class AddCompletionCoordinator {
         announce(AppCopy.addedAnnouncement(name: bodega.name).text)
 
         let clock = clock
+        let telemetry = telemetry
         let showsCard = currentIsFirstAdd
         task = Task { [weak self] in
             do {
@@ -237,6 +245,7 @@ final class AddCompletionCoordinator {
                 }
                 try await clock.sleep(for: Self.clearDelay - elapsed)
             } catch {
+                telemetry.record(error, context: "add_completion.drop")
                 return
             }
             self?.finish(id)
@@ -250,10 +259,12 @@ final class AddCompletionCoordinator {
         // VoiceOver users get as long as they need (DD15).
         guard !isVoiceOverRunning() else { return }
         let clock = clock
+        let telemetry = telemetry
         cardDismissTask = Task { [weak self] in
             do {
                 try await clock.sleep(for: Self.cardTransition + Self.cardAutoDismiss)
             } catch {
+                telemetry.record(error, context: "add_completion.card")
                 return
             }
             guard self?.firstAddCard?.id == bodega.id else { return }

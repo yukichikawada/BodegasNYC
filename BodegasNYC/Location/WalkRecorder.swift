@@ -48,6 +48,9 @@ final class WalkRecorder {
     private(set) var saveFailed = false
     /// Called on the main actor after each save that inserted a fix.
     @ObservationIgnored var onPointsSaved: (@MainActor () -> Void)?
+    /// Called on the main actor when a save fails (#147: `AppDelegate`
+    /// records it to telemetry).
+    @ObservationIgnored var onSaveError: (@MainActor (any Error) -> Void)?
     /// Called on the main actor when `topProblem` changes, with the old
     /// and the new value, after the recorder has settled (so a resume has
     /// already set `isRecording`).
@@ -292,6 +295,7 @@ final class WalkRecorder {
             try saveContext(modelContext)
         } catch {
             Self.logger.error("save failed: \(error.localizedDescription, privacy: .public)")
+            onSaveError?(error)
             if !saveFailed { saveFailed = true }
             return
         }

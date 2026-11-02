@@ -43,6 +43,12 @@
 	<string>$(SUPABASE_URL)</string>
 	<key>SUPABASE_ANON_KEY</key>
 	<string>$(SUPABASE_ANON_KEY)</string>
+	<key>SENTRY_DSN</key>
+	<string>$(SENTRY_DSN)</string>
+	<key>POSTHOG_API_KEY</key>
+	<string>$(POSTHOG_API_KEY)</string>
+	<key>POSTHOG_HOST</key>
+	<string>$(POSTHOG_HOST)</string>
 	<key>TEST_ACCOUNT_EMAIL</key>
 	<string>$(TEST_ACCOUNT_EMAIL)</string>
 	<key>TEST_ACCOUNT_PASSWORD</key>

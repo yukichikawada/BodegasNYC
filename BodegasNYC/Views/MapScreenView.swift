@@ -91,6 +91,7 @@ struct MapScreenView: View {
     let isForeground: Bool
     /// The intro's seen flag; `nil` (previews) presents nothing on its own.
     let firstRunState: FirstRunState?
+    let telemetry: Telemetry // `locate_me_tapped` (#147)
 
     init(
         viewModel: BodegaMapViewModel,
@@ -107,7 +108,8 @@ struct MapScreenView: View {
         showsToolbar: Bool = true,
         hasLeftMap: Bool = false,
         isForeground: Bool = false,
-        firstRunState: FirstRunState? = nil
+        firstRunState: FirstRunState? = nil,
+        telemetry: Telemetry
     ) {
         self.viewModel = viewModel
         _cameraPosition = cameraPosition
@@ -124,6 +126,7 @@ struct MapScreenView: View {
         self.hasLeftMap = hasLeftMap
         self.isForeground = isForeground
         self.firstRunState = firstRunState
+        self.telemetry = telemetry
     }
 
     /// The bottom slot's one occupant: the placement card while placing,

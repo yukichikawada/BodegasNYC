@@ -47,10 +47,11 @@ struct BrowseView: View {
     /// The window's own bottom inset (home indicator), which the covered map
     /// keeps on both tabs instead of the List tab's search-bar inset (#23).
     @State var deviceBottomInset: CGFloat = 0
-    @State private var showingSignIn = false
+    @State var showingSignIn = false
     @State var showingAccount = false // the Account sheet (#127)
     @AccessibilityFocusState var accountMenuFocused: Bool // back here after it closes (DS7)
     @State var isPlacingBodega = false
+    @State var addRoute = TelemetryEvent.AddRoute.Tracker() // `add_started`'s route (#147 E6)
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var existingToOpen: Bodega? // a duplicate-prompt match (#20)
     @State var detailOpenedFromAddFlow: Bodega.ID? // see `zoomsFromPin(to:)`
@@ -80,7 +81,7 @@ struct BrowseView: View {
     let firstRunState: FirstRunState
     /// `RootView`'s overlay flag: the Account menu's "Show Intro Again"
     /// sets it, and it going false is this view's cue to land on the map.
-    @Binding private var showingOnboarding: Bool
+    @Binding var showingOnboarding: Bool
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     /// The tutorial's Add tip: TipKit's display verdict and whether a
     /// detail has been opened (#22).
@@ -90,6 +91,7 @@ struct BrowseView: View {
     @Namespace var detailTransition // pin → detail zoom source (#23)
     @State var pinMotion = PinMotionState()
     @State var userLocation: UserLocationProvider // distances (#68), see BrowseView+Distance.swift
+    let telemetry: Telemetry // events and the menu's switch (#147), see BrowseView+Account.swift
 
     init(
         bodegaService: BodegaService,
@@ -101,15 +103,17 @@ struct BrowseView: View {
         locationPermissionClient: LocationPermissionClient,
         streetsWalkedViewModel: StreetsWalkedViewModel?,
         firstRunState: FirstRunState,
-        showingOnboarding: Binding<Bool>
+        showingOnboarding: Binding<Bool>,
+        telemetry: Telemetry
     ) {
         self.firstRunState = firstRunState
+        self.telemetry = telemetry
         _showingOnboarding = showingOnboarding
-        let mapViewModel = BodegaMapViewModel(bodegaService: bodegaService)
-        let listViewModel = BodegaListViewModel(bodegaService: bodegaService)
+        let mapViewModel = BodegaMapViewModel(bodegaService: bodegaService, telemetry: telemetry)
+        let listViewModel = BodegaListViewModel(bodegaService: bodegaService, telemetry: telemetry)
         _mapViewModel = State(initialValue: mapViewModel)
         _listViewModel = State(initialValue: listViewModel)
-        _addCompletion = State(initialValue: .forBrowsing(firstRunState, mapViewModel, listViewModel))
+        _addCompletion = State(initialValue: .forBrowsing(firstRunState, mapViewModel, listViewModel, telemetry))
         _userLocation = State(initialValue: UserLocationProvider(client: locationPermissionClient))
         self.bodegaService = bodegaService
         self.reviewService = reviewService
@@ -182,13 +186,16 @@ struct BrowseView: View {
                         reviewService: reviewService,
                         photoService: photoService,
                         flagService: flagService,
-                        sessionStore: sessionStore, userLocation: userLocation
+                        sessionStore: sessionStore, userLocation: userLocation, telemetry: telemetry
                     ) { updatedBodega in
                         mapViewModel.bodegaWasUpdated(updatedBodega)
                         listViewModel.bodegaWasUpdated(updatedBodega)
                     }
                     .pinToDetailTransition(sourceID: bodega.id, in: detailTransition, fromMap: zoomsFromPin(to: bodega))
-                    .task { await addTipState.donateDidOpenBodegaDetail() }
+                    .task {
+                        telemetry.capture(.bodegaOpened(id: bodega.id, fromMap: activeTab == .map))
+                        await addTipState.donateDidOpenBodegaDetail()
+                    }
                 }
                 .sheet(isPresented: $showingSignIn) {
                     SignInView(sessionStore: sessionStore)
@@ -200,6 +207,7 @@ struct BrowseView: View {
                     // A different query has a different top row.
                     listScrollID = nil
                 }
+                .modifier(BrowseTelemetryEvents(telemetry: telemetry, activeTab: activeTab, filter: filter))
                 // The add sheet and everything after a successful add (#25).
                 .addBodegaFlow($addBodegaViewModel, sessionStore: sessionStore, completion: addCompletion,
                                existingToOpen: $existingToOpen, openExisting: openExisting) {
@@ -224,7 +232,10 @@ struct BrowseView: View {
                     listViewModel.loadInitialIfNeeded()
                 }
                 .addCompletion(addCompletion, camera: $cameraPosition, hasLeftMap: !path.isEmpty || activeTab == .list)
-                .onChange(of: isPlacingBodega) { syncTipParameters() }
+                .onChange(of: isPlacingBodega) { _, isPlacing in
+                    syncTipParameters()
+                    if !isPlacing { addRoute.placementEnded() }
+                }
                 .onChange(of: firstRunState.hasAddedFirstBodega) { syncTipParameters() }
                 .task { await addTipState.observe() }
                 .modifier(userLocationRefresh)
@@ -274,18 +285,23 @@ struct BrowseView: View {
         isResolvingCurrentLocation = true
         defer { isResolvingCurrentLocation = false }
         if let coordinate = await locationPermissionClient.requestCurrentLocation() {
-            presentAddBodegaSheet(coordinate: coordinate)
+            presentAddBodegaSheet(coordinate: coordinate, fromCurrentLocation: true)
         } else {
             requestPlacement()
         }
     }
 
-    func presentAddBodegaSheet(coordinate: CLLocationCoordinate2D) {
+    /// The add sheet's single entry, so `add_started` fires once per
+    /// presentation on every route (#147 E6).
+    func presentAddBodegaSheet(coordinate: CLLocationCoordinate2D, fromCurrentLocation: Bool = false) {
+        let route = addRoute.sheetPresented(fromCurrentLocation: fromCurrentLocation)
         isPlacingBodega = false
+        telemetry.capture(.addStarted(route: route))
         addBodegaViewModel = AddBodegaViewModel(
             coordinate: Coordinate(coordinate),
             bodegaService: bodegaService,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            telemetry: telemetry
         )
     }
 }
@@ -313,34 +329,6 @@ extension BrowseView {
 // MARK: - First run (#21)
 
 extension BrowseView {
-    /// Account toolbar item: a `Menu` (#21). Signed in, "Your Account…" opens
-    /// the Account sheet (#127 DS1); Privacy Policy is below the divider for
-    /// everyone. Same label as before, so the #44 toolbar layout is unchanged.
-    private var accountMenu: some View {
-        Menu {
-            if sessionStore.isSignedIn {
-                Button(AppCopy.Account.menuItem.menuItemWithEllipsis) { showingAccount = true }
-            } else {
-                Button("Sign In") {
-                    showingSignIn = true
-                }
-            }
-            Divider()
-            Button(AppCopy.onboardingReplayMenuItem.copy.text) {
-                withAnimation(OnboardingView.animation(reduceMotion: reduceMotion)) {
-                    showingOnboarding = true
-                }
-            }
-            Link(AppCopy.Account.privacyPolicy.copy.text, destination: AppCopy.Account.privacyPolicyURL)
-        } label: {
-            Label(
-                "Account",
-                systemImage: sessionStore.isSignedIn ? "person.crop.circle.fill" : "person.crop.circle"
-            )
-        }
-        .accessibilityFocused($accountMenuFocused)
-    }
-
     /// The single landing rule for every onboarding exit, first run or
     /// replay: the Map tab, in placement mode only when the user chose "Add
     /// a Bodega You Know" (the pending request is consumed here, once), and
@@ -350,6 +338,7 @@ extension BrowseView {
     private func landAfterOnboarding() {
         guard !showingOnboarding else { return }
         activeTab = .map
+        if firstRunState.pendingTutorialAdd { addRoute.onboardingStartsPlacement() }
         isPlacingBodega = firstRunState.pendingTutorialAdd
         firstRunState.pendingTutorialAdd = false
     }

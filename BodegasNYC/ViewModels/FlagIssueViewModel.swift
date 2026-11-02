@@ -61,12 +61,19 @@ final class FlagIssueViewModel: Identifiable {
 
     private let flagService: FlagService
     private let sessionStore: SessionStore
+    private let telemetry: Telemetry
     private var submitTask: Task<Void, Never>?
 
-    init(target: FlagTarget, flagService: FlagService, sessionStore: SessionStore) {
+    init(
+        target: FlagTarget,
+        flagService: FlagService,
+        sessionStore: SessionStore,
+        telemetry: Telemetry = Telemetry(sinks: [])
+    ) {
         self.target = target
         self.flagService = flagService
         self.sessionStore = sessionStore
+        self.telemetry = telemetry
     }
 
     /// `flags.reason` is a single text column, so the picked reason and the
@@ -85,12 +92,15 @@ final class FlagIssueViewModel: Identifiable {
         submitTask?.cancel()
         submissionState = .submitting
         let draft = NewFlag(reporterId: userID, target: target, reason: composedReason)
-        submitTask = Task { [flagService, draft] in
+        let kind = reason.rawValue
+        submitTask = Task { [flagService, draft, telemetry] in
             do {
                 let flag = try await flagService.insert(draft)
                 guard !Task.isCancelled else { return }
+                telemetry.capture(.flagSubmitted(kind: kind))
                 submissionState = .submitted(flag)
             } catch {
+                telemetry.record(error, context: "flag.submit")
                 guard !Task.isCancelled else { return }
                 submissionState = .failed(Self.failureMessage(for: error))
             }

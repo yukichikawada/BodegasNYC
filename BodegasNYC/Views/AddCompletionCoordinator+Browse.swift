@@ -12,7 +12,8 @@ extension AddCompletionCoordinator {
     static func forBrowsing(
         _ firstRunState: FirstRunState,
         _ mapViewModel: BodegaMapViewModel,
-        _ listViewModel: BodegaListViewModel
+        _ listViewModel: BodegaListViewModel,
+        _ telemetry: Telemetry
     ) -> AddCompletionCoordinator {
         AddCompletionCoordinator(
             firstRunState: firstRunState,
@@ -22,7 +23,8 @@ extension AddCompletionCoordinator {
             },
             moveCamera: { _ in },
             setHighlighted: { mapViewModel.highlightedBodegaID = $0 },
-            onFirstAdd: { TutorialTips.invalidateAll() }
+            onFirstAdd: { TutorialTips.invalidateAll() },
+            telemetry: telemetry
         )
     }
 
@@ -51,6 +53,7 @@ extension BrowseView {
     /// highlight, camera move or first-add: nothing was added. The push is
     /// standard, not the pin zoom (`detailOpenedFromAddFlow`).
     func openExisting(_ bodega: Bodega) {
+        telemetry.capture(.duplicateChosen)
         mapViewModel.bodegaWasAdded(bodega)
         listViewModel.bodegaWasAdded(bodega)
         detailOpenedFromAddFlow = bodega.id

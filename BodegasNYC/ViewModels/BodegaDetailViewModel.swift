@@ -25,12 +25,19 @@ final class BodegaDetailViewModel {
 
     private let reviewService: ReviewService
     private let photoService: PhotoService
+    private let telemetry: Telemetry
     private var loadTask: Task<Void, Never>?
 
-    init(bodega: Bodega, reviewService: ReviewService, photoService: PhotoService) {
+    init(
+        bodega: Bodega,
+        reviewService: ReviewService,
+        photoService: PhotoService,
+        telemetry: Telemetry = Telemetry(sinks: [])
+    ) {
         self.bodega = bodega
         self.reviewService = reviewService
         self.photoService = photoService
+        self.telemetry = telemetry
     }
 
     var averageRating: Double? { Self.computeAverageRating(from: reviews) }
@@ -46,7 +53,7 @@ final class BodegaDetailViewModel {
         guard loadState == .idle else { return }
         loadState = .loading
 
-        loadTask = Task { [reviewService, photoService, bodega] in
+        loadTask = Task { [reviewService, photoService, bodega, telemetry] in
             do {
                 // Sequential, not concurrent (`async let`): MockURLProtocol's
                 // stub queue is strict FIFO with no path-based matching, so a
@@ -59,6 +66,7 @@ final class BodegaDetailViewModel {
                 photos = Self.mergingLocalPhotos(photos, into: fetchedPhotos.filter { !$0.isHidden })
                 loadState = .loaded
             } catch {
+                telemetry.record(error, context: "detail.load")
                 loadState = .failed(error.localizedDescription)
             }
         }
