@@ -22,11 +22,11 @@
 
 ### Check the zoom swipe-back on a physical iPhone
 
-**What:** After PR 2 is on `main`, run pin → detail → swipe-back five times on a device and confirm the pin stays visible and aligned. Then, once #150 is on `main`, pin → detail → Show on Map: the page shrinks into the pin where it is, then the camera centres it (eng review R3).
+**What:** After PR 2 is on `main`, run pin → detail → swipe-back five times on a device and confirm the pin stays visible and aligned. Then, once #150 is on `main`, pin → detail → Show on Map: the page shrinks into the pin where it is, then the camera centres it (eng review R3). Also from the List: Show on Map five times, no frozen search field over the map (the pop runs one main-actor turn after the tab switch; timing-sensitive). While there, open a detail with Xcode's memory gauge on `main` and on the #150 build: on the simulator the live preview added ~45 MB to the first detail open (~36 MB kept) and ~10 MB per later visit, over the eng review's 40 MB gate; the owner shipped it (R1 reopened 2026-11-02). If the device shows the detail pushing memory, swap the preview for an `MKMapSnapshotter` image: it is one file, `BodegaDetailMap.swift`.
 
-**Why:** Apple forum thread 807715 reports the source view vanishing only on device, which simulator QA cannot see.
+**Why:** Apple forum thread 807715 reports the source view vanishing only on device, which simulator QA cannot see. Simulator RSS overstates device memory, so the preview's real cost is unknown until measured there.
 
-**Context:** #23 T1, `BrowseMotion.PinToDetail`.
+**Context:** #23 T1, `BrowseMotion.PinToDetail`; #150 PR #153 Test plan for the simulator numbers.
 
 **Effort:** S
 **Priority:** P2
