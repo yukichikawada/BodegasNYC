@@ -15,6 +15,18 @@ final class PinMotionState {
     /// The map's proxy from the last placement, so later events can re-place.
     @ObservationIgnored private var proxy: MapProxy?
     @ObservationIgnored private var onPush: (Bodega) -> Void = { _ in }
+    /// Show on Map's camera flight (#150 R2, DS7): the camera centre
+    /// (`AddCompletionCoordinator.cameraCenter(for:)`) and the flight's
+    /// seconds. Bound by `BrowseView`, which owns the camera position.
+    @ObservationIgnored var flyCamera: (Coordinate, TimeInterval) -> Void = { _, _ in }
+    /// Show on Map's VoiceOver landing (DS9).
+    @ObservationIgnored var announce: (String) -> Void = { AddCompletionCoordinator.postHighPriorityAnnouncement($0) }
+    /// The map's last settled region (`cameraDidSettle`): the flight's
+    /// duration and DS7's no-op are measured from it.
+    @ObservationIgnored private(set) var settledRegion: MKCoordinateRegion?
+    /// The spotlit bodega whose announcement waits for the flight's settle.
+    @ObservationIgnored private var pendingAnnouncement: Bodega?
+    @ObservationIgnored private var announcementFallback: Task<Void, Never>?
 
     /// Runs `BrowseMotion.PinToDetail.reduce` and performs its effects.
     /// `onPush` opens the detail; it is kept for the timer's later events.
@@ -40,8 +52,81 @@ final class PinMotionState {
             case .cancelTimer:
                 timer?.cancel()
                 timer = nil
+            case .moveCamera(let bodega):
+                moveCamera(to: bodega)
             }
         }
+        if phase.spotlitBodega == nil { dropPendingAnnouncement() }
+    }
+
+    // MARK: Show on Map (#150)
+
+    /// The `.moveCamera` effect: flies to the spotlit pin on Locate Me's
+    /// duration rule (DS7), or, when the camera is already there, flies
+    /// nowhere and announces at once. Otherwise the announcement waits for
+    /// the flight's settle (a fallback covers a settle that never comes).
+    private func moveCamera(to bodega: Bodega) {
+        let center = AddCompletionCoordinator.cameraCenter(for: bodega.coordinate)
+        dropPendingAnnouncement()
+        guard let seconds = Self.spotlightFlightSeconds(from: settledRegion, to: center) else {
+            announce(AppCopy.showOnMapAnnouncement(name: bodega.name).text)
+            return
+        }
+        pendingAnnouncement = bodega
+        flyCamera(center, seconds)
+        announcementFallback = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(seconds + Self.announcementGraceSeconds))
+            guard !Task.isCancelled else { return }
+            self?.announcePending()
+        }
+    }
+
+    /// The map settled (`MapScreenView.cameraDidSettle`, on both tabs): the
+    /// next flight measures from here, and a pending landing is announced.
+    func cameraDidSettle(region: MKCoordinateRegion) {
+        settledRegion = region
+        announcePending()
+    }
+
+    private func announcePending() {
+        guard let bodega = pendingAnnouncement else { return }
+        dropPendingAnnouncement()
+        guard phase.spotlitBodega?.id == bodega.id else { return }
+        announce(AppCopy.showOnMapAnnouncement(name: bodega.name).text)
+    }
+
+    private func dropPendingAnnouncement() {
+        pendingAnnouncement = nil
+        announcementFallback?.cancel()
+        announcementFallback = nil
+    }
+
+    /// How long past the flight a missing settle is waited for.
+    nonisolated static let announcementGraceSeconds: TimeInterval = 0.5
+
+    /// DS7: `nil` (no flight) when `settled` is already centred within
+    /// `settleTolerance` of `center` at the street span, else Locate Me's
+    /// rule: 0.9 s when it zooms in more than three levels or moves more
+    /// than 2 km, 0.6 s otherwise. The span compared is the smaller of the
+    /// two, the one MapKit fits the requested square span to. With no settle
+    /// yet, the long flight.
+    static func spotlightFlightSeconds(
+        from settled: MKCoordinateRegion?,
+        to center: Coordinate
+    ) -> TimeInterval? {
+        guard let settled else { return MapScreenView.locateMeLongFlightSeconds }
+        let target = AddCompletionCoordinator.cameraSpan
+        let tolerance = AddCompletionCoordinator.settleTolerance
+        let span = min(settled.span.latitudeDelta, settled.span.longitudeDelta)
+        if abs(settled.center.latitude - center.latitude) <= tolerance,
+           abs(settled.center.longitude - center.longitude) <= tolerance,
+           abs(span - target) <= tolerance {
+            return nil
+        }
+        return MapScreenView.locateMeFlightSeconds(
+            ratio: span / target,
+            centreMoveMeters: Coordinate(settled.center).distance(to: center)
+        )
     }
 
     /// A tap MapKit reported (its selection tag): feeds `pinTapped` or
@@ -119,7 +204,9 @@ extension EnvironmentValues {
 extension View {
     /// Feeds the held pin the events that come from outside the map: the pop
     /// (`path` emptied by the back button or a completed swipe), entering
-    /// placement, and choosing the List tab.
+    /// placement, and choosing the List tab. Show on Map's `.showOnMap` is
+    /// sent by `BrowseView.showOnMap`, before the pop's `.detailDismissed`,
+    /// which the spotlight then ignores.
     func pinMotionEvents(
         _ motion: PinMotionState,
         presentedBodegaID: Bodega.ID?,

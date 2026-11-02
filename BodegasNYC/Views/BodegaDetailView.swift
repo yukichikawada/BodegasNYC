@@ -67,6 +67,9 @@ struct BodegaDetailView: View {
     /// row on the map and list. This screen updates itself first, via its
     /// own view model — it never re-reads the `Bodega` it was pushed with.
     private let onBodegaUpdated: (Bodega) -> Void
+    /// Show on Map and the map preview (#150): `BrowseView.showOnMap`, given
+    /// the bodega as this screen shows it (post-edit).
+    private let onShowOnMap: (Bodega) -> Void
 
     init(
         bodega: Bodega,
@@ -77,8 +80,10 @@ struct BodegaDetailView: View {
         sessionStore: SessionStore,
         userLocation: UserLocationProvider? = nil,
         telemetry: Telemetry,
+        onShowOnMap: @escaping (Bodega) -> Void = { _ in },
         onBodegaUpdated: @escaping (Bodega) -> Void
     ) {
+        self.onShowOnMap = onShowOnMap
         self.userLocation = userLocation
         self.telemetry = telemetry
         self.bodegaService = bodegaService
@@ -111,6 +116,9 @@ struct BodegaDetailView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 header
+                BodegaDetailMapSection(bodega: viewModel.bodega, telemetry: telemetry) {
+                    onShowOnMap(viewModel.bodega)
+                }
                 DataPointsSection(bodega: viewModel.bodega)
                 RatingSummaryView(averageRating: viewModel.averageRating, reviewCount: viewModel.reviews.count)
                 if let hours = viewModel.bodega.hours {

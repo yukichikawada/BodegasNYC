@@ -34,6 +34,7 @@
 //
 
 import CoreGraphics
+import MapKit
 import Foundation
 import Testing
 
@@ -202,6 +203,146 @@ struct BrowseMotionTests {
         #expect(effects == [.cancelTimer])
     }
 
+    // MARK: Show on Map (#150 eng R2/R3)
+    // protects: Show on Map spotlights the detail's bodega as passed (the
+    // post-edit value), flies at once from idle, releases first from a
+    // pin-opened detail and flies only on that release's own timer, opens
+    // the bodega on a pin tap, and clears on a cluster tap or an
+    // interruption (List tab, placement, an add).
+    // fails_when: the spotlight keeps a stale held value, flies during the
+    // pop, ignores its release, or survives a cluster tap or interruption.
+    // no_claim: the pop's look, the camera's path, VoiceOver focus (live QA).
+
+    @Test func showOnMapFromIdleSpotlightsAndFliesAtOnce() {
+        let (phase, effects) = PinMotion.reduce(.idle, .showOnMap(pin))
+        #expect(phase == .spotlit(pin))
+        #expect(effects == [.moveCamera(pin)])
+    }
+
+    @Test func showOnMapFromAPinOpenedDetailReleasesBeforeFlying() throws {
+        let edited = try makeTestBodega(id: pin.id, name: "Renamed Deli")
+        let (phase, effects) = PinMotion.reduce(.presented(pin), .showOnMap(edited))
+        #expect(phase == .spotlit(edited))
+        #expect(effects == [.scheduleRelease(pin.id)])
+    }
+
+    @Test func releaseElapsedForTheSpotlitPinFliesThere() {
+        #expect(PinMotion.reduce(.spotlit(pin), .releaseElapsed(pin.id)) == (.spotlit(pin), [.moveCamera(pin)]))
+        let (stale, staleEffects) = PinMotion.reduce(.spotlit(pin), .releaseElapsed(otherPin.id))
+        #expect(stale == .spotlit(pin))
+        #expect(staleEffects.isEmpty)
+    }
+
+    @Test func pinTappedWhileSpotlitHoldsThatPin() {
+        #expect(PinMotion.reduce(.spotlit(pin), .pinTapped(pin)) == (.holding(pin), [.scheduleHold(pin.id)]))
+        #expect(
+            PinMotion.reduce(.spotlit(pin), .pinTapped(otherPin)) == (.holding(otherPin), [.scheduleHold(otherPin.id)])
+        )
+    }
+
+    @Test func clusterTapOrInterruptionClearsTheSpotlight() {
+        for event in [PinMotion.Event.clusterTapped, .interrupted] {
+            let (phase, effects) = PinMotion.reduce(.spotlit(pin), event)
+            #expect(phase == .idle)
+            #expect(effects == [.cancelTimer])
+        }
+    }
+
+    /// A spotlight still up under a detail opened from the add flow's
+    /// duplicate prompt (no pin tap or List tab in between) moves on.
+    @Test func showOnMapWhileSpotlitMovesTheSpotlight() {
+        let (phase, effects) = PinMotion.reduce(.spotlit(pin), .showOnMap(otherPin))
+        #expect(phase == .spotlit(otherPin))
+        #expect(effects == [.moveCamera(otherPin)])
+    }
+
+    /// protects: `PinMotionState` runs `.moveCamera` through its bound
+    /// flight with `cameraCenter(for:)` of the event's bodega, only after
+    /// the release from a pin-opened detail, and announces the landing at
+    /// the next settle (DS9).
+    /// fails_when: the flight starts during the pop, targets the pin itself
+    /// or the stale held value, or the announcement is missing or early.
+    /// no_claim: the real camera animation or VoiceOver speech (live QA);
+    /// real 0.25 s and 0.4 s timers, polled.
+    @Test func showOnMapFromAPinOpenedDetailFliesAfterTheReleaseThenAnnounces() async throws {
+        let motion = PinMotionState()
+        let log = FlightLog()
+        motion.flyCamera = { log.flights.append(($0, $1)) }
+        motion.announce = { log.announcements.append($0) }
+        motion.send(.pinTapped(pin), onPush: { _ in })
+        await waitUntil { motion.phase == .presented(pin) }
+        #expect(motion.phase == .presented(pin))
+        let edited = try makeTestBodega(id: pin.id, name: "Renamed Deli")
+
+        motion.send(.showOnMap(edited))
+        #expect(motion.phase == .spotlit(edited))
+        #expect(log.flights.isEmpty)
+        await waitUntil { !log.flights.isEmpty }
+
+        let center = AddCompletionCoordinator.cameraCenter(for: edited.coordinate)
+        #expect(log.flights.map(\.0) == [center])
+        // No settle reported yet: the long flight.
+        #expect(log.flights.map(\.1) == [MapScreenView.locateMeLongFlightSeconds])
+        #expect(log.announcements.isEmpty)
+        motion.cameraDidSettle(region: Self.streetRegion(at: center))
+        #expect(log.announcements == ["Renamed Deli. On the map."])
+    }
+
+    /// protects: DS7's no-op: a camera already settled on the target at
+    /// street span does not fly, and the landing is announced at once.
+    /// fails_when: a pointless flight runs, or the announcement waits for a
+    /// settle that will never come.
+    /// no_claim: MapKit's own settle rounding (the tolerance is the add
+    /// flow's `settleTolerance`).
+    @Test func showOnMapOnTheSettledCameraAnnouncesWithoutFlying() {
+        let motion = PinMotionState()
+        let log = FlightLog()
+        motion.flyCamera = { log.flights.append(($0, $1)) }
+        motion.announce = { log.announcements.append($0) }
+        let center = AddCompletionCoordinator.cameraCenter(for: pin.coordinate)
+        motion.cameraDidSettle(region: Self.streetRegion(at: center))
+
+        motion.send(.showOnMap(pin))
+
+        #expect(log.flights.isEmpty)
+        #expect(log.announcements == ["Held Deli. On the map."])
+    }
+
+    /// protects: the flight follows Locate Me's rule (design DS7): 0.6 s
+    /// for a short hop, 0.9 s when zooming in more than three levels or
+    /// moving over 2 km, none when already there.
+    /// fails_when: a long flight is rushed, a short one dawdles, or a
+    /// settled camera at the target flies again.
+    /// no_claim: how the flight looks.
+    @Test func spotlightFlightFollowsTheLocateMeRule() {
+        let center = AddCompletionCoordinator.cameraCenter(for: pin.coordinate)
+        let rule = PinMotionState.spotlightFlightSeconds
+        #expect(rule(nil, center) == 0.9)
+        #expect(rule(Self.streetRegion(at: center), center) == nil)
+        // Portrait fit: the latitude span is the larger one.
+        #expect(rule(Self.region(at: center, latitudeSpan: 0.007, longitudeSpan: 0.004), center) == nil)
+        // A block away at a slightly wider zoom: short.
+        let nearby = Coordinate(latitude: center.latitude + 0.002, longitude: center.longitude)
+        #expect(rule(Self.region(at: nearby, latitudeSpan: 0.01, longitudeSpan: 0.01), center) == 0.6)
+        // Zooming in from a borough-wide view (ratio over 8): long.
+        #expect(rule(Self.region(at: nearby, latitudeSpan: 0.05, longitudeSpan: 0.05), center) == 0.9)
+        // Same zoom, 3 km away: long.
+        let far = Coordinate(latitude: center.latitude + 0.027, longitude: center.longitude)
+        #expect(rule(Self.streetRegion(at: far), center) == 0.9)
+    }
+
+    private static func streetRegion(at center: Coordinate) -> MKCoordinateRegion {
+        region(at: center, latitudeSpan: 0.004, longitudeSpan: 0.004)
+    }
+
+    private static func region(at center: Coordinate, latitudeSpan: Double, longitudeSpan: Double)
+        -> MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: center.clLocationCoordinate,
+            span: MKCoordinateSpan(latitudeDelta: latitudeSpan, longitudeDelta: longitudeSpan)
+        )
+    }
+
     /// protects: the list order cross-fade runs DESIGN.md's content-swap
     /// duration (#81 design D4).
     /// fails_when: the constant drifts from 0.25s.
@@ -223,4 +364,11 @@ struct BrowseMotionTests {
         let design = try String(contentsOf: designURL, encoding: .utf8)
         #expect(design.contains("`releaseSeconds = \(PinMotion.releaseSeconds)`"))
     }
+}
+
+/// What `PinMotionState`'s bound flight and announcer were handed.
+@MainActor
+private final class FlightLog {
+    var flights: [(Coordinate, TimeInterval)] = []
+    var announcements: [String] = []
 }

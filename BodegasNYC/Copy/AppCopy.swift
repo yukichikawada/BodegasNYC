@@ -220,6 +220,21 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     /// VoiceOver, once Clear History is done (design D11).
     case historyClearedAnnouncement
 
+    // MARK: Detail map and directions (#150, design DS6)
+
+    case directionsAction
+    /// The detail's button. Same text as `showOnMapToggle` (the Streets
+    /// Walked menu's walked-blocks toggle), a different control; TODOS has
+    /// the toggle's rename to "Show Blocks".
+    case showOnMapAction
+    /// The map preview's VoiceOver label and hint; the hint is also Show on
+    /// Map's.
+    case detailMapLabel
+    case detailMapHint
+    case directionsHint
+    /// Under the detail's action row when Apple Maps did not open (DS10).
+    case mapsDidNotOpenBody
+
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -355,9 +370,18 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .deleteHistoryAction: CopyString(kind: .label, text: "Delete History")
         case .zoomInForBlocksTitle: CopyString(kind: .title, text: "Zoom in to see your blocks.")
         case .historyClearedAnnouncement: CopyString(kind: .body, text: "History cleared.")
+        case .directionsAction: CopyString(kind: .label, text: "Directions")
+        case .showOnMapAction: CopyString(kind: .label, text: "Show on Map")
+        case .detailMapLabel: CopyString(kind: .label, text: "Map")
+        case .detailMapHint: CopyString(kind: .body, text: "Shows this bodega on the map.")
+        case .directionsHint: CopyString(kind: .body, text: "Opens walking directions in Apple Maps.")
+        case .mapsDidNotOpenBody: CopyString(kind: .body, text: "Maps didn't open.")
         }
     }
+}
 
+// Outside the enum body, which sits at SwiftLint's type_body_length limit.
+nonisolated extension AppCopy {
     /// A menu item that opens a confirmation, with the HIG's trailing "…".
     /// The voice rules check the label without it.
     var menuItemWithEllipsis: String {
@@ -378,10 +402,14 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     static func addedAnnouncement(name: String) -> CopyString {
         CopyString(kind: .body, text: "\(name) is on the map.")
     }
-}
 
-// Outside the enum body, which sits at SwiftLint's type_body_length limit.
-nonisolated extension AppCopy {
+    /// VoiceOver once Show on Map's camera has landed (#150 design DS9).
+    /// `name` is user-typed and exempt from the voice rules; the voice test
+    /// checks the template with the fixture "Deli".
+    static func showOnMapAnnouncement(name: String) -> CopyString {
+        CopyString(kind: .body, text: "\(name). On the map.")
+    }
+
     /// The detail reviews section's empty state: the cat line only when the
     /// bodega has a cat (spec D2, cat use 2 of 2).
     static func noReviews(hasCat: Bool) -> (title: AppCopy, body: AppCopy) {
