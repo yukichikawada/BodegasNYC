@@ -26,6 +26,10 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// Asks the system for Always; injected so a test never shows a prompt.
     private let promptForAlways: @MainActor (CLLocationManager) -> Void
     private let notificationCenter: NotificationCenter
+    /// How long an authorization request waits before resolving with the
+    /// current status; `authorizationTimeout` in the app, injectable so a
+    /// test can rule the timeout path out instead of timing it.
+    private let authorizationRequestTimeout: Duration
     @ObservationIgnored private nonisolated(unsafe) var activationObserver: (any NSObjectProtocol)?
     /// Keyed rather than a single slot: `requestAlwaysAuthorization()` can be
     /// in flight from one caller while another awaits
@@ -51,7 +55,7 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     /// all. There's no API to distinguish that from "the prompt is still up
     /// and the user hasn't answered yet", so every request is bounded by this
     /// timeout rather than awaiting the delegate forever.
-    private static let authorizationTimeout: Duration = .seconds(30)
+    nonisolated static let authorizationTimeout: Duration = .seconds(30)
     /// `requestLocation()` has no documented upper bound on how long it can
     /// take (or whether it calls back at all if a fix never arrives), so
     /// this is a best-effort convenience bounded the same way as the
@@ -63,14 +67,18 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
     ///   - notificationCenter: where `didBecomeActiveNotification` arrives:
     ///     the end of a system prompt (#123), injectable for tests.
     ///   - promptForAlways: shows the Always prompt; a no-op in tests.
+    ///   - authorizationRequestTimeout: the bound on an authorization
+    ///     request; tests pass one far longer than their time limit (#135).
     init(
         notificationCenter: NotificationCenter = .default,
-        promptForAlways: @escaping @MainActor (CLLocationManager) -> Void = { $0.requestAlwaysAuthorization() }
+        promptForAlways: @escaping @MainActor (CLLocationManager) -> Void = { $0.requestAlwaysAuthorization() },
+        authorizationRequestTimeout: Duration = LocationPermissionClient.authorizationTimeout
     ) {
         let manager = CLLocationManager()
         self.manager = manager
         self.notificationCenter = notificationCenter
         self.promptForAlways = promptForAlways
+        self.authorizationRequestTimeout = authorizationRequestTimeout
         self.authorizationStatus = manager.authorizationStatus
         self.accuracyAuthorization = manager.accuracyAuthorization
         super.init()
@@ -138,7 +146,7 @@ final class LocationPermissionClient: NSObject, CLLocationManagerDelegate {
         return await withCheckedContinuation { continuation in
             pendingContinuations[id] = continuation
             Task { @MainActor in
-                try? await Task.sleep(for: Self.authorizationTimeout)
+                try? await Task.sleep(for: self.authorizationRequestTimeout)
                 self.resumePending(id: id, status: self.authorizationStatus)
             }
         }

@@ -56,19 +56,31 @@ struct LocationPermissionClientTests {
     /// status (Keep Only While Using on the upgrade prompt fires no delegate
     /// change) returns as soon as the app is active again, with the current
     /// status, so Start Recording shows its card at once (#123 QA P2);
-    /// fails_when=the request waits for the 30 s timeout, or never returns;
+    /// fails_when=the request waits for the timeout, or never returns (the
+    /// timeout here is a day, so either way the time limit fails the test);
     /// no_claim=the system prompt itself (a no-op stands in) and the real
     /// activation (a private NotificationCenter posts it), and that the
     /// real Core Location status is current at that moment (QA, live).
+    ///
+    /// No wall-clock bound (#135): this used to expect under 5 s and took
+    /// about 4.7 s, but nothing in the request waits that long. It is how
+    /// long the main actor is busy while the whole parallel suite starts
+    /// (156 of 528 tests took over 4 s in the same run, median 0.24 s).
+    /// With a timeout far past the time limit, the request returning at all
+    /// rules the timeout path out.
     @MainActor
-    @Test func anAlwaysRequestReturnsWhenTheAppIsActiveAgain() async throws {
+    @Test(.timeLimit(.minutes(1)))
+    func anAlwaysRequestReturnsWhenTheAppIsActiveAgain() async throws {
         let center = NotificationCenter()
         var prompts = 0
-        let client = LocationPermissionClient(notificationCenter: center, promptForAlways: { _ in prompts += 1 })
+        let client = LocationPermissionClient(
+            notificationCenter: center,
+            promptForAlways: { _ in prompts += 1 },
+            authorizationRequestTimeout: .seconds(86_400)
+        )
         try #require(client.authorizationStatus != .authorizedAlways)
         let before = client.authorizationStatus
 
-        let started = ContinuousClock.now
         let request = Task { await client.requestAlwaysAuthorization() }
         while prompts == 0 { await Task.yield() }
         center.post(name: UIApplication.didBecomeActiveNotification, object: nil)
@@ -76,7 +88,6 @@ struct LocationPermissionClientTests {
 
         #expect(prompts == 1)
         #expect(status == before)
-        #expect(ContinuousClock.now - started < .seconds(5))
     }
 
     /// protects=`hasPendingAuthorizationRequest` is true exactly while an
