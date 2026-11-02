@@ -17,18 +17,34 @@ extension BrowseView {
     /// over the map as a frozen glass capsule until the next push (iPhone SE
     /// simulator, iOS 26.5, either order and unanimated alike). One turn
     /// lets the hidden root drop the field before it is revealed.
+    ///
+    /// A second tap (the button or the preview) while the first is still
+    /// under way is ignored: during the deferred pop `showOnMapPending` is
+    /// set, and once the pop has begun `path` is empty. So the event,
+    /// telemetry and flight run once per detail.
     func showOnMap(_ bodega: Bodega) {
-        telemetry.capture(.showOnMap(fromMap: zoomOrigin() == .map))
+        guard !showOnMapPending, !path.isEmpty else { return }
+        telemetry.capture(.showOnMap(fromMap: zoomsFromPin(to: bodega)))
         guard activeTab != .map else {
             path.removeAll()
             pinMotion.send(.showOnMap(bodega))
             return
         }
         tabSelection.wrappedValue = .map
+        showOnMapPending = true
         Task { @MainActor in
+            showOnMapPending = false
             path.removeAll()
             pinMotion.send(.showOnMap(bodega))
         }
+    }
+
+    /// Whether a detail counts as opened from its map pin: opened on the Map
+    /// tab, and not from the add flow's duplicate prompt (a standard push
+    /// with no pin, #20). The zoom transition (`zoomsFromPin`) and Show on
+    /// Map's `from_map` (#150 R4) both read it.
+    static func opensFromPin(origin: Tab, addFlowBodegaID: Bodega.ID?, bodegaID: Bodega.ID) -> Bool {
+        origin == .map && addFlowBodegaID != bodegaID
     }
 
     /// The pushed detail's entry origin (R5): captured on the render after

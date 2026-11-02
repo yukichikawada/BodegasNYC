@@ -68,7 +68,7 @@ extension BrowseView {
     /// the live one: Show on Map switches a list-opened detail's tab to Map
     /// under it before the pop (#150 R5).
     func zoomsFromPin(to bodega: Bodega) -> Bool {
-        zoomOrigin() == .map && detailOpenedFromAddFlow != bodega.id
+        Self.opensFromPin(origin: zoomOrigin(), addFlowBodegaID: detailOpenedFromAddFlow, bodegaID: bodega.id)
     }
 }
 

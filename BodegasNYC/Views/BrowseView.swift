@@ -56,6 +56,7 @@ struct BrowseView: View {
     @State private var existingToOpen: Bodega? // a duplicate-prompt match (#20)
     @State var detailOpenedFromAddFlow: Bodega.ID? // see `zoomsFromPin(to:)`
     @State var detailOrigin: Tab? // the pushed detail's tab (#150 R5), see `zoomOrigin()`
+    @State var showOnMapPending = false // the List path's deferred pop (#150), see `showOnMap`
     @State private var isResolvingCurrentLocation = false
     /// The single source of truth for filter/search across both tabs —
     /// pushed into both view models via `.onChange` below, so switching

@@ -331,6 +331,20 @@ struct BrowseMotionTests {
         #expect(rule(Self.streetRegion(at: far), center) == 0.9)
     }
 
+    /// protects: a detail counts as pin-opened (zoom transition, Show on
+    /// Map's `from_map`) only from the Map tab and never when the add flow's
+    /// duplicate prompt opened it with a standard push (#20, #150 R4).
+    /// fails_when: a duplicate-prompt detail on the Map tab reports
+    /// `from_map = true`, or a list-opened detail counts as pin-opened.
+    /// no_claim: that `BrowseView` passes the captured origin (live QA).
+    @Test func opensFromPinExcludesTheListAndTheDuplicatePrompt() {
+        let opens = BrowseView.opensFromPin
+        #expect(opens(.map, nil, pin.id))
+        #expect(opens(.map, otherPin.id, pin.id))
+        #expect(!opens(.map, pin.id, pin.id))
+        #expect(!opens(.list, nil, pin.id))
+    }
+
     private static func streetRegion(at center: Coordinate) -> MKCoordinateRegion {
         region(at: center, latitudeSpan: 0.004, longitudeSpan: 0.004)
     }
