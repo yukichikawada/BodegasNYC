@@ -3,3 +3,16 @@ disabled_rules:
 
 excluded:
   - .build
+
+custom_rules:
+  # #147 eng E1: only BodegasNYC/Telemetry/SentrySink.swift and
+  # PostHogSink.swift import an SDK; every other file goes through `Telemetry`.
+  telemetry_sdk_import:
+    name: "Telemetry SDK Import"
+    regex: '^\s*(@testable\s+)?import\s+(Sentry|PostHog)\b'
+    match_kinds:
+      - keyword
+      - identifier
+    excluded: '/BodegasNYC/Telemetry/[^/]+\.swift$'
+    message: "Import Sentry or PostHog only in BodegasNYC/Telemetry/ (#147 E1); call Telemetry instead."
+    severity: error
