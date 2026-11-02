@@ -192,7 +192,7 @@ extension Telemetry {
         let sinks: [any TelemetrySink] = plan.vendors.map { vendor in
             switch vendor {
             case .posthog(let apiKey, let host):
-                PostHogSink(apiKey: apiKey, host: host, environment: plan.environment, optedOut: !consent.isEnabled)
+                PostHogSink(apiKey: apiKey, host: host, environment: plan.environment, userDefaults: userDefaults)
             case .sentry(let dsn):
                 SentrySink(dsn: dsn, environment: plan.environment, release: release, consent: consent)
             }
@@ -200,15 +200,35 @@ extension Telemetry {
         let telemetry = Telemetry(sinks: sinks, userDefaults: userDefaults, consent: consent)
         #if DEBUG
         let hasSentry = plan.vendors.contains { if case .sentry = $0 { true } else { false } }
-        if hasSentry, launchArguments.contains(TelemetryPlan.crashTestArgument) {
+        if shouldCrashForTesting(hasSentry: hasSentry, launchArguments: launchArguments, consent: consent) {
             Task {
                 try? await Task.sleep(for: .seconds(2))
+                // Sharing may have gone off in the 2 s; off means no crash (#151).
+                guard shouldCrashForTesting(hasSentry: hasSentry, launchArguments: launchArguments, consent: consent) else {
+                    logger.notice("TelemetryCrashTest skipped: sharing is off")
+                    return
+                }
                 SentrySink.crashForTesting()
             }
+        } else if launchArguments.contains(TelemetryPlan.crashTestArgument) {
+            logger.notice("TelemetryCrashTest skipped: needs Sentry configured and sharing on")
         }
         #endif
         return telemetry
     }
+
+    #if DEBUG
+    /// `-TelemetryCrashTest` crashes only with Sentry configured and sharing
+    /// on (#151): checked when the launch schedules it and again when it
+    /// fires, so an opted-out launch stays up.
+    nonisolated static func shouldCrashForTesting(
+        hasSentry: Bool,
+        launchArguments: [String],
+        consent: TelemetryConsent
+    ) -> Bool {
+        hasSentry && consent.isEnabled && launchArguments.contains(TelemetryPlan.crashTestArgument)
+    }
+    #endif
 
     /// Sentry's `releaseName`: "1.0+1".
     nonisolated static func release(bundle: Bundle) -> String {
