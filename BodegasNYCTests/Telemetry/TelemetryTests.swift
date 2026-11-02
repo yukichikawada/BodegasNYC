@@ -67,10 +67,13 @@ struct TelemetryTests {
     /// protects=off means off: the off-switch stops the sinks with no final
     /// event, nothing is captured or recorded after it, and the on-switch
     /// starts them and re-identifies the signed-in user without capturing;
-    /// an off/on/off run repeats that exactly (AC 5); fails_when=a
-    /// `telemetry_disabled`-style event goes out, an event leaks after off,
-    /// or the on-switch captures or forgets the user; no_claim=that the
-    /// SDKs send nothing after opting out (proxy check, AC 4).
+    /// an off/on/off run repeats that exactly (AC 5); the consent flag the
+    /// SDK callbacks read is already false when the sinks stop and already
+    /// true when they start; fails_when=a `telemetry_disabled`-style event
+    /// goes out, an event leaks after off, the on-switch captures or forgets
+    /// the user, or `setEnabled` flips consent after stopping or before
+    /// starting the sinks; no_claim=that the SDKs send nothing after opting
+    /// out (proxy check, AC 4).
     @Test func offThenOnSequence() {
         let (telemetry, sink) = makeRecordingTelemetry()
         telemetry.identify(Self.userA)
@@ -93,6 +96,8 @@ struct TelemetryTests {
 
         telemetry.setEnabled(false)
         #expect(sink.calls.count == 4)
+        #expect(sink.consentAtStop == [false, false])
+        #expect(sink.consentAtStart == [true])
     }
 
     /// protects=identity is tracked while off (E2): signed in as A, turn

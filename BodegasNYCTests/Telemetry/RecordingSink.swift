@@ -24,6 +24,11 @@ final class RecordingSink: TelemetrySink {
     }
 
     private(set) var calls: [Call] = []
+    /// The consent flag the SDK callbacks read, as this sink saw it at each
+    /// `stop()` and `start()`, so a test can pin the off/on order (DS3).
+    var consent: TelemetryConsent?
+    private(set) var consentAtStop: [Bool] = []
+    private(set) var consentAtStart: [Bool] = []
 
     var events: [TelemetryEvent] {
         calls.compactMap { if case .capture(let event) = $0 { event } else { nil } }
@@ -43,10 +48,21 @@ final class RecordingSink: TelemetrySink {
         }
     }
 
-    func clear() { calls = [] }
+    func clear() {
+        calls = []
+        consentAtStop = []
+        consentAtStart = []
+    }
 
-    func start() { calls.append(.start) }
-    func stop() { calls.append(.stop) }
+    func start() {
+        calls.append(.start)
+        if let consent { consentAtStart.append(consent.isEnabled) }
+    }
+
+    func stop() {
+        calls.append(.stop)
+        if let consent { consentAtStop.append(consent.isEnabled) }
+    }
     func capture(_ event: TelemetryEvent) { calls.append(.capture(event)) }
     func record(_ report: TelemetryErrorReport) { calls.append(.record(report)) }
     func identify(_ userID: UUID) { calls.append(.identify(userID)) }
@@ -63,6 +79,7 @@ func makeTelemetryDefaults() -> UserDefaults {
 func makeRecordingTelemetry(defaults: UserDefaults = makeTelemetryDefaults()) -> (Telemetry, RecordingSink) {
     let sink = RecordingSink()
     let telemetry = Telemetry(sinks: [sink], userDefaults: defaults)
+    sink.consent = telemetry.consent
     sink.clear()
     return (telemetry, sink)
 }
