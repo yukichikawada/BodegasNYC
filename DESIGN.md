@@ -383,6 +383,30 @@ reserved as an empty line and the sentence fades in over it (0.2s `easeOut`, opa
 the sections below never shift. A load failure under the sections is `.footnote` `.primary`
 (consequence copy, #95 D8).
 
+**Detail map and directions (#150):** header → map preview → action row → data points. The
+preview and the row are one `VStack(alignment: .leading, spacing: 12)` inside the page's 20pt stack.
+The preview is a live, non-interactive `Map`, full content width, fixed 160pt, `{rounded.md}`
+12pt, on a `{colors.surface-grouped}` ground (`secondarySystemBackground`) with the map clipped
+inside, so loading and offline show a grey panel with the pin and nothing shifts: no spinner, no
+failure copy (DS2). `MapCamera` centred on the pin at 400 m, north up, level, so both nearest
+cross streets are named on a 375pt phone at default type (DS1); the main map's POI exclusions.
+`BodegaPinView` at rest, unlabelled, centred, clear of the attribution band. The preview is a
+`.plain` button alias of Show on Map with no chevron, pill or border (DS8); VoiceOver "Map", hint
+"Shows this bodega on the map."; the `Map` keeps its accessibility children and the tap target
+stops above the attribution band, so Apple's Legal link stays reachable. The row is a
+`DetailButtonRow` with no title, leading: Directions first, `.borderedProminent` (the page's one
+primary action) with `arrow.triangle.turn.up.right.diamond` (`figure.walk` is Streets Walked's,
+DS5), then Show on Map `.bordered` with `map`, default control size (DS11). Directions opens Apple
+Maps walking to the pin's coordinate, named for the bodega, signed in or not and with location
+denied; if Maps does not open, "Maps didn't open." in `.footnote` `.primary` under the row,
+announced, cleared on the next tap (DS10). Show on Map pops the detail (from a list-opened
+detail the Map tab is chosen under it first) and flies to the pin at street zoom on Locate Me's
+duration rule, `easeInOut`, the pan kept under Reduce Motion, no flight when the camera is
+already there (DS7); from a pin-opened detail the zoom pop runs first and the camera flies after
+the release. The pin stays in the selected look, its own pin and labelled first until the next
+pin or cluster tap, the List tab, placement or an add; VoiceOver hears "<Name>. On the map." once
+the camera settles (DS9).
+
 **Data points** (`DataPointsSection`, #70, #95 D9, #141): six amenities (cat, hot food, nicotine,
 beer, lotto, ATM), in `BodegaFilter.Amenity` order on every surface, each with one caption shared by
 onboarding, detail, the Add/Edit form and the Filters sheet. Symbol over a `.caption2` caption, six
@@ -680,3 +704,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-30 | #127 Account sheet and account deletion (DS1 to DS8): "Your Account…" in the Account menu opens an inset-grouped sheet with Sign Out, the consequence line and Delete Account, and Privacy Policy; deleting asks once in a dialog, then (Apple users) confirms with Apple in the sheet; a terminal "Your account is gone." line instead of an auto-dismiss; three truthful failure outcomes, including a 202 when the photo sweep lags; Privacy Policy in the menu for everyone | `/plan-design-review` with two outside voices; owner accepted all. App Review 5.1.1(v) and (i); the Apple step must not hide the point of no return, and the copy must never say the account survived when it did not |
 | 2026-10-30 | #141 ATM as the sixth data point: `has_atm` boolean, defaulted false, decoded strictly like the other five (D6); ATM last on every surface, captioned "ATM" with `banknote`, VoiceOver "Has an ATM"; the detail points, the Add/Edit toggles and the onboarding rows derive from `BodegaFilter.Amenity`, whose `caption` is the one label source, so the form's "Hot food" becomes "Hot Food" (D5, DS6); the form toggles carry the Filters sheet's VoiceOver labels (DS4); six detail columns while they fit, stacked at xxxLarge on 375 pt (DS1); Must Have may scroll at `.medium` on 667 pt screens (DS2); the boolean and strikethrough stay, unknown vs no is a P2 TODO (DS3, D9); "ATM" means one inside the store (DS7); rollback keeps the column (D7) | `/plan-eng-review` D5 to D9 and `/plan-design-review` DS1 to DS7 with outside voices; owner accepted all. Deriving from one enum keeps four surfaces from drifting; a drop would break installed strict-decoding builds; a tri-state for ATM alone would diverge from the five |
 | 2026-11-01 | #147 Share Usage and Diagnostics: the Account menu becomes three sections, [Your Account… / Sign In] / [Show Intro Again] / [Share Usage and Diagnostics, Privacy Policy]; the switch is a native `Toggle` (checkmark item, system VoiceOver value, no custom accessibility value), on by default, per device, unchanged by sign-out or account deletion; flipping it closes the menu with no confirmation, toast or delay, and off means off (no final event) | `/plan-design-review` DS1 to DS7 with two outside voices; owner accepted all. "and", not "&", because the label voice rule rejects an ampersand; the policy link directly under the switch is its explanation, following the Streets Walked menu's own `Toggle` section |
+| 2026-11-02 | #150 DS1 to DS11 detail map preview, Directions and Show on Map: preview at a 400 m camera (not the main map's 0.004° span), grey grouped ground with the pin centred in every state and no spinner, header → preview → row → data points in a 12pt group, Directions prominent first with `arrow.triangle.turn.up.right.diamond`, seven `AppCopy` strings, Locate Me's flight rule with a no-op when already there, the preview kept as a tap alias of Show on Map, a VoiceOver announcement after the landing, the "Maps didn't open." footnote, default control size with 44pt targets deferred to one pass over the detail (TODOS) | `/plan-design-review` with two outside voices; owner accepted all. The 0.004° span showed the neighbourhood with side-street names dropped; the List → detail path was the one place the map was out of sight |
