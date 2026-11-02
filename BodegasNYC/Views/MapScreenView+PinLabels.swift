@@ -11,9 +11,10 @@ import UIKit
 // camera moves wait for the settle (eng D1), and a zoom gesture clears them
 // (design D9).
 extension MapScreenView {
-    /// The pins placed first and always labelled: held, then dropping. The
-    /// tapped pin (`selectedItemID`) is cleared on every tap, so it is not a
-    /// lasting priority.
+    /// The pins placed first and always labelled: held or spotlit (Show on
+    /// Map, #150: `phase.bodega` carries it), then dropping. The tapped pin
+    /// (`selectedItemID`) is cleared on every tap, so it is not a lasting
+    /// priority.
     var labelPriorityIDs: [Bodega.ID] {
         var seen = Set<Bodega.ID>()
         return [pinMotion.phase.bodega?.id, viewModel.highlightedBodegaID]
@@ -80,6 +81,7 @@ extension MapScreenView {
         isCameraMoving = false
         countLocateTakeover(settledAt: context.camera)
         lastSettledCamera = context.camera
+        pinMotion.cameraDidSettle(region: context.region) // Show on Map's landing (#150)
         guard showsToolbar else {
             pendingSettledRegion = context.region
             return

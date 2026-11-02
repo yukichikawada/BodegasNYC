@@ -34,7 +34,9 @@ struct TelemetryEventTests {
         .walkStopped,
         .signedIn,
         .signedOut,
-        .accountDeleted
+        .accountDeleted,
+        .directionsOpened,
+        .showOnMap(fromMap: false)
     ]
 
     private static func expected(for event: TelemetryEvent) -> (name: String, keys: Set<String>) {
@@ -55,18 +57,21 @@ struct TelemetryEventTests {
         case .signedIn: ("signed_in", [])
         case .signedOut: ("signed_out", [])
         case .accountDeleted: ("account_deleted", [])
+        case .directionsOpened: ("directions_opened", [])
+        case .showOnMap: ("show_on_map", ["from_map"])
         }
     }
 
-    /// protects=the declared contract: 16 events (no `telemetry_disabled`,
-    /// DS3), each with its table name and exactly its table keys, and no
-    /// `bodega_id` on the authorship events (E4); fails_when=a case is
-    /// renamed, gains or loses a key, or a 17th event appears without a row;
+    /// protects=the declared contract: 18 events (no `telemetry_disabled`,
+    /// DS3; #150 R4 added `directions_opened` and `show_on_map`), each with
+    /// its table name and exactly its table keys, and no `bodega_id` on the
+    /// authorship events (E4); fails_when=a case is renamed, gains or loses a
+    /// key, or a 19th event appears without a row;
     /// no_claim=what the SDK adds on its own (lifecycle events, default
     /// properties), which only the live dashboard shows.
     @Test func everyEventMatchesTheTable() {
-        #expect(Self.fixtures.count == 16)
-        #expect(Set(Self.fixtures.map(\.name)).count == 16)
+        #expect(Self.fixtures.count == 18)
+        #expect(Set(Self.fixtures.map(\.name)).count == 18)
         for event in Self.fixtures {
             let expected = Self.expected(for: event)
             #expect(event.name == expected.name)
@@ -101,6 +106,7 @@ struct TelemetryEventTests {
         let opened = TelemetryEvent.bodegaOpened(id: Self.bodegaID, fromMap: false).properties
         #expect(opened["bodega_id"] == .string("8f14e45f-ceea-467e-adc9-15476f4eaa15"))
         #expect(opened["from_map"]?.sdkValue as? Bool == false)
+        #expect(TelemetryEvent.showOnMap(fromMap: true).properties["from_map"]?.sdkValue as? Bool == true)
         #expect(TelemetryEvent.filterApplied(amenityCount: 6).properties["amenity_count"]?.sdkValue as? Int == 6)
         #expect(TelemetryEvent.addStarted(route: .currentLocation).properties["route"] == .string("current_location"))
     }

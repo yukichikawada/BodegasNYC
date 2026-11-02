@@ -64,9 +64,11 @@ extension BrowseView {
     /// except for a detail opened from the duplicate prompt, which gets a
     /// standard push since its pin may be clustered, off screen or not yet
     /// loaded and iOS 26 would zoom from the screen centre (#20). Cleared
-    /// when the path empties.
+    /// when the path empties. Reads the tab the detail was opened from, not
+    /// the live one: Show on Map switches a list-opened detail's tab to Map
+    /// under it before the pop (#150 R5).
     func zoomsFromPin(to bodega: Bodega) -> Bool {
-        activeTab == .map && detailOpenedFromAddFlow != bodega.id
+        Self.opensFromPin(origin: zoomOrigin(), addFlowBodegaID: detailOpenedFromAddFlow, bodegaID: bodega.id)
     }
 }
 

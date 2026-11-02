@@ -91,7 +91,8 @@ struct AppCopyVoiceTests {
     static let shippedCopy: [CopyString] =
         AppCopy.allCases.map(\.copy) + [
             AppCopy.noSearchMatchesTitle("Deli"),
-            AppCopy.addedAnnouncement(name: "Deli")
+            AppCopy.addedAnnouncement(name: "Deli"),
+            AppCopy.showOnMapAnnouncement(name: "Deli")
         ] + distanceFixtures.flatMap { [AppCopy.distanceValue($0), AppCopy.distanceFromYou($0)] }
         + photoPositionFixtures.flatMap { index, count in
             [
@@ -173,6 +174,25 @@ struct AppCopyVoiceTests {
     @Test func addedAnnouncementNamesTheBodega() {
         #expect(AppCopy.addedAnnouncement(name: "Deli").text == "Deli is on the map.")
         #expect(AppCopy.addedAnnouncement(name: "Deli").kind == .body)
+    }
+
+    /// protects=the detail map and directions copy is design DS6's table
+    /// (#150), labels as labels and the rest as sentences; fails_when=a
+    /// string or its kind drifts from the table, or the announcement drops
+    /// the name; no_claim=where each is shown or spoken (live QA).
+    @Test func detailMapCopyMatchesTheDesignTable() {
+        let table: [(AppCopy, CopyString.Kind, String)] = [
+            (.directionsAction, .label, "Directions"),
+            (.showOnMapAction, .label, "Show on Map"),
+            (.detailMapLabel, .label, "Map"),
+            (.detailMapHint, .body, "Shows this bodega on the map."),
+            (.directionsHint, .body, "Opens walking directions in Apple Maps."),
+            (.mapsDidNotOpenBody, .body, "Maps didn't open.")
+        ]
+        for (copy, kind, text) in table {
+            #expect(copy.copy == CopyString(kind: kind, text: text))
+        }
+        #expect(AppCopy.showOnMapAnnouncement(name: "Deli") == CopyString(kind: .body, text: "Deli. On the map."))
     }
 
     @Test func reviewsEmptyStateUsesTheCatLineOnlyWithACat() {

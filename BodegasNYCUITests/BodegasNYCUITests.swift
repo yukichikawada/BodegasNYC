@@ -93,6 +93,44 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(detailTitle.waitForExistence(timeout: 10), "detail title never appeared after tapping the pin")
     }
 
+    /// protects: a detail opened from the List shows the map preview and a Directions button, and Show on Map
+    /// lands on the Map tab with the detail gone and the bodega's pin on screen to tap (#150 AC 1, AC 3, R5).
+    /// fails_when: the preview or Directions is missing, Show on Map leaves the detail up or the List tab
+    /// showing, or the pin is not hittable afterwards (clustered away, under the page, never drawn).
+    /// no_claim: Apple Maps opening (never launched here), the camera's centre and flight, the pin's selected
+    /// look, the announcement, the pin-opened path's pop-then-fly (unit tests and live QA).
+    @MainActor
+    func testShowOnMapFromAListOpenedDetail() throws {
+        let app = launchWithFixtures()
+
+        let listTab = app.buttons["List"].firstMatch
+        XCTAssertTrue(listTab.waitForExistence(timeout: 10), "the List tab control never appeared")
+        listTab.tap()
+        let row = app.buttons.matching(NSPredicate(format: "label BEGINSWITH %@", Self.fixtureBodegaName)).firstMatch
+        XCTAssertTrue(row.waitForExistence(timeout: 20), "fixture row never appeared on the list")
+        row.tap()
+
+        XCTAssertTrue(app.navigationBars[Self.fixtureBodegaName].waitForExistence(timeout: 10), "detail never opened")
+        // `BodegaDetailMapPreview.accessibilityID`.
+        let preview = app.buttons["bodegaDetail.mapPreview"]
+        XCTAssertTrue(preview.waitForExistence(timeout: 5), "the detail has no map preview")
+        XCTAssertEqual(preview.label, "Map", "the preview's VoiceOver label is not Map")
+        XCTAssertTrue(app.buttons["Directions"].exists, "the detail has no Directions button")
+        let showOnMap = app.buttons["Show on Map"]
+        XCTAssertTrue(showOnMap.exists, "the detail has no Show on Map button")
+        showOnMap.tap()
+
+        XCTAssertTrue(
+            app.navigationBars[Self.fixtureBodegaName].waitForNonExistence(timeout: 5),
+            "Show on Map left the detail up"
+        )
+        XCTAssertTrue(app.buttons["Locate Me"].waitForExistence(timeout: 5), "Show on Map did not land on the Map tab")
+        let pin = app.buttons[Self.fixtureBodegaName].firstMatch
+        XCTAssertTrue(pin.waitForExistence(timeout: 10), "the fixture pin is not on the map after Show on Map")
+        let hittable = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pin)
+        wait(for: [hittable], timeout: 5)
+    }
+
     /// protects: tapping a thumbnail opens the viewer on that photo, swipes page in gallery order with the
     /// counter right at the last photo, and both the close button and a swipe down close it (#107 AC 1, AC 3).
     /// fails_when: the viewer opens on another photo, a swipe does not page or pages past the end, the counter

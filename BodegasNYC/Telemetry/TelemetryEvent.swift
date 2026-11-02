@@ -17,7 +17,7 @@ nonisolated enum TelemetryValue: Equatable, Sendable {
     }
 }
 
-/// The app's only named events (16 after design DS3). The SDK adds its own
+/// The app's only named events (16 after design DS3, 18 with #150's two). The SDK adds its own
 /// lifecycle events and default properties; nothing else leaves the app.
 /// `bodega_id` (the public row UUID) appears on `bodega_opened` only: the
 /// authorship events carry no id, so no vendor can tie an account to what
@@ -87,6 +87,12 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
     case signedIn
     case signedOut
     case accountDeleted
+    /// The detail's Directions button (#150 R4); a Maps hand-off that
+    /// fails is also recorded as an error, context `directions.open`.
+    case directionsOpened
+    /// The detail's Show on Map or its map preview (#150 R4): whether the
+    /// detail had been opened from a map pin.
+    case showOnMap(fromMap: Bool)
 
     var name: String {
         switch self {
@@ -106,6 +112,8 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
         case .signedIn: "signed_in"
         case .signedOut: "signed_out"
         case .accountDeleted: "account_deleted"
+        case .directionsOpened: "directions_opened"
+        case .showOnMap: "show_on_map"
         }
     }
 
@@ -127,8 +135,10 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
             ["has_caption": .bool(hasCaption)]
         case .flagSubmitted(let kind):
             ["kind": .string(kind)]
+        case .showOnMap(let fromMap):
+            ["from_map": .bool(fromMap)]
         case .locateMeTapped, .duplicateChosen, .reviewAdded, .walkStarted, .walkStopped,
-             .signedIn, .signedOut, .accountDeleted:
+             .signedIn, .signedOut, .accountDeleted, .directionsOpened:
             [:]
         }
     }

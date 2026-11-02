@@ -158,13 +158,23 @@ nonisolated enum PinToDetailMotion {
         case holding(Bodega)
         case presented(Bodega)
         case releasing(Bodega)
+        /// Show on Map (#150 R2): the detail's bodega (the event's payload,
+        /// so post-edit) is the map's one focused pin, drawn in the selected
+        /// look and kept out of clusters until a pin or cluster tap, the
+        /// List tab, placement or an add.
+        case spotlit(Bodega)
 
-        /// The held pin, in every phase but `idle`.
+        /// The held or spotlit pin, in every phase but `idle`.
         var bodega: Bodega? {
             switch self {
             case .idle: nil
-            case .holding(let bodega), .presented(let bodega), .releasing(let bodega): bodega
+            case .holding(let bodega), .presented(let bodega), .releasing(let bodega), .spotlit(let bodega): bodega
             }
+        }
+
+        /// The spotlit pin only (`BodegaMapViewModel.spotlitBodegaID`).
+        var spotlitBodega: Bodega? {
+            if case .spotlit(let bodega) = self { bodega } else { nil }
         }
     }
 
@@ -179,8 +189,11 @@ nonisolated enum PinToDetailMotion {
         /// cancelled swipe never changes `path`, so never sends this.
         case detailDismissed
         case releaseElapsed(Bodega.ID)
-        /// Placement mode entered or the List tab chosen.
+        /// Placement mode entered, the List tab chosen or an add submitted.
         case interrupted
+        /// The detail's Show on Map or its map preview (#150), with the
+        /// bodega as the detail shows it.
+        case showOnMap(Bodega)
     }
 
     enum Effect: Equatable {
@@ -188,6 +201,8 @@ nonisolated enum PinToDetailMotion {
         case push(Bodega)
         case scheduleRelease(Bodega.ID)
         case cancelTimer
+        /// Fly the camera to the spotlit pin (#150 R2, design DS7).
+        case moveCamera(Bodega)
     }
 
     static func reduce(_ phase: Phase, _ event: Event) -> (Phase, [Effect]) {
@@ -215,8 +230,32 @@ nonisolated enum PinToDetailMotion {
             return (.idle, [.cancelTimer])
 
         default:
-            // Stale `*Elapsed` ids, a re-tap of the pin already being held,
-            // and anything else a phase doesn't answer: unchanged.
+            // Show on Map's rows, then: stale `*Elapsed` ids, a re-tap of
+            // the pin already being held, and anything else a phase doesn't
+            // answer: unchanged.
+            return reduceShowOnMap(phase, event)
+        }
+    }
+
+    /// Show on Map (#150 R2/R3), reached only when no row above matched:
+    /// from a pin-opened detail the pop shrinks the page into the pin where
+    /// it is, and the camera flies only once the release has run; from
+    /// anywhere else it flies at once.
+    private static func reduceShowOnMap(_ phase: Phase, _ event: Event) -> (Phase, [Effect]) {
+        switch (phase, event) {
+        // A spotlight still up under a detail the add flow's duplicate
+        // prompt opened (no pin tap, no List tab) moves to the new bodega.
+        case (.idle, .showOnMap(let bodega)), (.spotlit, .showOnMap(let bodega)):
+            return (.spotlit(bodega), [.moveCamera(bodega)])
+        case (.presented, .showOnMap(let bodega)):
+            return (.spotlit(bodega), [.scheduleRelease(bodega.id)])
+        case (.spotlit(let spotlit), .releaseElapsed(let id)) where id == spotlit.id:
+            return (.spotlit(spotlit), [.moveCamera(spotlit)])
+        case (.spotlit, .pinTapped(let bodega)):
+            return (.holding(bodega), [.scheduleHold(bodega.id)])
+        case (.spotlit, .clusterTapped), (.spotlit, .interrupted):
+            return (.idle, [.cancelTimer])
+        default:
             return (phase, [])
         }
     }
@@ -228,8 +267,10 @@ extension View {
     /// list row. Not applied unconditionally (spec R5): on iOS 26 a zoom with
     /// no live source still zooms, out of the screen's centre, instead of
     /// falling back to the push. `fromMap` cannot change while a detail is up
-    /// (the tab control is not on the detail), so the modifier is never
-    /// swapped mid-push or mid-pop.
+    /// (the tab control is not on the detail, and Show on Map's tab switch
+    /// under a list-opened detail is read through the captured
+    /// `BrowseView.detailOrigin`, #150 R5), so the modifier is never swapped
+    /// mid-push or mid-pop.
     @ViewBuilder
     func pinToDetailTransition(sourceID: Bodega.ID, in namespace: Namespace.ID, fromMap: Bool) -> some View {
         if BrowseMotion.PinToDetail.zoomEnabled, fromMap {

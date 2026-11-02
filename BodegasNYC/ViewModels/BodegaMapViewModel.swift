@@ -57,6 +57,18 @@ final class BodegaMapViewModel {
         }
     }
 
+    /// Show on Map's spotlit bodega (#150 R2), written only by `BrowseView`
+    /// from `PinMotionState.phase`. The same `recluster` treatment as
+    /// `highlightedBodegaID`: its own pin whatever the filter or the grid
+    /// cell. Before the camera's `.nearby` fetch brings it into
+    /// `loadedBodegas`, the stand-in annotation draws it.
+    var spotlitBodegaID: Bodega.ID? {
+        didSet {
+            guard spotlitBodegaID != oldValue, let lastRegion else { return }
+            recluster(region: lastRegion)
+        }
+    }
+
     /// True only when a fetch has landed and returned no bodegas at all,
     /// before any filtering — the map's "nothing here" banners
     /// (`MapBottomCard`). False during the initial load, after a failure,
@@ -206,18 +218,21 @@ final class BodegaMapViewModel {
     /// bodegas that actually match — clustering first and then hiding
     /// clusters would leave badges counting bodegas the user filtered out.
     ///
-    /// The highlighted bodega (R7) skips both steps and goes last, so it is
-    /// always its own pin. Going last does not put it above a neighbour to
-    /// its south (MapKit stacks by screen position, see `drawOrdered`);
-    /// `BodegaPinView` puts its label above the circle for that (#59).
+    /// The spotlit (#150) and highlighted (R7) bodegas skip both steps and
+    /// go last, so each is always its own pin. Going last does not put them
+    /// above a neighbour to the south (MapKit stacks by screen position, see
+    /// `drawOrdered`); `BodegaPinView` puts its label above the circle for
+    /// that (#59).
     private func recluster(region: MKCoordinateRegion) {
-        let highlighted = highlightedBodegaID.flatMap { id in loadedBodegas.first { $0.id == id } }
-        let candidates = highlighted.map { pinned in loadedBodegas.filter { $0.id != pinned.id } } ?? loadedBodegas
+        var pinnedIDs: [Bodega.ID] = []
+        for id in [spotlitBodegaID, highlightedBodegaID].compactMap({ $0 }) where !pinnedIDs.contains(id) {
+            pinnedIDs.append(id)
+        }
+        let pinned = pinnedIDs.compactMap { id in loadedBodegas.first { $0.id == id } }
+        let candidates = pinned.isEmpty ? loadedBodegas : loadedBodegas.filter { !pinnedIDs.contains($0.id) }
         let visible = filter.isActive ? candidates.filter(filter.matches) : candidates
         var items = Self.cluster(visible, visibleRegion: region)
-        if let highlighted {
-            items.append(.pin(highlighted))
-        }
+        items.append(contentsOf: pinned.map(MapDisplayItem.pin))
         // An unchanged result writes nothing: every write is a synchronous
         // whole-Map content update through Observation, and a settle that
         // reclusters to the same pins (most pans) paid for one each time

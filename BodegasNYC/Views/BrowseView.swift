@@ -55,6 +55,8 @@ struct BrowseView: View {
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var existingToOpen: Bodega? // a duplicate-prompt match (#20)
     @State var detailOpenedFromAddFlow: Bodega.ID? // see `zoomsFromPin(to:)`
+    @State var detailOrigin: Tab? // the pushed detail's tab (#150 R5), see `zoomOrigin()`
+    @State var showOnMapPending = false // the List path's deferred pop (#150), see `showOnMap`
     @State private var isResolvingCurrentLocation = false
     /// The single source of truth for filter/search across both tabs —
     /// pushed into both view models via `.onChange` below, so switching
@@ -186,7 +188,8 @@ struct BrowseView: View {
                         reviewService: reviewService,
                         photoService: photoService,
                         flagService: flagService,
-                        sessionStore: sessionStore, userLocation: userLocation, telemetry: telemetry
+                        sessionStore: sessionStore, userLocation: userLocation, telemetry: telemetry,
+                        onShowOnMap: showOnMap
                     ) { updatedBodega in
                         mapViewModel.bodegaWasUpdated(updatedBodega)
                         listViewModel.bodegaWasUpdated(updatedBodega)
@@ -212,8 +215,13 @@ struct BrowseView: View {
                 .addBodegaFlow($addBodegaViewModel, sessionStore: sessionStore, completion: addCompletion,
                                existingToOpen: $existingToOpen, openExisting: openExisting) {
                     activeTab = .map
+                    pinMotion.send(.interrupted) // an add clears a Show on Map spotlight (#150 R2)
                 }
-                .onChange(of: path.isEmpty) { if path.isEmpty { detailOpenedFromAddFlow = nil } }
+                .onChange(of: path.isEmpty) {
+                    if path.isEmpty { detailOpenedFromAddFlow = nil }
+                    detailOrigin = path.isEmpty ? nil : activeTab
+                }
+                .modifier(spotlightWiring)
                 .onChange(of: showingOnboarding) { _, isShowing in
                     syncTipParameters()
                     guard !isShowing else { return }

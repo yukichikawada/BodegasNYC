@@ -729,6 +729,50 @@ struct BodegaMapViewModelTests {
         #expect(Set(Self.pins(in: viewModel.displayItems).map(\.id)) == [neighbourID, added.id])
     }
 
+    /// protects: Show on Map's spotlit bodega (#150 R2) gets the highlight's
+    /// recluster treatment: its own pin when a neighbour shares its grid
+    /// cell and when the active filter excludes it, and back to normal once
+    /// the spotlight clears.
+    /// fails_when: the spotlit bodega is absorbed into a cluster (drawn twice
+    /// with the stand-in) or filtered out.
+    /// no_claim: the stand-in drawn before the fetch lands (`PinMotionState`)
+    /// or the selected look (live QA).
+    @Test func theSpotlitPinIsNeverClusteredOrFilteredOut() async throws {
+        MockURLProtocol.reset()
+        let streetRegion = MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 40.73005, longitude: -73.99005),
+            span: MKCoordinateSpan(latitudeDelta: 0.004, longitudeDelta: 0.004)
+        )
+        let neighbourID = UUID()
+        let spotlitID = UUID()
+        let rows = [
+            Self.bodegaJSON(
+                id: neighbourID, name: "Neighbour", latitude: 40.73001, longitude: -73.99001, hasCat: true
+            ),
+            Self.bodegaJSON(id: spotlitID, name: "Next Door", latitude: 40.73003, longitude: -73.99003)
+        ]
+        MockURLProtocol.stub(body: Data("[\(rows.joined(separator: ","))]".utf8))
+        let viewModel = makeViewModel()
+        viewModel.loadInitialIfNeeded(region: streetRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        // Without the spotlight the two share a cell and cluster.
+        #expect(viewModel.displayItems.count == 1)
+        if case .cluster = viewModel.displayItems.first {} else {
+            Issue.record("expected a cluster, got \(viewModel.displayItems)")
+        }
+
+        viewModel.spotlitBodegaID = spotlitID
+        #expect(Set(Self.pins(in: viewModel.displayItems).map(\.id)) == [neighbourID, spotlitID])
+        #expect(viewModel.displayItems.count == 2)
+
+        // A cat filter excludes the spotlit bodega but not its neighbour.
+        viewModel.filter = BodegaFilter(requiredAmenities: [.hasCat])
+        #expect(Set(Self.pins(in: viewModel.displayItems).map(\.id)) == [neighbourID, spotlitID])
+
+        viewModel.spotlitBodegaID = nil
+        #expect(Self.pins(in: viewModel.displayItems).map(\.id) == [neighbourID])
+    }
+
     /// R3: the ids and kinds `displayItems` yields for a fixed fixture and
     /// region, snapshotted when pins moved from `Marker` to `BodegaPinView`
     /// and updated once for the F1 overlap merge (adjacent-cell A and B now
