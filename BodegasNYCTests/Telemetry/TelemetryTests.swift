@@ -166,4 +166,29 @@ struct TelemetryTests {
         let json = String(decoding: try JSONSerialization.data(withJSONObject: serialized), as: UTF8.self)
         #expect(!json.contains(email))
     }
+
+    // MARK: DEBUG crash test (#151)
+
+    #if DEBUG
+    /// protects=`-TelemetryCrashTest` crashes only with Sentry configured
+    /// and sharing on, and the same check run when the task fires sees a
+    /// flip to off; fails_when=an opted-out launch, a launch without Sentry
+    /// or without the argument would crash, or a flip to off before the 2 s
+    /// delay is ignored; no_claim=that `Telemetry.live` calls this check at
+    /// both points (live check: an opted-out crash-test launch stays up).
+    @Test func crashTestNeedsSentryAndConsent() {
+        let args = ["app", TelemetryPlan.crashTestArgument]
+        let on = TelemetryConsent(true)
+        #expect(Telemetry.shouldCrashForTesting(hasSentry: true, launchArguments: args, consent: on))
+        #expect(!Telemetry.shouldCrashForTesting(hasSentry: false, launchArguments: args, consent: on))
+        #expect(!Telemetry.shouldCrashForTesting(hasSentry: true, launchArguments: ["app"], consent: on))
+        #expect(!Telemetry.shouldCrashForTesting(hasSentry: true, launchArguments: args, consent: TelemetryConsent(false)))
+
+        let defaults = makeTelemetryDefaults()
+        let telemetry = Telemetry(sinks: [], userDefaults: defaults)
+        #expect(Telemetry.shouldCrashForTesting(hasSentry: true, launchArguments: args, consent: telemetry.consent))
+        telemetry.setEnabled(false)
+        #expect(!Telemetry.shouldCrashForTesting(hasSentry: true, launchArguments: args, consent: telemetry.consent))
+    }
+    #endif
 }
