@@ -63,12 +63,9 @@ struct BrowseView: View {
     /// The list's order (#81), remembered across launches; an unreadable
     /// stored value falls back to nearest.
     @AppStorage("listOrder") var listOrder: ListOrder = .nearest
-    /// On iOS 26 the trailing toolbar buttons grow with Dynamic Type and
-    /// squeeze the principal slot: at `.xLarge` the segmented Map/List
-    /// control truncates and from `.xxLarge` up the toolbar drops it
-    /// entirely, even icon-only (#44). `modePicker` switches to a compact
-    /// `Menu` from `.xLarge` up so the List tab stays reachable.
+    /// With `browseWidth`, picks `modePicker`'s form: see `BrowseModePickerStyle` (#44, #143).
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @State private var browseWidth: CGFloat = 0
 
     private let bodegaService: BodegaService
     private let reviewService: ReviewService
@@ -125,9 +122,9 @@ struct BrowseView: View {
     }
 
     /// The Map/List switch in the toolbar's principal slot. A text
-    /// segmented control at default sizes; from `.xLarge` up it becomes a
-    /// single-button `Menu` wrapping the same `Picker` (see the
-    /// `dynamicTypeSize` doc comment for why).
+    /// segmented control where it fits; from `.xLarge` up, or on phones
+    /// narrower than 400 pt, a single-button `Menu` wrapping the same
+    /// `Picker` (see `BrowseModePickerStyle`).
     @ViewBuilder
     private var modePicker: some View {
         let picker = Picker("Browse Mode", selection: tabSelection) {
@@ -135,11 +132,18 @@ struct BrowseView: View {
                 Label(tab.label, systemImage: tab.systemImage).tag(tab)
             }
         }
-        if dynamicTypeSize >= .xLarge {
+        if BrowseModePickerStyle.resolve(dynamicTypeSize: dynamicTypeSize, width: browseWidth) == .menu {
             Menu {
                 picker
             } label: {
+                // The principal slot gives a bare icon (no glass button), so the
+                // label carries its own target: 44 pt wide, and as tall as the
+                // toolbar allows (it caps items at 36 pt, the same as the
+                // system Filters button), so taps near the glyph's edge count.
                 Label(activeTab.label, systemImage: activeTab.systemImage)
+                    .labelStyle(.iconOnly)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(.rect)
             }
             .accessibilityLabel("Browse Mode")
             .accessibilityValue(activeTab.label)
@@ -163,6 +167,7 @@ struct BrowseView: View {
                     }
                     // Account and Add: see `trailingToolbar`.
                 }
+                .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { browseWidth = $0 }
                 .navigationDestination(for: Bodega.self) { bodega in
                     // `path` is deliberately left holding the pre-edit
                     // `Bodega` after an edit: the detail screen renders
