@@ -47,12 +47,38 @@ struct FlagIssueViewModelTests {
     }
     """
 
-    private func makeViewModel(target: FlagTarget = .bodega(bodegaID), session: Session?) throws -> FlagIssueViewModel {
+    private func makeViewModel(
+        target: FlagTarget = .bodega(bodegaID),
+        session: Session?,
+        telemetry: Telemetry = Telemetry(sinks: [])
+    ) throws -> FlagIssueViewModel {
         FlagIssueViewModel(
             target: target,
             flagService: FlagService(postgrest: makeTestPostgrestClient()),
-            sessionStore: SessionStore(auth: try makeTestAuthClient(session: session))
+            sessionStore: SessionStore(auth: try makeTestAuthClient(session: session)),
+            telemetry: telemetry
         )
+    }
+
+    /// protects=a successful flag captures `flag_submitted` with the
+    /// reason's raw value as `kind`, never the typed details (#147); a
+    /// duplicate is recorded as an error with its SQLSTATE only;
+    /// fails_when=the details text reaches the event, the kind is wrong, or
+    /// a failure captures the event; no_claim=delivery (live QA).
+    @Test func aSubmittedFlagCapturesItsKindOnly() async throws {
+        let (telemetry, sink) = makeRecordingTelemetry()
+        let viewModel = try makeViewModel(session: makeTestSession(userID: Self.reporterID), telemetry: telemetry)
+        viewModel.reason = .closedPermanently
+        viewModel.details = "the owner's phone is 555-0100"
+
+        _ = try await submitAndCaptureJSON(viewModel)
+        MockURLProtocol.reset()
+        MockURLProtocol.stub(statusCode: 409, body: Data(Self.uniqueViolationJSON.utf8))
+        viewModel.submit()
+        await viewModel.waitForPendingSubmitForTesting()
+
+        #expect(sink.events == [.flagSubmitted(kind: "Closed permanently")])
+        #expect(sink.reports.map(\.code) == ["23505"])
     }
 
     private func submitAndCaptureJSON(_ viewModel: FlagIssueViewModel) async throws -> [String: Any] {

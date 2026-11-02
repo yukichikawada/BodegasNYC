@@ -37,11 +37,19 @@ final class SessionStore {
     private(set) var lastAuthError: String?
 
     private let auth: AuthClient
+    /// Identified with the user id while signed in, reset on every sign-out
+    /// (#147 eng E2); see `apply(_:)`.
+    @ObservationIgnored private let telemetry: Telemetry
+    /// Set while a user-initiated sign-out is in flight, so `apply(_:)`
+    /// captures `signed_out` just before the reset, whichever path (this
+    /// call or the `authStateChanges` listener) clears the user first.
+    @ObservationIgnored private var capturesSignedOut = false
 
     var isSignedIn: Bool { currentUserID != nil }
 
-    init(auth: AuthClient) {
+    init(auth: AuthClient, telemetry: Telemetry = Telemetry(sinks: [])) {
         self.auth = auth
+        self.telemetry = telemetry
         apply(auth.currentSession?.user)
         Task {
             for await (_, session) in auth.authStateChanges {
@@ -63,7 +71,9 @@ final class SessionStore {
                 credentials: OpenIDConnectCredentials(provider: .apple, idToken: idToken, nonce: nonce)
             )
             apply(session.user)
+            telemetry.capture(.signedIn)
         } catch {
+            telemetry.record(error, context: "session.apple_sign_in")
             lastAuthError = error.localizedDescription
         }
     }
@@ -78,25 +88,43 @@ final class SessionStore {
         do {
             let session = try await auth.signIn(email: email, password: password)
             apply(session.user)
+            telemetry.capture(.signedIn)
         } catch {
+            telemetry.record(error, context: "session.email_sign_in")
             lastAuthError = error.localizedDescription
         }
     }
     #endif
 
-    func signOut() async {
+    /// `emitsEvent` is false only after an account deletion, whose own
+    /// event follows the reset (`AccountViewModel.delete`).
+    func signOut(emitsEvent: Bool = true) async {
         lastAuthError = nil
+        capturesSignedOut = emitsEvent
+        defer { capturesSignedOut = false }
         do {
             try await auth.signOut()
             apply(nil)
         } catch {
+            telemetry.record(error, context: "session.sign_out")
             lastAuthError = error.localizedDescription
         }
     }
 
     /// The one place the user-derived state is set, so `currentUserID`,
-    /// `signedInWithApple` and `currentUserEmail` never disagree.
+    /// `signedInWithApple` and `currentUserEmail` never disagree. Telemetry
+    /// follows the id (eng E2): nil to A identifies, A to nil resets, A to B
+    /// resets then identifies, A to A does nothing.
     private func apply(_ user: User?) {
+        let previousUserID = currentUserID
+        let userID = user?.id
+        if previousUserID != userID {
+            if previousUserID != nil {
+                if userID == nil, capturesSignedOut { telemetry.capture(.signedOut) }
+                telemetry.reset()
+            }
+            if let userID { telemetry.identify(userID) }
+        }
         currentUserID = user?.id
         signedInWithApple = Self.hasAppleIdentity(user)
         currentUserEmail = user?.email

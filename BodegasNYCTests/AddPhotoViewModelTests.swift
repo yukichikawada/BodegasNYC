@@ -67,6 +67,7 @@ struct AddPhotoViewModelTests {
     private func makeViewModel(
         sources: [AddPhotoViewModel.PhotoSource],
         session: Session?,
+        telemetry: Telemetry = Telemetry(sinks: []),
         onUploaded: @escaping (Photo) -> Void = { _ in }
     ) throws -> AddPhotoViewModel {
         AddPhotoViewModel(
@@ -75,6 +76,7 @@ struct AddPhotoViewModelTests {
             itemIDs: Array(Self.itemIDs.prefix(sources.count)),
             photoService: PhotoService(postgrest: makeTestPostgrestClient(), storage: makeTestStorageClient()),
             sessionStore: SessionStore(auth: try makeTestAuthClient(session: session)),
+            telemetry: telemetry,
             onUploaded: onUploaded
         )
     }
@@ -83,10 +85,13 @@ struct AddPhotoViewModelTests {
     private func makeLoadedViewModel(
         count: Int,
         session: Session? = makeTestSession(userID: AddPhotoViewModelTests.uploaderID),
+        telemetry: Telemetry = Telemetry(sinks: []),
         onUploaded: @escaping (Photo) -> Void = { _ in }
     ) async throws -> AddPhotoViewModel {
         let sources = try (0..<count).map { _ in try Self.pngSource() }
-        let viewModel = try makeViewModel(sources: sources, session: session, onUploaded: onUploaded)
+        let viewModel = try makeViewModel(
+            sources: sources, session: session, telemetry: telemetry, onUploaded: onUploaded
+        )
         await viewModel.loadPickedPhotos()
         return viewModel
     }
@@ -320,6 +325,33 @@ struct AddPhotoViewModelTests {
         #expect(json["uploaded_by"] as? String == Self.uploaderID.uuidString)
         #expect(json["storage_path"] as? String == "\(Self.bodegaID.uuidString)/\(id.uuidString).jpg")
         #expect(json["caption"] as? String == "Front door")
+    }
+
+    /// protects=each uploaded photo captures `photo_added` with
+    /// `has_caption` and no caption text or bodega id (#147, eng E4); a
+    /// failed upload records an error instead;
+    /// fails_when=a failed item emits `photo_added`, the caption flag is
+    /// wrong, or the caption text appears; no_claim=delivery (live QA).
+    @Test func eachUploadedPhotoCapturesPhotoAdded() async throws {
+        MockURLProtocol.reset()
+        // Reverse order: 2 (no caption) uploads, then 1 (captioned) fails.
+        MockURLProtocol.stub(body: Data(Self.storageJSON.utf8))
+        MockURLProtocol.stub(body: Data(Self.photoJSON(id: Self.itemIDs[1]).utf8))
+        MockURLProtocol.stub(statusCode: 500, body: Data(#"{"message":"boom"}"#.utf8))
+        let (telemetry, sink) = makeRecordingTelemetry()
+        let viewModel = try await makeLoadedViewModel(count: 2, telemetry: telemetry)
+        viewModel.setCaption("Cat", for: Self.itemIDs[0])
+
+        viewModel.submit()
+        await viewModel.waitForPendingSubmitForTesting()
+        #expect(sink.events == [.photoAdded(hasCaption: false)])
+        #expect(sink.reports.map(\.context) == ["photo.upload"])
+
+        MockURLProtocol.stub(body: Data(Self.storageJSON.utf8))
+        MockURLProtocol.stub(body: Data(Self.photoJSON(id: Self.itemIDs[0], caption: "Cat").utf8))
+        viewModel.submit()
+        await viewModel.waitForPendingSubmitForTesting()
+        #expect(sink.events == [.photoAdded(hasCaption: false), .photoAdded(hasCaption: true)])
     }
 
     /// protects: once the sheet lets go of it, the view model (and every pick's JPEG and thumbnail) is freed after a

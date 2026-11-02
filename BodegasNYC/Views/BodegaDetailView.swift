@@ -60,6 +60,9 @@ struct BodegaDetailView: View {
     /// provider itself rather than a snapshot, so a fix that lands while the
     /// page is open fills the line in; `nil` (the default) shows no line.
     private let userLocation: UserLocationProvider?
+    /// Handed to the view models it builds (#147): their success events and
+    /// error records.
+    private let telemetry: Telemetry
     /// Fired after an Edit Bodega save so `BrowseView` can update the same
     /// row on the map and list. This screen updates itself first, via its
     /// own view model — it never re-reads the `Bodega` it was pushed with.
@@ -73,9 +76,11 @@ struct BodegaDetailView: View {
         flagService: FlagService,
         sessionStore: SessionStore,
         userLocation: UserLocationProvider? = nil,
+        telemetry: Telemetry,
         onBodegaUpdated: @escaping (Bodega) -> Void
     ) {
         self.userLocation = userLocation
+        self.telemetry = telemetry
         self.bodegaService = bodegaService
         self.reviewService = reviewService
         self.photoService = photoService
@@ -86,7 +91,8 @@ struct BodegaDetailView: View {
             initialValue: BodegaDetailViewModel(
                 bodega: bodega,
                 reviewService: reviewService,
-                photoService: photoService
+                photoService: photoService,
+                telemetry: telemetry
             )
         )
     }
@@ -221,7 +227,12 @@ struct BodegaDetailView: View {
                     }
                 ),
                 makeFlagViewModel: { photoID in
-                    FlagIssueViewModel(target: .photo(photoID), flagService: flagService, sessionStore: sessionStore)
+                    FlagIssueViewModel(
+                        target: .photo(photoID),
+                        flagService: flagService,
+                        sessionStore: sessionStore,
+                        telemetry: telemetry
+                    )
                 },
                 sessionStore: sessionStore
             )
@@ -247,12 +258,15 @@ struct BodegaDetailView: View {
             coordinate: viewModel.bodega.coordinate,
             existingBodega: viewModel.bodega,
             bodegaService: bodegaService,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            telemetry: telemetry
         )
     }
 
     private func presentFlagSheet(for target: FlagTarget) {
-        flagIssueViewModel = FlagIssueViewModel(target: target, flagService: flagService, sessionStore: sessionStore)
+        flagIssueViewModel = FlagIssueViewModel(
+            target: target, flagService: flagService, sessionStore: sessionStore, telemetry: telemetry
+        )
     }
 
     private var reviewActionButton: some View {
@@ -261,7 +275,8 @@ struct BodegaDetailView: View {
                 bodegaId: viewModel.bodega.id,
                 existingReview: myReview,
                 reviewService: reviewService,
-                sessionStore: sessionStore
+                sessionStore: sessionStore,
+                telemetry: telemetry
             )
         }
         .buttonStyle(.bordered)
@@ -330,7 +345,8 @@ extension BodegaDetailView {
             sources: sources,
             itemIDs: itemIDs,
             photoService: photoService,
-            sessionStore: sessionStore
+            sessionStore: sessionStore,
+            telemetry: telemetry
         ) { photo in
             uploadedWhileSheetOpen.append(photo)
         }

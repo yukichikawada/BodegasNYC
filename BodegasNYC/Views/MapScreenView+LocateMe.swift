@@ -61,6 +61,7 @@ extension MapScreenView {
     /// Whoever replaces or cancels the request clears the pulse at that
     /// moment, and every return here leaves it false.
     func locateMe() async {
+        telemetry.capture(.locateMeTapped)
         // The first add's choreography owns the camera (design D6).
         guard !Self.ignoresLocateMe(
             dropState: addCompletion?.dropState ?? .none,

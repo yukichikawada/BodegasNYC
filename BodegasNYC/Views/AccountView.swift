@@ -49,8 +49,11 @@ struct AccountView: View {
     /// opacity, so the same under Reduce Motion.
     static let swapAnimation = Animation.easeInOut(duration: 0.25)
 
-    init(accountService: AccountService, sessionStore: SessionStore) {
-        _viewModel = State(initialValue: AccountViewModel(accountService: accountService, sessionStore: sessionStore))
+    init(accountService: AccountService, sessionStore: SessionStore, telemetry: Telemetry) {
+        let viewModel = AccountViewModel(
+            accountService: accountService, sessionStore: sessionStore, telemetry: telemetry
+        )
+        _viewModel = State(initialValue: viewModel)
         self.sessionStore = sessionStore
     }
 

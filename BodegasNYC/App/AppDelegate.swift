@@ -10,7 +10,12 @@ import UIKit
 /// at a background launch, and shared by every window (eng R5). A `nil`
 /// store leaves both `nil`: a corrupt local store must not take down the
 /// bodega-finding core.
+///
+/// Also owns the one `Telemetry` (#147), built first in `didFinishLaunching`
+/// so a crash during a background relaunch is captured too.
 final class AppDelegate: NSObject, UIApplicationDelegate {
+    /// The no-op until `didFinishLaunching` replaces it (previews never run it).
+    private(set) var telemetry = Telemetry(sinks: [])
     private(set) var streetsWalkedContainer: ModelContainer?
     private(set) var walkRecorder: WalkRecorder?
     /// Authorization status, accuracy and Location Services (eng C2).
@@ -21,6 +26,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
+        telemetry = Telemetry.live()
         setUpStreetsWalked(
             container: Self.makeStreetsWalkedContainer(),
             isBackgroundLaunch: application.applicationState == .background
@@ -49,6 +55,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             backend: backend
         )
         walkRecorder = recorder
+        let telemetry = telemetry
+        recorder.onSaveError = { telemetry.record($0, context: "walk_recorder.save") }
         // A change re-reads the problems only; sessions move at activation.
         accessReader.onChange = { [weak recorder] in recorder?.accessDidChange() }
         recorder.resumeIfPreviouslyEnabled(isBackgroundLaunch: isBackgroundLaunch)
@@ -62,7 +70,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         let viewModel = StreetsWalkedViewModel(
             locationPermissionClient: locationPermissionClient,
             modelContainer: streetsWalkedContainer,
-            recorder: walkRecorder
+            recorder: walkRecorder,
+            telemetry: telemetry
         )
         streetsWalkedViewModel = viewModel
         return viewModel
