@@ -122,7 +122,7 @@ extension BrowseView {
     /// and the card rises over a map that is already uncovered (design
     /// review 3A). From the Map tab it starts at once, as before.
     func requestPlacement() {
-        placementFromOnboarding = false
+        addRoute.userStartsPlacement()
         guard activeTab == .list else {
             isPlacingBodega = true
             return

@@ -51,7 +51,7 @@ struct BrowseView: View {
     @State var showingAccount = false // the Account sheet (#127)
     @AccessibilityFocusState var accountMenuFocused: Bool // back here after it closes (DS7)
     @State var isPlacingBodega = false
-    @State var placementFromOnboarding = false // `add_started`'s route (#147 E6)
+    @State var addRoute = TelemetryEvent.AddRoute.Tracker() // `add_started`'s route (#147 E6)
     @State private var addBodegaViewModel: AddBodegaViewModel?
     @State private var existingToOpen: Bodega? // a duplicate-prompt match (#20)
     @State var detailOpenedFromAddFlow: Bodega.ID? // see `zoomsFromPin(to:)`
@@ -232,7 +232,10 @@ struct BrowseView: View {
                     listViewModel.loadInitialIfNeeded()
                 }
                 .addCompletion(addCompletion, camera: $cameraPosition, hasLeftMap: !path.isEmpty || activeTab == .list)
-                .onChange(of: isPlacingBodega) { syncTipParameters() }
+                .onChange(of: isPlacingBodega) { _, isPlacing in
+                    syncTipParameters()
+                    if !isPlacing { addRoute.placementEnded() }
+                }
                 .onChange(of: firstRunState.hasAddedFirstBodega) { syncTipParameters() }
                 .task { await addTipState.observe() }
                 .modifier(userLocationRefresh)
@@ -291,12 +294,8 @@ struct BrowseView: View {
     /// The add sheet's single entry, so `add_started` fires once per
     /// presentation on every route (#147 E6).
     func presentAddBodegaSheet(coordinate: CLLocationCoordinate2D, fromCurrentLocation: Bool = false) {
-        let route = TelemetryEvent.AddRoute.resolve(
-            fromCurrentLocation: fromCurrentLocation,
-            placementFromOnboarding: placementFromOnboarding
-        )
+        let route = addRoute.sheetPresented(fromCurrentLocation: fromCurrentLocation)
         isPlacingBodega = false
-        placementFromOnboarding = false
         telemetry.capture(.addStarted(route: route))
         addBodegaViewModel = AddBodegaViewModel(
             coordinate: Coordinate(coordinate),
@@ -339,8 +338,8 @@ extension BrowseView {
     private func landAfterOnboarding() {
         guard !showingOnboarding else { return }
         activeTab = .map
+        if firstRunState.pendingTutorialAdd { addRoute.onboardingStartsPlacement() }
         isPlacingBodega = firstRunState.pendingTutorialAdd
-        placementFromOnboarding = firstRunState.pendingTutorialAdd
         firstRunState.pendingTutorialAdd = false
     }
 }

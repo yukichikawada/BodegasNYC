@@ -110,6 +110,32 @@ struct TelemetryEventTests {
     /// begun from onboarding; fails_when=the shortcut reads as placement, or
     /// an onboarding placement reads as plain placement; no_claim=that
     /// `BrowseView` passes the right flags (live QA through the three routes).
+    /// protects=a placement begun from onboarding and then cancelled does
+    /// not leave a later placement (from the empty-state card or the Add
+    /// tip, which never call Drop a Pin's path) reading "onboarding"; the
+    /// onboarding route survives until its own sheet opens, and is spent
+    /// there; fails_when=cancel-then-re-enter logs "onboarding", or the
+    /// onboarding placement itself logs "placement"; no_claim=that
+    /// `BrowseView` calls `placementEnded()` on every `isPlacingBodega`
+    /// false (its `onChange`; live QA through the cancel path).
+    @Test func addRouteTrackerForgetsOnboardingWhenPlacementEnds() {
+        var tracker = TelemetryEvent.AddRoute.Tracker()
+        tracker.onboardingStartsPlacement()
+        tracker.placementEnded() // Cancel on the placement bar
+        // Re-entered from the empty-state card: no tracker call.
+        #expect(tracker.sheetPresented(fromCurrentLocation: false) == .placement)
+
+        tracker.onboardingStartsPlacement()
+        #expect(tracker.sheetPresented(fromCurrentLocation: false) == .onboarding)
+        #expect(tracker.sheetPresented(fromCurrentLocation: false) == .placement)
+
+        tracker.onboardingStartsPlacement()
+        tracker.userStartsPlacement()
+        #expect(tracker.sheetPresented(fromCurrentLocation: false) == .placement)
+        tracker.onboardingStartsPlacement()
+        #expect(tracker.sheetPresented(fromCurrentLocation: true) == .currentLocation)
+    }
+
     @Test func addRouteMapping() {
         typealias Route = TelemetryEvent.AddRoute
         #expect(Route.resolve(fromCurrentLocation: true, placementFromOnboarding: false) == .currentLocation)

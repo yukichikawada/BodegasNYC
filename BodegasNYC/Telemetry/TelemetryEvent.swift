@@ -43,6 +43,32 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
             if fromCurrentLocation { return .currentLocation }
             return placementFromOnboarding ? .onboarding : .placement
         }
+
+        /// Whether the placement in progress began from onboarding, for
+        /// `BrowseView`. Cleared whenever placement ends (confirmed or
+        /// cancelled) and when the sheet opens, so a later placement from
+        /// Drop a Pin, the empty-state card or the Add tip reads "placement".
+        nonisolated struct Tracker: Equatable, Sendable {
+            private(set) var placementFromOnboarding = false
+
+            /// Onboarding's "Add a Bodega You Know" is starting placement.
+            mutating func onboardingStartsPlacement() { placementFromOnboarding = true }
+
+            /// Drop a Pin (or the List tab's add): an ordinary placement.
+            mutating func userStartsPlacement() { placementFromOnboarding = false }
+
+            /// `isPlacingBodega` went false, by confirm or cancel.
+            mutating func placementEnded() { placementFromOnboarding = false }
+
+            /// The add sheet opens: its route, and the flag is spent.
+            mutating func sheetPresented(fromCurrentLocation: Bool) -> AddRoute {
+                defer { placementFromOnboarding = false }
+                return AddRoute.resolve(
+                    fromCurrentLocation: fromCurrentLocation,
+                    placementFromOnboarding: placementFromOnboarding
+                )
+            }
+        }
     }
 
     case onboardingCompleted(wantsToAdd: Bool)
