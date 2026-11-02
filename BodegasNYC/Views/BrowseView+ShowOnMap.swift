@@ -11,13 +11,24 @@ extension BrowseView {
     /// map and the camera flies at once. From a pin-opened detail the zoom
     /// pop shrinks the page into the pin where it is, and the camera flies
     /// when the release has run (R3). `bodega` is the detail's post-edit value.
+    ///
+    /// From the List the pop waits one main-actor turn after the tab switch:
+    /// popping in the same update left the list's bottom search field drawn
+    /// over the map as a frozen glass capsule until the next push (iPhone SE
+    /// simulator, iOS 26.5, either order and unanimated alike). One turn
+    /// lets the hidden root drop the field before it is revealed.
     func showOnMap(_ bodega: Bodega) {
         telemetry.capture(.showOnMap(fromMap: zoomOrigin() == .map))
-        if activeTab != .map {
-            tabSelection.wrappedValue = .map
+        guard activeTab != .map else {
+            path.removeAll()
+            pinMotion.send(.showOnMap(bodega))
+            return
         }
-        path.removeAll()
-        pinMotion.send(.showOnMap(bodega))
+        tabSelection.wrappedValue = .map
+        Task { @MainActor in
+            path.removeAll()
+            pinMotion.send(.showOnMap(bodega))
+        }
     }
 
     /// The pushed detail's entry origin (R5): captured on the render after

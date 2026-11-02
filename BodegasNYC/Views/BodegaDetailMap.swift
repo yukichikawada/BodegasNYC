@@ -59,8 +59,11 @@ struct BodegaDetailMapPreview: View {
     /// DESIGN.md Shapes `{rounded.md}`, as the gallery thumbnails.
     static let cornerRadius: CGFloat = 12
     /// DS1: close enough that the two nearest cross streets are named on a
-    /// 375 pt phone at default type (tuned on the simulator, see the PR).
-    static let cameraDistance: CLLocationDistance = 400
+    /// 375 pt phone at default type. Tuned on the iPhone SE (3rd generation)
+    /// simulator (iOS 26.5, #150): at the reviewed ~400 m the avenue at an
+    /// East Village corner went unlabelled; at 300 m it and the street were
+    /// both named, as were Hudson, Barrow and Morton in the West Village.
+    static let cameraDistance: CLLocationDistance = 300
     /// The Apple Maps logo and Legal link's row at the bottom of the map.
     static let attributionBand: CGFloat = 24
     /// The UI test's handle (the label "Map" is also the Map/List control's).
