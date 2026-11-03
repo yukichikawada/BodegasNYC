@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The placement crosshair (#23 T3), drawn over the map while placing:
-/// `figure.wave`, centred horizontally and vertically in the band the
+/// The placement crosshair (#23 T3), drawn over the map while placing: a
+/// resting green pin (#154 design DS10, `PinCircle`), previewing exactly the
+/// pin that drops, centred horizontally and vertically in the band the
 /// placement card leaves uncovered (`BrowseMotion.crosshairY`), so it stays
 /// fully visible at every Dynamic Type size and orientation. It lands like a
 /// dropped pin and, under Reduce Motion, fades in. Silent to VoiceOver: the
@@ -28,15 +29,13 @@ struct PlacementCrosshair: View {
         GeometryReader { geometry in
             ZStack {
                 if isShown {
-                    // `figure.wave` has no directional "point" the way
-                    // `mappin` does, so its centre is the submitted point.
-                    // Fixed at `.largeTitle`'s default 34pt, like the pin's
-                    // glyph (DESIGN.md: symbol sizes are fixed): it marks a
-                    // point on the map, and growing with Dynamic Type would
-                    // push it into the card in landscape.
-                    Image(systemName: "figure.wave")
-                        .font(.system(size: 34))
-                        .foregroundStyle(.red)
+                    // A pin is anchored at its centre (`Annotation(anchor:
+                    // .center)`), so the circle's centre is the submitted
+                    // point. Fixed at the pin's 28pt (DESIGN.md: symbol sizes
+                    // are fixed): it marks a point on the map, and growing
+                    // with Dynamic Type would push it into the card in
+                    // landscape.
+                    PinCircle(hasCat: false, isSelected: false)
                         .onGeometryChange(for: CGPoint.self) { proxy in
                             let frame = proxy.frame(in: .global)
                             return CGPoint(x: frame.midX, y: frame.midY)
