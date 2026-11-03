@@ -134,6 +134,26 @@ nonisolated extension BodegaMapViewModel {
         .musicVenue
     ]
 
+    /// Apple's wayfinding points of interest (#154 design DS8): the only
+    /// ones drawn at block zoom and on the detail preview. An include list
+    /// also drops the businesses Apple leaves unclassified (galleries,
+    /// physiotherapy, dentists), which no exclusion can reach and which are
+    /// the loudest thing on a muted ground.
+    static let wayfindingPOICategories: [MKPointOfInterestCategory] = [
+        .publicTransport, .park, .school, .university, .hospital, .library, .museum, .landmark,
+        .airport, .stadium, .nationalPark, .nationalMonument, .beach, .zoo, .aquarium,
+        .amusementPark, .fireStation, .police, .postOffice, .restroom
+    ]
+
+    /// Which of Apple's points of interest the main map draws (#154 eng D2
+    /// as amended by design DS8): commercial ones hidden above block zoom,
+    /// wayfinding only at block zoom, switching on the labels' own 400 /
+    /// 440 m hysteresis so Apple's badges leave in the settle that brings
+    /// our labels in.
+    static func poiFilter(isBlockZoom: Bool) -> POIFilter {
+        isBlockZoom ? .wayfindingOnly : .commercialHidden
+    }
+
     /// Whether the camera is at block zoom, given the visible map height and
     /// the previous verdict.
     /// the previous verdict. A non-positive height (the map not laid out yet)

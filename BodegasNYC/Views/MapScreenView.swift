@@ -262,8 +262,9 @@ struct MapScreenView: View {
         // blue rather than taking the app tint (DESIGN.md Colors). Applied
         // to the Map alone, before the overlays, so they keep the tint.
         .tint(.blue)
-        // Ours are the only business names; wayfinding stays (#67 D1).
-        .mapStyle(.standard(pointsOfInterest: .excluding(BodegaMapViewModel.excludedPOICategories)))
+        // Muted, following the system appearance; ours are the only
+        // business names, and at block zoom only wayfinding stays (#154).
+        .mapStyle(BodegaMapViewModel.poiFilter(isBlockZoom: viewModel.pinLabels.isBlockZoom).mapStyle)
         .onMapCameraChange(frequency: .onEnd) { cameraDidSettle($0, proxy: proxy) }
         .onChange(of: selectedItemID) { _, newValue in
             guard let newValue else { return }
