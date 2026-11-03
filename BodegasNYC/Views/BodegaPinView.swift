@@ -27,6 +27,29 @@ struct BodegaPinView: View {
     nonisolated static let labelHorizontalPadding: CGFloat = 6
     nonisolated static let labelVerticalPadding: CGFloat = 2
 
+    /// The blur radii of the pin glow's two layers (#154 design DS3, the
+    /// probe board's values): the inner layer at 95% opacity, the outer at
+    /// 60%, in `pinGlow` or `catPinGlow`. Selected grows them with the pin.
+    nonisolated static func glow(isSelected: Bool) -> (inner: CGFloat, outer: CGFloat) {
+        isSelected ? (10, 28) : (7, 20)
+    }
+
+    /// The glyph takes the fill's on-colour (#154 design DS1): white on the
+    /// light green #0A7A43 (5.4:1), black on the night green #34C77B
+    /// (9.6:1), and black on the cat orange in both appearances (#FF9500
+    /// 9.6:1, #FF9F0A 10.2:1), where white is 2.2:1 or less. An explicit
+    /// rule, not `.primary`, which would flip the cat glyph to white at night.
+    nonisolated static func glyphColor(hasCat: Bool, colorScheme: ColorScheme) -> Color {
+        if hasCat { return .black }
+        return colorScheme == .dark ? .black : .white
+    }
+
+    /// Increase Contrast draws the pin's fill, glyph, stroke and black shadow
+    /// only, no glow (#154 design DS7). Reduce Transparency changes nothing.
+    nonisolated static func showsGlow(contrast: ColorSchemeContrast) -> Bool {
+        contrast != .increased
+    }
+
     let bodega: Bodega
     let isSelected: Bool
     /// From `AddCompletionCoordinator.pinPhase(for:)`. `.pending` renders
@@ -128,13 +151,7 @@ struct BodegaPinView: View {
     }
 
     private var circle: some View {
-        Image(systemName: bodega.hasCat ? "cat" : "figure.wave")
-            .font(.system(size: 14, weight: .semibold))
-            .foregroundStyle(.white)
-            .frame(width: Self.diameter, height: Self.diameter)
-            .background(bodega.hasCat ? Color.catPin : Color.pin, in: Circle())
-            .overlay(Circle().stroke(.white, lineWidth: isSelected ? 3 : 2))
-            .shadow(color: .black.opacity(0.3), radius: isSelected ? 4 : 2, y: isSelected ? 2 : 1)
+        PinCircle(hasCat: bodega.hasCat, isSelected: isSelected)
     }
 
     private var nameLabel: some View {
@@ -165,11 +182,57 @@ struct BodegaPinView: View {
     }
 }
 
+/// The pin's chrome without a `Bodega` (#154): the 28pt circle in `pin` or
+/// `catPin`, the glyph in the fill's on-colour (design DS1), the white
+/// stroke, the black offset shadow, and the coloured glow behind it all
+/// (DS3). `BodegaPinView` draws it for every bodega and `PlacementCrosshair`
+/// draws a resting green one (DS10), so the crosshair previews exactly the
+/// pin that drops.
+///
+/// The glow is drawn after the shadow, as a background, so the black shadow
+/// is cast from the circle alone, never from the halo. It scales with the
+/// caller's 1.15 selection scale and rides its 0.15s ease. It is not a label
+/// obstacle: placement still uses `BodegaMapViewModel.itemObstacleSide`
+/// (32pt), because a label may sit over another pin's halo but not its
+/// circle.
+struct PinCircle: View {
+    let hasCat: Bool
+    let isSelected: Bool
+
+    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+
+    var body: some View {
+        let glow = BodegaPinView.glow(isSelected: isSelected)
+        let glowColor = hasCat ? Color.catPinGlow : Color.pinGlow
+        Image(systemName: hasCat ? "cat" : "figure.wave")
+            .font(.system(size: 14, weight: .semibold))
+            .foregroundStyle(BodegaPinView.glyphColor(hasCat: hasCat, colorScheme: colorScheme))
+            .frame(width: BodegaPinView.diameter, height: BodegaPinView.diameter)
+            .background(hasCat ? Color.catPin : Color.pin, in: Circle())
+            .overlay(Circle().stroke(.white, lineWidth: isSelected ? 3 : 2))
+            .shadow(color: .black.opacity(0.3), radius: isSelected ? 4 : 2, y: isSelected ? 2 : 1)
+            .background {
+                if BodegaPinView.showsGlow(contrast: colorSchemeContrast) {
+                    ZStack {
+                        Circle().fill(glowColor.opacity(0.6)).blur(radius: glow.outer)
+                        Circle().fill(glowColor.opacity(0.95)).blur(radius: glow.inner)
+                    }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                }
+            }
+    }
+}
+
 /// A cluster of nearby bodegas, in the pin family (DD3): at least the pin's
-/// 28pt, neutral fill, white count, same stroke and shadow. Tapping zooms
+/// 28pt, the pin's green fill with the count in the pin glyph's on-colour
+/// (#154 design DS4), same stroke and shadow, no glow. Tapping zooms
 /// (`MapScreenView`).
 struct ClusterBadge: View {
     let count: Int
+
+    @Environment(\.colorScheme) private var colorScheme
 
     /// The badge's obstacle side for label placement (#67): the count in
     /// `.caption` bold at `contentSize` capped at `.xxLarge`, plus the 6pt
@@ -189,11 +252,11 @@ struct ClusterBadge: View {
     var body: some View {
         Text("\(count)")
             .font(.caption.bold())
-            .foregroundStyle(.white)
+            .foregroundStyle(BodegaPinView.glyphColor(hasCat: false, colorScheme: colorScheme))
             .padding(6)
             .frame(minWidth: BodegaPinView.diameter, minHeight: BodegaPinView.diameter)
-            // Opaque, so the white count keeps its contrast over light tiles.
-            .background(Color(.systemGray), in: Circle())
+            // Opaque, so the count keeps its contrast over any tile.
+            .background(Color.pin, in: Circle())
             .overlay(Circle().stroke(.white, lineWidth: 2))
             .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)

@@ -3,8 +3,27 @@ import Foundation
 import PostgREST
 import Storage
 import SwiftData
+import UIKit
 
 @testable import BodegasNYC
+
+/// A colour resolved under `traits`, as uppercase `RRGGBB`, for the asset
+/// colour tests (`WalkedOverlayTests`, `TextContrastTests`).
+func hexString(_ color: UIColor, _ traits: UITraitCollection) -> String {
+    var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+    color.resolvedColor(with: traits).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+    let bytes = [red, green, blue].map { Int(($0 * 255).rounded()) }
+    return bytes.map { String(format: "%02X", $0) }.joined()
+}
+
+/// A trait collection for one appearance and contrast slot of an asset
+/// colour.
+func colorTraits(_ style: UIUserInterfaceStyle, _ contrast: UIAccessibilityContrast) -> UITraitCollection {
+    UITraitCollection { traits in
+        traits.userInterfaceStyle = style
+        traits.accessibilityContrast = contrast
+    }
+}
 
 /// A bare `PostgrestClient` pointed at a `MockURLProtocol`-backed session —
 /// used by service tests that only need to verify request shape/decoding,

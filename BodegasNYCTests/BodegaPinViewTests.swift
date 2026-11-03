@@ -10,6 +10,7 @@
 //  truncation, so the function they covered no longer exists.
 //
 
+import SwiftUI
 import Testing
 import UIKit
 
@@ -90,5 +91,40 @@ struct BodegaPinViewTests {
         #expect(twelveAX5 == twelveCap)
         #expect(hundreds > twelveCap)
         #expect(PinLabelState().clusterObstacleSide(count: 12, contentSize: .extraExtraLarge) == twelveCap)
+    }
+
+    /// protects=the pin glow's two blur radii, 7 / 20 pt at rest and
+    /// 10 / 28 pt selected (#154 eng AC 4, design DS3), with the inner
+    /// layer tighter than the outer in both states;
+    /// fails_when=a radius drifts from the reviewed value, the selected glow
+    /// does not grow, or the layers swap;
+    /// no_claim=that `PinCircle` draws the glow, that the annotation host
+    /// does not clip it, or how it looks (the PR's close-up screenshots).
+    @Test func glowRadii() {
+        let rest = BodegaPinView.glow(isSelected: false)
+        let selected = BodegaPinView.glow(isSelected: true)
+        #expect(rest.inner == 7)
+        #expect(rest.outer == 20)
+        #expect(selected.inner == 10)
+        #expect(selected.outer == 28)
+        #expect(rest.inner < rest.outer)
+        #expect(selected.inner < selected.outer)
+    }
+
+    /// protects=DS1's four-cell glyph rule: white on the light green, black
+    /// on the night green, black on the cat orange in both appearances; and
+    /// DS7's rule that Increase Contrast turns the glow off;
+    /// fails_when=any cell takes the other colour (white on night green is
+    /// 2.19:1, white on cat orange 2.06-2.2:1), or the glow shows under
+    /// Increase Contrast or hides at standard contrast;
+    /// no_claim=that the view reads these from the environment, or the
+    /// rendered contrast over real tiles.
+    @Test func glyphOnColourAndContrastRule() {
+        #expect(BodegaPinView.glyphColor(hasCat: false, colorScheme: .light) == .white)
+        #expect(BodegaPinView.glyphColor(hasCat: false, colorScheme: .dark) == .black)
+        #expect(BodegaPinView.glyphColor(hasCat: true, colorScheme: .light) == .black)
+        #expect(BodegaPinView.glyphColor(hasCat: true, colorScheme: .dark) == .black)
+        #expect(BodegaPinView.showsGlow(contrast: .standard))
+        #expect(!BodegaPinView.showsGlow(contrast: .increased))
     }
 }

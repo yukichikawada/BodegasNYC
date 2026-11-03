@@ -271,35 +271,44 @@ struct WalkedOverlayTests {
         #expect(WalkedOverlay.lineWidth(visibleHeightMeters: 1_900, current: 3) == 5)
     }
 
-    /// protects: the stroke is the `walked` asset: indigo #5856D6 light,
-    /// #7D7AFF dark, with Increase Contrast slots, never the cat's orange
-    /// (design D1, AC10).
-    /// fails_when: the asset is missing, its values drift, or it matches
-    /// `catPin`.
-    /// no_claim: that MapScreenView strokes with it (QA reads the map).
-    @MainActor @Test func walkedColorIsIndigoNotOrange() throws {
-        let walked = try #require(UIColor(named: "walked", in: Bundle(for: StreetGrid.self), compatibleWith: nil))
-        let catPin = try #require(UIColor(named: "catPin", in: Bundle(for: StreetGrid.self), compatibleWith: nil))
-        func hex(_ color: UIColor, _ traits: UITraitCollection) -> String {
-            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-            color.resolvedColor(with: traits).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-            return String(format: "%02X%02X%02X", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+    /// protects: the map's colour assets after #154 (eng F2, design DS2):
+    /// `walked` is cyan #0891B2 light / #5AE3FF dark with Increase Contrast
+    /// #066A85 / #A0F0FF; `pin` is Deli Green and equals `AccentColor` in
+    /// both appearances; the glow tokens are the bright value in both
+    /// appearances (`pinGlow` #34C77B, `catPinGlow` #FF9F0A); and pin,
+    /// walked and catPin stay pairwise distinct in both appearances.
+    /// fails_when: an asset is missing, a slot is missing (it would fall
+    /// back to Any) or drifts from the reviewed value, `pin` diverges from
+    /// the tint, or any two of the three map colours collide.
+    /// no_claim: that the views draw with these assets (QA reads the map),
+    /// or any rendered contrast.
+    @MainActor @Test func walkedColorIsCyanNotOrange() throws {
+        let bundle = Bundle(for: StreetGrid.self)
+        func named(_ name: String) throws -> UIColor {
+            try #require(UIColor(named: name, in: bundle, compatibleWith: nil), "missing asset \(name)")
         }
-        func traits(_ style: UIUserInterfaceStyle, _ contrast: UIAccessibilityContrast) -> UITraitCollection {
-            UITraitCollection { mutable in
-                mutable.userInterfaceStyle = style
-                mutable.accessibilityContrast = contrast
-            }
+        let walked = try named("walked")
+        let pin = try named("pin")
+        let accent = try named("AccentColor")
+        let catPin = try named("catPin")
+        let pinGlow = try named("pinGlow")
+        let catPinGlow = try named("catPinGlow")
+        let light = colorTraits(.light, .normal)
+        let dark = colorTraits(.dark, .normal)
+
+        #expect(hexString(walked, light) == "0891B2")
+        #expect(hexString(walked, dark) == "5AE3FF")
+        #expect(hexString(walked, colorTraits(.light, .high)) == "066A85")
+        #expect(hexString(walked, colorTraits(.dark, .high)) == "A0F0FF")
+
+        #expect(hexString(pin, light) == "0A7A43")
+        #expect(hexString(pin, dark) == "34C77B")
+        for traits in [light, dark] {
+            #expect(hexString(pin, traits) == hexString(accent, traits))
+            #expect(hexString(pinGlow, traits) == "34C77B")
+            #expect(hexString(catPinGlow, traits) == "FF9F0A")
+            let mapColours = [hexString(pin, traits), hexString(walked, traits), hexString(catPin, traits)]
+            #expect(Set(mapColours).count == 3, "pin / walked / catPin collide: \(mapColours)")
         }
-        let light = traits(.light, .normal)
-        let dark = traits(.dark, .normal)
-        let lightContrast = traits(.light, .high)
-        let darkContrast = traits(.dark, .high)
-        #expect(hex(walked, light) == "5856D6")
-        #expect(hex(walked, dark) == "7D7AFF")
-        #expect(hex(walked, lightContrast) == "3634A3")
-        #expect(hex(walked, darkContrast) == "A5A3FF")
-        #expect(hex(walked, light) != hex(catPin, light))
-        #expect(hex(walked, dark) != hex(catPin, dark))
     }
 }

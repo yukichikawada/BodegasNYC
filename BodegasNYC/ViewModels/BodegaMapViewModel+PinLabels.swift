@@ -112,6 +112,8 @@ nonisolated extension BodegaMapViewModel {
     /// covered). Not the halo: a user standing on a pin lost that pin's and
     /// its neighbour's labels to a 44pt square (#67 QA, refining design D1).
     /// At 24pt, a label above a pin at the user's point clears the dot.
+    /// Not the pin glow either (#154 design DS3): a label may sit over a
+    /// neighbour's halo, never over its circle.
     static let itemObstacleSide: CGFloat = 32
     static let priorityObstacleSide: CGFloat = 36
     static let locationDotObstacleSide: CGFloat = 24

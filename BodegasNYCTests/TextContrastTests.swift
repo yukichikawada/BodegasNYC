@@ -18,30 +18,16 @@ import UIKit
 
 @MainActor
 struct TextContrastTests {
-    private static func hex(_ color: UIColor, _ traits: UITraitCollection) -> String {
-        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-        color.resolvedColor(with: traits).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-        let bytes = [red, green, blue].map { Int(($0 * 255).rounded()) }
-        return bytes.map { String(format: "%02X", $0) }.joined()
-    }
-
-    private static func traits(_ style: UIUserInterfaceStyle, _ contrast: UIAccessibilityContrast) -> UITraitCollection {
-        UITraitCollection { traits in
-            traits.userInterfaceStyle = style
-            traits.accessibilityContrast = contrast
-        }
-    }
-
     /// protects: the D6 slot values, each 4.5:1 or better on its surface
     /// (Any 5.99 on white, Dark 4.86 on #2C2C2E, the High Contrast pair higher).
     /// fails_when: a slot is missing (it would fall back to Any) or drifts
     /// from the reviewed value.
     @Test func textMutedResolvesToTheReviewedSlots() {
         let color = UIColor(resource: .textMuted)
-        #expect(Self.hex(color, Self.traits(.light, .normal)) == "636366")
-        #expect(Self.hex(color, Self.traits(.dark, .normal)) == "98989F")
-        #expect(Self.hex(color, Self.traits(.light, .high)) == "545458")
-        #expect(Self.hex(color, Self.traits(.dark, .high)) == "AEAEB2")
+        #expect(hexString(color, colorTraits(.light, .normal)) == "636366")
+        #expect(hexString(color, colorTraits(.dark, .normal)) == "98989F")
+        #expect(hexString(color, colorTraits(.light, .high)) == "545458")
+        #expect(hexString(color, colorTraits(.dark, .high)) == "AEAEB2")
     }
 
     /// protects: each of the six points reads its own amenity, in order
