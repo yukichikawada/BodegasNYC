@@ -41,15 +41,19 @@ nonisolated struct WalkedRunIndex: Sendable, Equatable {
 
     /// What the map draws for `region`: the runs whose bounding box meets
     /// the region expanded by 25% on each side, in run order, or `overCap`
-    /// past `WalkedOverlay.maxVisibleRuns`. Same answer as
-    /// `WalkedOverlay.visible(_:in:)`, which scans every run.
-    func visible(in region: WalkedRegion) -> WalkedOverlay.Visible {
-        query(region).visible
+    /// past `cap` (`WalkedOverlay.maxVisibleRuns` unless the trail style
+    /// lowers it, #154 D8). Same answer as `WalkedOverlay.visible(_:in:cap:)`,
+    /// which scans every run.
+    func visible(in region: WalkedRegion, cap: Int = WalkedOverlay.maxVisibleRuns) -> WalkedOverlay.Visible {
+        query(region, cap: cap).visible
     }
 
     /// `visible(in:)` plus how many index entries it examined (tests: the
     /// cost follows the cells in view, not the total).
-    func query(_ region: WalkedRegion) -> (visible: WalkedOverlay.Visible, examined: Int) {
+    func query(
+        _ region: WalkedRegion,
+        cap: Int = WalkedOverlay.maxVisibleRuns
+    ) -> (visible: WalkedOverlay.Visible, examined: Int) {
         guard !runs.isEmpty else { return (.runs([]), 0) }
         let bounds = WalkedOverlay.expandedBounds(region)
         let firstRow = max(rowRange.lowerBound, Self.row(bounds.minLatitude))
@@ -67,7 +71,7 @@ nonisolated struct WalkedRunIndex: Sendable, Equatable {
                     examined += 1
                     guard !kept.contains(index), WalkedOverlay.meets(runs[Int(index)], bounds) else { continue }
                     kept.insert(index)
-                    if kept.count > WalkedOverlay.maxVisibleRuns { return (.overCap, examined) }
+                    if kept.count > cap { return (.overCap, examined) }
                 }
             }
         }

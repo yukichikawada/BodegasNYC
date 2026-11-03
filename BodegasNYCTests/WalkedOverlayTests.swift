@@ -138,6 +138,41 @@ struct WalkedOverlayTests {
         #expect(WalkedRunIndex(runs: farAway + Array(runs.prefix(5))).visible(in: region) == .runs(Array(runs.prefix(5))))
     }
 
+    /// protects=#154 eng D8: while breadcrumbs draw (two polylines a run)
+    /// the layer hides past 500 visible runs, a line keeps 1,000, and the
+    /// settled display applies the cap of the width it settled at, through
+    /// the spatial index and the full scan alike;
+    /// fails_when=breadcrumbs keep the 1,000 cap (2,000 polylines), a line
+    /// loses runs it drew before #154, or the cap ignores the settled width;
+    /// no_claim=the frame rate at 500 breadcrumb runs (owner's device A/B,
+    /// AC 13).
+    @Test func breadcrumbsHalveTheCap() {
+        #expect(WalkedOverlay.maxVisibleRuns(for: .breadcrumbs(dot: 8, spacing: 16, track: 16)) == 500)
+        #expect(WalkedOverlay.maxVisibleRuns(for: .line(width: 3)) == 1_000)
+        let region = WalkedRegion(centerLatitude: F.originLatitude, centerLongitude: F.originLongitude, latitudeDelta: 0.1, longitudeDelta: 0.1)
+        let runs = (0 ..< 501).map {
+            WalkedRun(id: UInt32($0), coordinates: [F.coordinate(x: Double($0), y: 0), F.coordinate(x: Double($0), y: 10)])
+        }
+        #expect(WalkedOverlay.visible(runs, in: region, cap: 500) == .overCap)
+        #expect(WalkedRunIndex(runs: runs).visible(in: region, cap: 500) == .overCap)
+        #expect(WalkedRunIndex(runs: Array(runs.prefix(500))).visible(in: region, cap: 500) != .overCap)
+
+        let index = WalkedRunIndex(runs: runs)
+        var display = WalkedOverlayDisplay()
+        // 350 m settles at 8pt, breadcrumbs: 501 runs is over.
+        display.refresh(index: index, showsOverlay: true, region: region, visibleHeightMeters: 350, isCameraMoving: false)
+        #expect(display.lineWidth == 8)
+        #expect(display.visible == .overCap)
+        // 5 km settles at 3pt, a line: the same 501 runs draw.
+        display.refresh(index: index, showsOverlay: true, region: region, visibleHeightMeters: 5_000, isCameraMoving: false)
+        #expect(display.lineWidth == 3)
+        guard case .runs(let drawn) = display.visible else {
+            Issue.record("501 runs should draw as a line")
+            return
+        }
+        #expect(drawn.count == 501)
+    }
+
     /// Runs on a 50 m lattice around `(x, y)` metres: `count` short runs,
     /// ids from `firstID`.
     private static func lattice(count: Int, firstID: UInt32, x: Double, y: Double) -> [WalkedRun] {
@@ -271,35 +306,64 @@ struct WalkedOverlayTests {
         #expect(WalkedOverlay.lineWidth(visibleHeightMeters: 1_900, current: 3) == 5)
     }
 
-    /// protects: the stroke is the `walked` asset: indigo #5856D6 light,
-    /// #7D7AFF dark, with Increase Contrast slots, never the cat's orange
-    /// (design D1, AC10).
-    /// fails_when: the asset is missing, its values drift, or it matches
-    /// `catPin`.
-    /// no_claim: that MapScreenView strokes with it (QA reads the map).
-    @MainActor @Test func walkedColorIsIndigoNotOrange() throws {
-        let walked = try #require(UIColor(named: "walked", in: Bundle(for: StreetGrid.self), compatibleWith: nil))
-        let catPin = try #require(UIColor(named: "catPin", in: Bundle(for: StreetGrid.self), compatibleWith: nil))
-        func hex(_ color: UIColor, _ traits: UITraitCollection) -> String {
-            var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
-            color.resolvedColor(with: traits).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
-            return String(format: "%02X%02X%02X", Int((red * 255).rounded()), Int((green * 255).rounded()), Int((blue * 255).rounded()))
+    /// protects=#154 AC 5 and eng D1: breadcrumbs at the 8 and 5pt bands
+    /// (8pt dots every 16pt on a 16pt track; 6.5pt every 13pt on a 14pt
+    /// track), a plain line at 3 and 2pt, switching exactly at 5pt; and the
+    /// 440 m hysteresis width (8pt held past 400 m) stays breadcrumbs;
+    /// fails_when=a band takes the wrong style, the caps stop holding at 8pt
+    /// (a 10.4pt dot on a 22.4pt track), or the edge moves off 5pt;
+    /// no_claim=how the dots read on the map (the PR's 420 m and 6 km
+    /// screenshots) or that the overlay draws tracks before dots (code read,
+    /// eng F5).
+    @Test func trailStyleByBand() {
+        #expect(WalkedOverlay.trailStyle(width: 8) == .breadcrumbs(dot: 8, spacing: 16, track: 16))
+        #expect(WalkedOverlay.trailStyle(width: 5) == .breadcrumbs(dot: 6.5, spacing: 13, track: 14))
+        #expect(WalkedOverlay.trailStyle(width: 3) == .line(width: 3))
+        #expect(WalkedOverlay.trailStyle(width: 2) == .line(width: 2))
+        #expect(WalkedOverlay.trailStyle(width: 4.99) == .line(width: 4.99))
+        #expect(WalkedOverlay.trailStyle(width: 5) != .line(width: 5))
+        let held = WalkedOverlay.lineWidth(visibleHeightMeters: 430, current: 8)
+        #expect(WalkedOverlay.trailStyle(width: held) == .breadcrumbs(dot: 8, spacing: 16, track: 16))
+    }
+
+    /// protects: the map's colour assets after #154 (eng F2, design DS2):
+    /// `walked` is cyan #0891B2 light / #5AE3FF dark with Increase Contrast
+    /// #066A85 / #A0F0FF; `pin` is Deli Green and equals `AccentColor` in
+    /// both appearances; the glow tokens are the bright value in both
+    /// appearances (`pinGlow` #34C77B, `catPinGlow` #FF9F0A); and pin,
+    /// walked and catPin stay pairwise distinct in both appearances.
+    /// fails_when: an asset is missing, a slot is missing (it would fall
+    /// back to Any) or drifts from the reviewed value, `pin` diverges from
+    /// the tint, or any two of the three map colours collide.
+    /// no_claim: that the views draw with these assets (QA reads the map),
+    /// or any rendered contrast.
+    @MainActor @Test func walkedColorIsCyanNotOrange() throws {
+        let bundle = Bundle(for: StreetGrid.self)
+        func named(_ name: String) throws -> UIColor {
+            try #require(UIColor(named: name, in: bundle, compatibleWith: nil), "missing asset \(name)")
         }
-        func traits(_ style: UIUserInterfaceStyle, _ contrast: UIAccessibilityContrast) -> UITraitCollection {
-            UITraitCollection { mutable in
-                mutable.userInterfaceStyle = style
-                mutable.accessibilityContrast = contrast
-            }
+        let walked = try named("walked")
+        let pin = try named("pin")
+        let accent = try named("AccentColor")
+        let catPin = try named("catPin")
+        let pinGlow = try named("pinGlow")
+        let catPinGlow = try named("catPinGlow")
+        let light = colorTraits(.light, .normal)
+        let dark = colorTraits(.dark, .normal)
+
+        #expect(hexString(walked, light) == "0891B2")
+        #expect(hexString(walked, dark) == "5AE3FF")
+        #expect(hexString(walked, colorTraits(.light, .high)) == "066A85")
+        #expect(hexString(walked, colorTraits(.dark, .high)) == "A0F0FF")
+
+        #expect(hexString(pin, light) == "0A7A43")
+        #expect(hexString(pin, dark) == "34C77B")
+        for traits in [light, dark] {
+            #expect(hexString(pin, traits) == hexString(accent, traits))
+            #expect(hexString(pinGlow, traits) == "34C77B")
+            #expect(hexString(catPinGlow, traits) == "FF9F0A")
+            let mapColours = [hexString(pin, traits), hexString(walked, traits), hexString(catPin, traits)]
+            #expect(Set(mapColours).count == 3, "pin / walked / catPin collide: \(mapColours)")
         }
-        let light = traits(.light, .normal)
-        let dark = traits(.dark, .normal)
-        let lightContrast = traits(.light, .high)
-        let darkContrast = traits(.dark, .high)
-        #expect(hex(walked, light) == "5856D6")
-        #expect(hex(walked, dark) == "7D7AFF")
-        #expect(hex(walked, lightContrast) == "3634A3")
-        #expect(hex(walked, darkContrast) == "A5A3FF")
-        #expect(hex(walked, light) != hex(catPin, light))
-        #expect(hex(walked, dark) != hex(catPin, dark))
     }
 }

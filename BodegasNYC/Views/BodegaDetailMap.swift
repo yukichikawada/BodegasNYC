@@ -86,7 +86,8 @@ struct BodegaDetailMapPreview: View {
                 ),
                 interactionModes: []
             )
-            .mapStyle(.standard(pointsOfInterest: .excluding(BodegaMapViewModel.excludedPOICategories)))
+            // Its 300 m camera is block zoom: muted, wayfinding only (#154 DS8).
+            .mapStyle(POIFilter.wayfindingOnly.mapStyle)
             // The pin is the map's centre, drawn over it rather than as an
             // annotation so it shows before the tiles and never offers
             // VoiceOver a second "<Name>" button.

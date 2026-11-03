@@ -1,9 +1,9 @@
 ---
 # gstack: design-md-format=spec
 name: BodegasNYC
-description: Signage on the system shell. The map is the poster, the chrome is quiet native iOS, and the only loud things are red and orange pins and a heavy condensed title.
+description: Signage on the system shell. The map is the poster, the chrome is quiet native iOS, and the only loud things are green and orange pins, a cyan breadcrumb trail and a heavy condensed title.
 colors:
-  primary: "#0A7A43"          # tint, "Deli Green"; dark #34C77B. Controls only, never data or status
+  primary: "#0A7A43"          # tint, "Deli Green"; dark #34C77B. Controls and bodega pins (the brand green, #154); never status or success
   on-primary: "#FFFFFF"       # dark #000000
   surface: "#FFFFFF"          # systemBackground; dark #000000
   surface-grouped: "#F2F2F7"  # secondarySystemBackground / grouped; dark #1C1C1E
@@ -12,12 +12,13 @@ colors:
   text-secondary: "#8A8A8E"   # secondaryLabel flattened on white; dark #8D8D93. Symbols on material, system Form headers and footers (body text on material is .primary, #95 D11)
   text-tertiary: "#C4C4C6"    # tertiaryLabel flattened; dark #48484A. Non-text only (decorative chevrons), never on text (#95 D7)
   separator: "#C6C6C8"        # separator; dark #38383A
-  accent: "#FF3B30"           # pin, systemRed asset color; dark #FF453A. Bodega pins and the mappin symbol
+  accent: "#0A7A43"           # pin asset (#154); dark #34C77B. Bodega pins, cluster badges, the first-add legend and the placement crosshair. Deliberately the tint's values
+  pin-glow: "#34C77B"         # pinGlow asset (#154 DS2), the same in both appearances. The green pin's glow only
+  pin-glow-cat: "#FF9F0A"     # catPinGlow asset (#154 DS2), the same in both appearances. The cat pin's glow only
   accent-cat: "#FF9500"       # catPin, systemOrange asset color; dark #FF9F0A. Cat symbol everywhere, cat pins, the onboarding spine and the Streets Walked intro's symbol (#126)
   star: "#FFCC00"             # systemYellow; dark #FFD60A. Rating stars only
-  walked: "#5856D6"           # walked asset (#108 D1); dark #7D7AFF, Increase Contrast #3634A3 / #A5A3FF. Walked blocks only
-  cluster: "#8E8E93"          # systemGray. Cluster badge fill
-  error: "#FF3B30"            # systemRed as text only (form errors, destructive actions); dark #FF453A
+  walked: "#0891B2"           # walked asset (#154); dark #5AE3FF, Increase Contrast #066A85 / #A0F0FF. Walked trail only
+  error: "#FF3B30"            # systemRed as text only (form errors, destructive actions); dark #FF453A. The only red in the app (#154)
 typography:
   display:
     fontFamily: SF Pro
@@ -83,13 +84,15 @@ components:
     size: 28pt
     backgroundColor: "{colors.accent}"
     backgroundColorCat: "{colors.accent-cat}"
-    symbolColor: "#FFFFFF"
+    symbolColor: "#FFFFFF on light green; #000000 on dark green and on cat orange in both appearances (#154 DS1)"
     stroke: 2pt white
     shadow: radius 2, y 1
+    glow: "blurred circles behind the pin: inner radius 7 at 95%, outer radius 20 at 60%, in {colors.pin-glow} or {colors.pin-glow-cat}; none under Increase Contrast (#154 DS3, DS7)"
     target: 44pt
   pin-selected:
     stroke: 3pt white
     shadow: radius 4, y 2
+    glow: inner 10, outer 28
     scale: 1.15
   pin-label:
     font: "{typography.label}"   # .caption2, Dynamic Type capped at .xxLarge
@@ -99,8 +102,8 @@ components:
     shadow: radius 2, y 1        # selected, held or dropping only; resting labels are flat
   cluster-badge:
     size: 28pt+
-    backgroundColor: "{colors.cluster}"
-    textColor: "#FFFFFF"
+    backgroundColor: "{colors.accent}"
+    textColor: "{components.pin.symbolColor}"   # no glow (#154 DS4)
   input:
     backgroundColor: "{colors.surface-grouped}"
     rounded: 10pt
@@ -113,7 +116,8 @@ components:
 ## Overview
 
 **Creative North Star:** Signage on the system shell. A native iOS map app whose identity lives in
-its data (red and orange pins, six amenities) and its voice (dry New Yorker), not in its chrome.
+its data (green and orange pins, six amenities, a cyan trail) and its voice (dry New Yorker), not in its chrome.
+The city goes quiet, the corner store lights up, and your walk is the trail of coins you collected (#154).
 The chrome is quiet, translucent where it floats, and typeset in the system face; the one
 typographic flourish is a heavy condensed title that reads like awning lettering.
 
@@ -137,9 +141,10 @@ a New Yorker." Every decision below serves that: the data and the words carry th
 
 **Key characteristics:**
 - The map is always on screen; everything else floats over it or slides over it.
-- Only four saturated colors exist and all four are data: pin red, cat orange, star yellow,
-  walked indigo.
-- One tint, Deli Green, for every control. It never means data, status, or success.
+- Only four saturated colors exist on the map and all four are data: pin green, cat orange,
+  star yellow, walked cyan. Red is errors only (#154).
+- One tint, Deli Green, for every control and every bodega pin: it means tappable, and it is
+  the brand green. It never means status or success.
 - System face everywhere; one display register (heavy, condensed) on four surfaces.
 - Copy is in voice (see `AppCopy`), one symbol per surface, the cat appears sparingly.
 
@@ -161,9 +166,9 @@ and icons on material stay `.secondary` (non-text, 3:1). Vibrant `.secondary` me
 not meet 4.5:1; the materials stay `.regularMaterial` and `.thickMaterial` is not used. System
 `Form` headers and footers and the DEBUG captions keep `.secondary`. `.tertiary` is
 never on text (#95 D7); it is for non-text decoration only (the duplicate chevron); inactive page dots, which must hold 3:1, are `.secondary` (3.44:1 light, 6.36:1 dark). Error and consequence copy is
-`.primary` (#95 D8). Two asset-catalog colors, `pin` (systemRed) and `catPin`
+`.primary` (#95 D8). Two asset-catalog colors, `pin` (Deli Green, the tint's own values, #154) and `catPin`
 (systemOrange), are the data colors and the brand; stars are `systemYellow`; cluster badges are
-`systemGray`. The app tint (`AccentColor` asset) is Deli Green, #0A7A43 light and #34C77B dark.
+`pin` green. The app tint (`AccentColor` asset) is Deli Green, #0A7A43 light and #34C77B dark.
 Contrast: 5.4:1 on white, 9.6:1 on black.
 
 **Light or dark:** both, decided by the system. The use scene is the sidewalk in daylight and the
@@ -174,17 +179,26 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   selected tab. Icon and text buttons on Liquid Glass toolbars (filter, account, add, Locate Me,
   walked; a sheet's Cancel) take the label color, which is the iOS 26 system behavior for glass;
   do not force the tint on them. It is never used for a status ("open now", success, loading
-  spinners) and never on a pin. The `AccentColor` asset carries it; toggles need an explicit
+  spinners). The `pin` asset carries the same green for bodega pins, cluster badges, the
+  first-add legend symbol (an icon, not a control) and the placement crosshair (#154); it is a
+  separate asset so a brighter daylight pin can diverge later without touching controls. The `AccentColor` asset carries it; toggles need an explicit
   `.tint(.accentColor)` on their `Section` because iOS switches ignore the asset, and there is no
   app-root tint because it would color every `ProgressView`. The user-location dot stays system
   blue (`.tint(.blue)` on the Map): it is status, not a control.
-- Red appears in two forms that never share a surface at the same size: filled 28pt pin circles
-  on the map, and plain text for form errors and destructive actions in sheets.
+- Red is text only: form errors and destructive actions in sheets (#154). Nothing on the map is red.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
   first-add card, the noBodegas empty state), and the Streets Walked intro's symbol (#126 D3). Yellow is stars and only stars.
-- Indigo is walked blocks and only walked blocks (#108 D1): the `walked` asset, #5856D6 light and
-  #7D7AFF dark, with Increase Contrast slots #3634A3 / #A5A3FF, at full opacity with round caps and
-  joins. Each walked block is a line on its street's centerline, chained into runs, drawn above
+- Cyan is the walked trail and only the walked trail (#154, superseding #108 D1): the
+  `walked` asset, #0891B2 light and #5AE3FF dark, with Increase Contrast slots #066A85 / #A0F0FF.
+  At the 8 and 5pt bands the trail is breadcrumbs: round dots (zero-length dashes with round caps)
+  over a translucent track of the same cyan at 35%: 8pt dots every 16pt on a 16pt track, and
+  6.5pt dots every 13pt on a 14pt track. At the 3 and 2pt bands it is a plain solid line with no
+  track. The trail cools as you leave your block: the switch from breadcrumbs to the solid line
+  is one settle at the 2 km edge (2,200 m on the way out). Every track is drawn before any dots,
+  so a track never covers another run's dots at a crossing. While breadcrumbs draw, the layer
+  hides past 500 visible runs (two polylines a run), and past 1,000 for the line. Increase
+  Contrast draws dots or line in the contrast slots with no track (#154 DS7). Full opacity
+  with round caps and joins. Each walked block is a line on its street's centerline, chained into runs, drawn above
   the roads and under the labels, pins and location dot (`.mapOverlayLevel(level: .aboveRoads)`),
   8pt up to 400 m of visible height, 5pt to 2 km, 3pt to 8 km, 2pt above, with 10% hysteresis on
   the way out. Visible height is the app's measure, not the screen's: the ground distance from
@@ -200,7 +214,8 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   retain margin (#115) was reverted: on device it did not cut settle hitches, because MapKit's
   add/remove cost grows with the lines drawn, not only the lines changed (#113).
 - Cat and non-cat pins are distinguished by glyph (`cat` vs `figure.wave`) as well as color, so
-  the red/orange pair is a redundant encoding, not the only one. Keep it that way.
+  the green/orange pair is a redundant encoding, not the only one; the glyph also takes the
+  fill's on-colour (#154 DS1). Keep it that way.
 - Materials (`.regularMaterial`) carry floating content (map card, pin label); `.thickMaterial` is not used (#95 D11). On iOS 26 the
   system's Liquid Glass carries floating controls (toolbars, tab bar, map buttons) by default;
   do not apply glass to content and do not apply material to controls. Pages are opaque.
@@ -266,7 +281,8 @@ Three layers: the map (opaque), floating content on `.regularMaterial`, floating
 system Liquid Glass. Shadows are offset and soft: `radius 2, y 1` on pins and cluster badges,
 `radius 4, y 2` on the selected pin. The card relies on material contrast plus the same small
 shadow. Pin labels at rest are a flat material layer; the selected, held or dropping label
-carries the small shadow (#67). No zero-offset glows, no borders as depth. Sheets use system presentation;
+carries the small shadow (#67). No zero-offset glows except the two data glows, the pin glow and
+the trail's track (#154); no borders as depth. Sheets use system presentation;
 the sign-in sheet from the add flow is `.medium` detent on `.regularMaterial`.
 
 ## Shapes
@@ -305,8 +321,15 @@ the card hides it for that problem until the problem changes or the next cold la
 menu and Your Blocks still say paused. VoiceOver hears the card's title when a problem appears while the app is
 active, and "Recording again." when recording resumes. There is no tracking-error banner.
 
-**Pin** (`BodegaPinView`, DD3): 28pt circle, `.pin` or `.catPin`, white 14pt glyph, 2pt white
-stroke, shadow 2/1, 44pt hit area, anchored at center. Selected: 3pt stroke, shadow 4/2, scale
+**Pin** (`BodegaPinView`, DD3, `PinCircle` since #154): 28pt circle, `.pin` or `.catPin`, a 14pt
+glyph in the fill's on-colour (white on the light green #0A7A43, 5.4:1; black on the night green
+#34C77B, 9.6:1; black on the cat orange in both appearances, 9.6 and 10.2:1; #154 DS1), 2pt white
+stroke, shadow 2/1 cast by the circle alone, 44pt hit area, anchored at center. Behind it a glow:
+two blurred circles in `pinGlow` (#34C77B) or `catPinGlow` (#FF9F0A), the bright value in both
+appearances, inner radius 7 at 95% and outer 20 at 60%; selected 10 and 28 (DS2, DS3). The glow
+scales with the selection and rides its 0.15s ease; it is not a label obstacle (the circle's
+32pt is). Increase Contrast: no glow, only fill, glyph, stroke and the black shadow (DS7);
+Reduce Transparency changes nothing. Selected: 3pt stroke, shadow 4/2, scale
 1.15, drawn last. Label: `.caption2` `.primary` on a `.regularMaterial` capsule, one line up to
 160pt of text, tail-truncated, 4pt above the circle. It shows when the pin is selected (held) or
 dropping, and at block zoom on every pin whose label clears every kept label and every drawn
@@ -347,18 +370,25 @@ tap re-centres (#84 design D7). It is a task panel: the material groups the task
 and its buttons keep native control styling. This is the one material-under-controls exception
 to the Colors rule. The placement tip is a popover on Use This Location, arrow at the bottom,
 presented 0.3s after the card appears and dismissed before the card leaves. The crosshair
-(`figure.wave`, red, fixed 34pt, `.largeTitle`'s default; a symbol, so it does not scale) is centred in the band the card leaves uncovered and is
+is the pin's own chrome at rest (#154 DS10): a 28pt `pin` green circle, white stroke, `figure.wave`
+in the DS1 glyph colour and the rest glow, a preview of exactly the pin that drops; it does not
+scale with text. It is centred in the band the card leaves uncovered and is
 hidden from VoiceOver; the card's title is the instruction.
 
-**Cluster badge:** same family as the pin, `systemGray` fill, white count, same stroke and shadow.
-Never labelled.
+**Cluster badge:** same family as the pin, `pin` green fill, the count in the pin glyph's colour,
+same stroke and shadow, no glow (#154 DS4). Never labelled.
 
-**Map tiles** (#67 design D1): `.standard` with Apple's commercial points of interest excluded
-at every zoom, so the map's only business names are ours: store, food market, restaurant, cafe,
+**Map tiles** (#67 design D1, #154): `.standard(elevation: .flat, emphasis: .muted)` on both maps,
+following the system appearance (no view forces a colour scheme on a `Map`; the muted map at night
+is the night look). Above block zoom Apple's commercial points of interest are excluded
+(`POIFilter.commercialHidden`), so the map's only business names are ours: store, food market, restaurant, cafe,
 bakery, brewery, winery, nightlife, pharmacy, laundry, ATM, bank, gas station, EV charger, car
 rental, hotel, fitness center, movie theater, theater, marina, spa, beauty, automotive repair,
 music venue (`BodegaMapViewModel.excludedPOICategories`). Businesses Apple leaves unclassified
-still show; no category can hide them. Wayfinding stays: public transport, parks,
+still show there; no exclusion can hide them. At block zoom (the labels' 400 / 440 m line) and on
+the detail preview the filter is an include list of wayfinding only (`POIFilter.wayfindingOnly`,
+#154 DS8), which also drops the unclassified badges, so the badges leave in the same settle that
+brings our labels in. Wayfinding stays at every zoom: public transport, parks,
 schools, universities, hospitals, libraries, museums, landmarks, airports, stadiums, national
 parks, beaches, zoos, aquariums, amusement parks, fire stations, police, post offices, restrooms.
 Pin labels are placed clear of the location dot itself (24pt) at each settle; the dot may drift
@@ -390,7 +420,7 @@ The preview is a live, non-interactive `Map`, full content width, fixed 160pt, `
 inside, so loading and offline show a grey panel with the pin and nothing shifts: no spinner, no
 failure copy (DS2). `MapCamera` centred on the pin at 300 m (DS1's ~400 m, tuned on the iPhone SE
 simulator), north up, level, so both nearest cross streets are named on a 375pt phone at default
-type (DS1); the main map's POI exclusions.
+type (DS1); muted emphasis and the wayfinding include list (#154 DS8).
 `BodegaPinView` at rest, unlabelled, centred, clear of the attribution band. The preview is a
 `.plain` button alias of Show on Map with no chevron, pill or border (DS8); VoiceOver "Map", hint
 "Shows this bodega on the map."; the `Map` keeps its accessibility children and the tap target
@@ -515,7 +545,7 @@ New York City, "412 blocks" with "of 99,360" in `textMuted`; section 2 is Manhat
 Queens, Bronx, Staten Island, each "412 of 9,300 blocks" in `.subheadline` `textMuted` under the
 name in `.body`, the percent trailing in `.body`, all monospaced digits. The percent rounds down;
 any nonzero count under 1% shows "<1%". Rows stack at accessibility sizes and otherwise use
-`ViewThatFits` (the `BodegaRow` idiom). No progress bars, no display register, no indigo (the sheet
+`ViewThatFits` (the `BodegaRow` idiom). No progress bars, no display register, no cyan (the sheet
 is numbers, not the overlay). Footer: "A block counts once you've walked most of it. Your walks stay
 on this phone.", plus "Recording is off. Your blocks stay." (or, while paused, "Recording is paused. Your
 blocks stay." with an Open Settings row when Settings can fix the problem, #123 DS3) and "Without Motion &
@@ -590,7 +620,7 @@ on the card and in the popover it is `.primary` (#95 D11).
 - Do: keep one floating object in the map's bottom slot; use the precedence list.
 - Do: give every object with mass a spring and every content swap a 0.25s ease-in-out.
 - Do: read `accessibilityReduceMotion` and degrade to fades; keep the camera pan.
-- Don't: use Deli Green for anything but controls, or any color for status.
+- Don't: use Deli Green for anything but controls and bodega pins, or any color for status.
 - Don't: put the display register on body, lists, card bodies, or labels.
 - Don't: nest a card in a card, add a colored edge to a card, or center a title.
 - Don't: apply glass to content or material to controls; don't frost whole pages.
@@ -706,3 +736,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-10-30 | #141 ATM as the sixth data point: `has_atm` boolean, defaulted false, decoded strictly like the other five (D6); ATM last on every surface, captioned "ATM" with `banknote`, VoiceOver "Has an ATM"; the detail points, the Add/Edit toggles and the onboarding rows derive from `BodegaFilter.Amenity`, whose `caption` is the one label source, so the form's "Hot food" becomes "Hot Food" (D5, DS6); the form toggles carry the Filters sheet's VoiceOver labels (DS4); six detail columns while they fit, stacked at xxxLarge on 375 pt (DS1); Must Have may scroll at `.medium` on 667 pt screens (DS2); the boolean and strikethrough stay, unknown vs no is a P2 TODO (DS3, D9); "ATM" means one inside the store (DS7); rollback keeps the column (D7) | `/plan-eng-review` D5 to D9 and `/plan-design-review` DS1 to DS7 with outside voices; owner accepted all. Deriving from one enum keeps four surfaces from drifting; a drop would break installed strict-decoding builds; a tri-state for ATM alone would diverge from the five |
 | 2026-11-01 | #147 Share Usage and Diagnostics: the Account menu becomes three sections, [Your Account… / Sign In] / [Show Intro Again] / [Share Usage and Diagnostics, Privacy Policy]; the switch is a native `Toggle` (checkmark item, system VoiceOver value, no custom accessibility value), on by default, per device, unchanged by sign-out or account deletion; flipping it closes the menu with no confirmation, toast or delay, and off means off (no final event) | `/plan-design-review` DS1 to DS7 with two outside voices; owner accepted all. "and", not "&", because the label voice rule rejects an ampersand; the policy link directly under the switch is its explanation, following the Streets Walked menu's own `Toggle` section |
 | 2026-11-02 | #150 DS1 to DS11 detail map preview, Directions and Show on Map: preview at a 300 m camera (DS1's ~400 m tuned in QA; not the main map's 0.004° span), grey grouped ground with the pin centred in every state and no spinner, header → preview → row → data points in a 12pt group, Directions prominent first with `arrow.triangle.turn.up.right.diamond`, seven `AppCopy` strings, Locate Me's flight rule with a no-op when already there, the preview kept as a tap alias of Show on Map, a VoiceOver announcement after the landing, the "Maps didn't open." footnote, default control size with 44pt targets deferred to one pass over the detail (TODOS) | `/plan-design-review` with two outside voices; owner accepted all. The 0.004° span showed the neighbourhood with side-street names dropped; the List → detail path was the one place the map was out of sight |
+| 2026-11-03 | #154 map look: muted standard tiles on both maps following the system appearance; `POIFilter` (commercial exclusions above block zoom, a wayfinding include list at block zoom and on the preview, DS8 amending D2); the `pin` asset becomes Deli Green (= `AccentColor`), so red is text only; pins glow from `pinGlow` / `catPinGlow` blurred circles behind the circle (7/20, selected 10/28), none under Increase Contrast (DS2, DS3, DS5, DS7); the glyph takes the fill's on-colour (DS1, closing D9); cluster badges green with no glow (DS4); the placement crosshair is the resting pin (DS10); the walked trail becomes cyan breadcrumbs at 8 and 5pt over a 35% track, drawn tracks-then-dots, and a solid line at 3 and 2pt (D1, D3, DS9), with a 500-run cap while breadcrumbs draw (D8); device A/B against main after merge (D4, D7); no wordmark (DS11) | `/plan-eng-review` D1 to D10 and `/plan-design-review` DS1 to DS11 with outside voices; owner accepted all. Four simulator probe rounds (`probe/map-look`): the muted ground makes the pins the subject; red read as stop; indigo vanished at night; the pattern was too busy zoomed out |

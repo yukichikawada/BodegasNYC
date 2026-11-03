@@ -884,6 +884,40 @@ struct BodegaMapViewModelTests {
     // stubs would need dedicated held-open-response test infrastructure —
     // see the plan's verification notes. Exercised manually instead (rapid
     // panning in Simulator).
+
+    /// protects=AC 2 as amended by eng D2 and design DS8: the main map hides
+    /// Apple's commercial POIs above block zoom and draws wayfinding only at
+    /// block zoom; the exclusion list is exactly the 24 commercial
+    /// categories of #67 D1; the include list is the 20 wayfinding
+    /// categories, and the two lists share none;
+    /// fails_when=the switch inverts or ignores block zoom, a commercial
+    /// category is dropped or added, a wayfinding category goes missing, or
+    /// a category sits in both lists;
+    /// no_claim=what Apple draws for either filter (the SDK value is not
+    /// Equatable; the simulator check in the PR covers the badges, subway
+    /// entrances and parks), or that the views pass these to `mapStyle`.
+    @Test func poiFilterByZoom() {
+        #expect(BodegaMapViewModel.poiFilter(isBlockZoom: true) == .wayfindingOnly)
+        #expect(BodegaMapViewModel.poiFilter(isBlockZoom: false) == .commercialHidden)
+
+        let excluded: Set<MKPointOfInterestCategory> = [
+            .store, .foodMarket, .restaurant, .cafe, .bakery, .brewery, .winery, .nightlife,
+            .pharmacy, .laundry, .atm, .bank, .gasStation, .evCharger, .carRental, .hotel,
+            .fitnessCenter, .movieTheater, .theater, .marina, .spa, .beauty, .automotiveRepair,
+            .musicVenue
+        ]
+        #expect(BodegaMapViewModel.excludedPOICategories.count == 24)
+        #expect(Set(BodegaMapViewModel.excludedPOICategories) == excluded)
+
+        let wayfinding: Set<MKPointOfInterestCategory> = [
+            .publicTransport, .park, .school, .university, .hospital, .library, .museum, .landmark,
+            .airport, .stadium, .nationalPark, .nationalMonument, .beach, .zoo, .aquarium,
+            .amusementPark, .fireStation, .police, .postOffice, .restroom
+        ]
+        #expect(BodegaMapViewModel.wayfindingPOICategories.count == 20)
+        #expect(Set(BodegaMapViewModel.wayfindingPOICategories) == wayfinding)
+        #expect(excluded.isDisjoint(with: wayfinding))
+    }
 }
 
 }
