@@ -138,6 +138,41 @@ struct WalkedOverlayTests {
         #expect(WalkedRunIndex(runs: farAway + Array(runs.prefix(5))).visible(in: region) == .runs(Array(runs.prefix(5))))
     }
 
+    /// protects=#154 eng D8: while breadcrumbs draw (two polylines a run)
+    /// the layer hides past 500 visible runs, a line keeps 1,000, and the
+    /// settled display applies the cap of the width it settled at, through
+    /// the spatial index and the full scan alike;
+    /// fails_when=breadcrumbs keep the 1,000 cap (2,000 polylines), a line
+    /// loses runs it drew before #154, or the cap ignores the settled width;
+    /// no_claim=the frame rate at 500 breadcrumb runs (owner's device A/B,
+    /// AC 13).
+    @Test func breadcrumbsHalveTheCap() {
+        #expect(WalkedOverlay.maxVisibleRuns(for: .breadcrumbs(dot: 8, spacing: 16, track: 16)) == 500)
+        #expect(WalkedOverlay.maxVisibleRuns(for: .line(width: 3)) == 1_000)
+        let region = WalkedRegion(centerLatitude: F.originLatitude, centerLongitude: F.originLongitude, latitudeDelta: 0.1, longitudeDelta: 0.1)
+        let runs = (0 ..< 501).map {
+            WalkedRun(id: UInt32($0), coordinates: [F.coordinate(x: Double($0), y: 0), F.coordinate(x: Double($0), y: 10)])
+        }
+        #expect(WalkedOverlay.visible(runs, in: region, cap: 500) == .overCap)
+        #expect(WalkedRunIndex(runs: runs).visible(in: region, cap: 500) == .overCap)
+        #expect(WalkedRunIndex(runs: Array(runs.prefix(500))).visible(in: region, cap: 500) != .overCap)
+
+        let index = WalkedRunIndex(runs: runs)
+        var display = WalkedOverlayDisplay()
+        // 350 m settles at 8pt, breadcrumbs: 501 runs is over.
+        display.refresh(index: index, showsOverlay: true, region: region, visibleHeightMeters: 350, isCameraMoving: false)
+        #expect(display.lineWidth == 8)
+        #expect(display.visible == .overCap)
+        // 5 km settles at 3pt, a line: the same 501 runs draw.
+        display.refresh(index: index, showsOverlay: true, region: region, visibleHeightMeters: 5_000, isCameraMoving: false)
+        #expect(display.lineWidth == 3)
+        guard case .runs(let drawn) = display.visible else {
+            Issue.record("501 runs should draw as a line")
+            return
+        }
+        #expect(drawn.count == 501)
+    }
+
     /// Runs on a 50 m lattice around `(x, y)` metres: `count` short runs,
     /// ids from `firstID`.
     private static func lattice(count: Int, firstID: UInt32, x: Double, y: Double) -> [WalkedRun] {
@@ -269,6 +304,26 @@ struct WalkedOverlayTests {
         // Zooming in takes the thicker band at once.
         #expect(WalkedOverlay.lineWidth(visibleHeightMeters: 390, current: 5) == 8)
         #expect(WalkedOverlay.lineWidth(visibleHeightMeters: 1_900, current: 3) == 5)
+    }
+
+    /// protects=#154 AC 5 and eng D1: breadcrumbs at the 8 and 5pt bands
+    /// (8pt dots every 16pt on a 16pt track; 6.5pt every 13pt on a 14pt
+    /// track), a plain line at 3 and 2pt, switching exactly at 5pt; and the
+    /// 440 m hysteresis width (8pt held past 400 m) stays breadcrumbs;
+    /// fails_when=a band takes the wrong style, the caps stop holding at 8pt
+    /// (a 10.4pt dot on a 22.4pt track), or the edge moves off 5pt;
+    /// no_claim=how the dots read on the map (the PR's 420 m and 6 km
+    /// screenshots) or that the overlay draws tracks before dots (code read,
+    /// eng F5).
+    @Test func trailStyleByBand() {
+        #expect(WalkedOverlay.trailStyle(width: 8) == .breadcrumbs(dot: 8, spacing: 16, track: 16))
+        #expect(WalkedOverlay.trailStyle(width: 5) == .breadcrumbs(dot: 6.5, spacing: 13, track: 14))
+        #expect(WalkedOverlay.trailStyle(width: 3) == .line(width: 3))
+        #expect(WalkedOverlay.trailStyle(width: 2) == .line(width: 2))
+        #expect(WalkedOverlay.trailStyle(width: 4.99) == .line(width: 4.99))
+        #expect(WalkedOverlay.trailStyle(width: 5) != .line(width: 5))
+        let held = WalkedOverlay.lineWidth(visibleHeightMeters: 430, current: 8)
+        #expect(WalkedOverlay.trailStyle(width: held) == .breadcrumbs(dot: 8, spacing: 16, track: 16))
     }
 
     /// protects: the map's colour assets after #154 (eng F2, design DS2):

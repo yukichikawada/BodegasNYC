@@ -2,25 +2,53 @@ import MapKit
 import SwiftUI
 import UIKit
 
-// Walked blocks on the map (#108): runs of walked blocks in the `walked`
-// indigo (design D1), above the roads but under the labels, pins and the
-// location dot (D4), width by visible height (D2). What is drawn changes only
-// at camera rest and swaps in place (D10: MapKit does not animate
-// `MapPolyline` changes, so there is no fade, #113), and past 1,000 visible
-// runs nothing is drawn and the bottom card says to zoom in (D3).
+// Walked blocks on the map (#108, #154): runs of walked blocks in the
+// `walked` cyan, above the roads but under the labels, pins and the location
+// dot (#108 D4), styled by width, itself by visible height (D2): at the 8 and
+// 5pt bands breadcrumbs (round dots over a 35% track), at 3 and 2pt a solid
+// line, so the trail cools as you leave your block (#154 D1, DS9). What is
+// drawn changes only at camera rest and swaps in place (D10: MapKit does not
+// animate `MapPolyline` changes, so there is no fade, #113), and past the
+// cap (500 runs for breadcrumbs, 1,000 for a line, #154 D8) nothing is drawn
+// and the bottom card says to zoom in (D3).
 extension MapScreenView {
     @MapContentBuilder
     var walkedBlockOverlay: some MapContent {
         if case .runs(let runs) = walkedDisplay.visible {
-            ForEach(runs) { run in
-                // The run's cached `MKPolyline`: a reference in the content
-                // list, not a coordinate array copied on every graph update.
-                MapPolyline(run.polyline)
-                    .stroke(
-                        Color.walked,
-                        style: StrokeStyle(lineWidth: walkedDisplay.lineWidth, lineCap: .round, lineJoin: .round)
-                    )
-                    .mapOverlayLevel(level: .aboveRoads)
+            switch WalkedOverlay.trailStyle(width: walkedDisplay.lineWidth) {
+            case .line(let width):
+                ForEach(runs) { run in
+                    // The run's cached `MKPolyline`: a reference in the content
+                    // list, not a coordinate array copied on every graph update.
+                    MapPolyline(run.polyline)
+                        .stroke(Color.walked, style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
+                        .mapOverlayLevel(level: .aboveRoads)
+                }
+            case .breadcrumbs(let dot, let spacing, let track):
+                // Two passes (#154 eng D3): every run's track first, then every
+                // run's dots, so no track covers another run's dots where runs
+                // cross. Increase Contrast draws no track (DS7); `walked`
+                // resolves to its contrast slot there.
+                if colorSchemeContrast != .increased {
+                    ForEach(runs) { run in
+                        MapPolyline(run.polyline)
+                            .stroke(
+                                Color.walked.opacity(0.35),
+                                style: StrokeStyle(lineWidth: track, lineCap: .round, lineJoin: .round)
+                            )
+                            .mapOverlayLevel(level: .aboveRoads)
+                    }
+                }
+                ForEach(runs) { run in
+                    // Zero-length dashes with round caps draw as dots; the
+                    // 0.01pt dash is accepted, not compensated.
+                    MapPolyline(run.polyline)
+                        .stroke(
+                            Color.walked,
+                            style: StrokeStyle(lineWidth: dot, lineCap: .round, lineJoin: .round, dash: [0.01, spacing])
+                        )
+                        .mapOverlayLevel(level: .aboveRoads)
+                }
             }
         }
     }

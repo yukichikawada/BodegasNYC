@@ -67,6 +67,7 @@ struct MapScreenView: View {
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.accessibilityReduceMotion) var reduceMotion
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
+    @Environment(\.colorSchemeContrast) var colorSchemeContrast // trail track (#154 DS7)
     @Environment(PinMotionState.self) var pinMotion // held pin (#23 T1)
     let locationPermissionClient: LocationPermissionClient
     let userLocation: UserLocationProvider? // the dot, a pin-label obstacle (#67)

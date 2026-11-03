@@ -70,7 +70,9 @@ nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
             lineWidth = WalkedOverlay.lineWidth(visibleHeightMeters: visibleHeightMeters, current: lineWidth)
         }
         if showsOverlay, let region {
-            visible = index.visible(in: region)
+            // The cap follows the settled width's style (#154 eng D8).
+            let cap = WalkedOverlay.maxVisibleRuns(for: WalkedOverlay.trailStyle(width: lineWidth))
+            visible = index.visible(in: region, cap: cap)
         } else {
             visible = .runs([])
         }
@@ -99,6 +101,16 @@ nonisolated enum WalkedOverlay {
     /// at most 675 in an 8 km view, so 1,000 draws every Manhattan view and
     /// hides only near-citywide views of far larger histories (D3's card).
     static let maxVisibleRuns = 1_000
+
+    /// The cap for a trail style (#154 eng D8): breadcrumbs draw two
+    /// polylines a run (track and dots), so they hide past 500 runs and the
+    /// polylines drawn never exceed the measured 1,000; a line keeps 1,000.
+    static func maxVisibleRuns(for style: TrailStyle) -> Int {
+        switch style {
+        case .breadcrumbs: maxVisibleRuns / 2
+        case .line: maxVisibleRuns
+        }
+    }
     /// The region is expanded by this fraction of its span on each side.
     static let regionMargin = 0.25
     static let joinToleranceMeters = 1.0
@@ -172,12 +184,12 @@ nonisolated enum WalkedOverlay {
     /// span on each side, or `overCap` past `maxVisibleRuns` (never a partial
     /// subset). Scans every run: the reference for `WalkedRunIndex`, which
     /// the map uses.
-    static func visible(_ runs: [WalkedRun], in region: WalkedRegion) -> Visible {
+    static func visible(_ runs: [WalkedRun], in region: WalkedRegion, cap: Int = maxVisibleRuns) -> Visible {
         let bounds = expandedBounds(region)
         var kept: [WalkedRun] = []
         for run in runs where meets(run, bounds) {
             kept.append(run)
-            if kept.count > maxVisibleRuns { return .overCap }
+            if kept.count > cap { return .overCap }
         }
         return .runs(kept)
     }
@@ -223,6 +235,29 @@ nonisolated enum WalkedOverlay {
         else { return entered }
         // Zooming out from a thicker band: stay until 10% past its edge.
         return height <= band.maxHeight * (1 + hysteresis) ? current : entered
+    }
+
+    // MARK: Trail style (#154 eng D1)
+
+    /// How a band's width is drawn.
+    enum TrailStyle: Equatable {
+        /// Round dots of `dot` pt every `spacing` pt (centre to centre), over
+        /// a translucent track `track` pt wide.
+        case breadcrumbs(dot: Double, spacing: Double, track: Double)
+        case line(width: Double)
+    }
+
+    /// Breadcrumbs at the 8 and 5pt bands (visible height up to 2 km), a
+    /// plain line at 3 and 2pt: the trail cools as you leave your block.
+    /// Dots and track are capped so block zoom does not draw a 10pt dot on a
+    /// 22pt track.
+    static func trailStyle(width: Double) -> TrailStyle {
+        guard width >= 5 else { return .line(width: width) }
+        return .breadcrumbs(
+            dot: min(width * 1.3, 8),
+            spacing: min(width * 2.6, 16),
+            track: min(width * 2.8, 16)
+        )
     }
 }
 
