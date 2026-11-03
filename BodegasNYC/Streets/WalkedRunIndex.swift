@@ -50,7 +50,10 @@ nonisolated struct WalkedRunIndex: Sendable, Equatable {
 
     /// `visible(in:)` plus how many index entries it examined (tests: the
     /// cost follows the cells in view, not the total).
-    func query(_ region: WalkedRegion, cap: Int = WalkedOverlay.maxVisibleRuns) -> (visible: WalkedOverlay.Visible, examined: Int) {
+    func query(
+        _ region: WalkedRegion,
+        cap: Int = WalkedOverlay.maxVisibleRuns
+    ) -> (visible: WalkedOverlay.Visible, examined: Int) {
         guard !runs.isEmpty else { return (.runs([]), 0) }
         let bounds = WalkedOverlay.expandedBounds(region)
         let firstRow = max(rowRange.lowerBound, Self.row(bounds.minLatitude))
