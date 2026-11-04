@@ -161,14 +161,6 @@ Status as of 2026-11-03 is in brackets.
 6. **Upload**: Organizer → Distribute App → App Store Connect → Upload.
    Keep "Upload your app's symbols" on. Automatic signing handles the
    distribution certificate and profile.
-6a. **Upload debug symbols to Sentry** (#147 D6), so crash reports name
-   `BodegasNYC` functions instead of addresses. Find the archive in
-   Organizer (right-click → Show in Finder), then:
-   ```sh
-   export SENTRY_AUTH_TOKEN=$(cat ~/.config/bodegasnyc/sentry-token)
-   ARCHIVE=~/Library/Developer/Xcode/Archives/<date>/<archive>.xcarchive
-   sentry-cli debug-files upload --org heerheer --project my-bodegas-ios "$ARCHIVE/dSYMs"
-   ```
 6c. **Command-line alternative to 5 and 6** (used for build 1 of 1.0 on
    2026-11-03; no Xcode UI, works while another session uses Xcode). The
    App Store Connect app record must exist first or the upload is refused.
@@ -196,6 +188,14 @@ Status as of 2026-11-03 is in brackets.
    Steps 6a, 6b and 7 still apply; for 6a and 6b, `ARCHIVE` is
    `build/archives/MyBodegas-<ver>-<build>.xcarchive` instead of the Organizer
    path.
+6a. **Upload debug symbols to Sentry** (#147 D6), so crash reports name
+   `BodegasNYC` functions instead of addresses. Find the archive in
+   Organizer (right-click → Show in Finder), then:
+   ```sh
+   export SENTRY_AUTH_TOKEN=$(cat ~/.config/bodegasnyc/sentry-token)
+   ARCHIVE=~/Library/Developer/Xcode/Archives/<date>/<archive>.xcarchive
+   sentry-cli debug-files upload --org heerheer --project my-bodegas-ios "$ARCHIVE/dSYMs"
+   ```
 6b. **Check the symbols match the binary** (#147 E8, AC 15; required on the
    first TestFlight build, a spot check after): the UUIDs of the archived app
    binary must be listed under Sentry → Settings → Debug Files.
