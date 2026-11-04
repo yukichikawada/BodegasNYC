@@ -169,7 +169,7 @@ Status as of 2026-11-03 is in brackets.
    ARCHIVE=~/Library/Developer/Xcode/Archives/<date>/<archive>.xcarchive
    sentry-cli debug-files upload --org heerheer --project my-bodegas-ios "$ARCHIVE/dSYMs"
    ```
-6c. **Command-line alternative to 5, 6 and 6a** (used for build 1 of 1.0 on
+6c. **Command-line alternative to 5 and 6** (used for build 1 of 1.0 on
    2026-11-03; no Xcode UI, works while another session uses Xcode). The
    App Store Connect app record must exist first or the upload is refused.
    ```sh
@@ -193,7 +193,9 @@ Status as of 2026-11-03 is in brackets.
    Sentry.framework". The Sentry package ships as a binary framework without
    its dSYM, so Apple's own crash reports lack Sentry frames; Sentry
    symbolicates its framework itself and the app's dSYM is unaffected.
-   Steps 6a, 6b and 7 still apply.
+   Steps 6a, 6b and 7 still apply; for 6a and 6b, `ARCHIVE` is
+   `build/archives/MyBodegas-<ver>-<build>.xcarchive` instead of the Organizer
+   path.
 6b. **Check the symbols match the binary** (#147 E8, AC 15; required on the
    first TestFlight build, a spot check after): the UUIDs of the archived app
    binary must be listed under Sentry → Settings → Debug Files.
