@@ -161,6 +161,33 @@ Status as of 2026-11-03 is in brackets.
 6. **Upload**: Organizer → Distribute App → App Store Connect → Upload.
    Keep "Upload your app's symbols" on. Automatic signing handles the
    distribution certificate and profile.
+6c. **Command-line alternative to 5 and 6** (used for build 1 of 1.0 on
+   2026-11-03; no Xcode UI, works while another session uses Xcode). The
+   App Store Connect app record must exist first or the upload is refused.
+   ```sh
+   until [ "$(pgrep -x xcodebuild | wc -l)" -lt 2 ]; do sleep 30; done
+   xcodebuild archive -project BodegasNYC.xcodeproj -scheme BodegasNYC \
+     -configuration Release -destination 'generic/platform=iOS' \
+     -archivePath build/archives/MyBodegas-<ver>-<build>.xcarchive \
+     -derivedDataPath build/dd-archive -skipPackagePluginValidation \
+     -allowProvisioningUpdates
+   xcodebuild -exportArchive \
+     -archivePath build/archives/MyBodegas-<ver>-<build>.xcarchive \
+     -exportOptionsPlist build/ExportOptions-upload.plist -allowProvisioningUpdates
+   ```
+   `build/ExportOptions-upload.plist` (gitignored with the rest of `build/`,
+   recreate if missing): `method` `app-store-connect`, `destination` `upload`,
+   `teamID` `3BAMVTHBKF`, `signingStyle` `automatic`, `uploadSymbols` true,
+   `manageAppVersionAndBuildNumber` false. The archive signs with the
+   development identity and the export re-signs with a cloud-managed
+   distribution certificate, so no distribution certificate appears in the
+   keychain. Expect one warning: "Upload Symbols Failed … no dSYM for
+   Sentry.framework". The Sentry package ships as a binary framework without
+   its dSYM, so Apple's own crash reports lack Sentry frames; Sentry
+   symbolicates its framework itself and the app's dSYM is unaffected.
+   Steps 6a, 6b and 7 still apply; for 6a and 6b, `ARCHIVE` is
+   `build/archives/MyBodegas-<ver>-<build>.xcarchive` instead of the Organizer
+   path.
 6a. **Upload debug symbols to Sentry** (#147 D6), so crash reports name
    `BodegasNYC` functions instead of addresses. Find the archive in
    Organizer (right-click → Show in Finder), then:
