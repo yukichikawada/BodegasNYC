@@ -5,13 +5,15 @@ pipeline: this checklist is the pipeline. Work through it top to bottom.
 
 ## One-time setup (before the first submission)
 
-Status as of 2026-10-29 is in brackets.
+Status as of 2026-11-03 is in brackets.
 
 - [x] **Account deletion in the app** (#127). App Review guideline 5.1.1(v)
       requires it for any app with sign-in. Built in #127: Account menu →
       Your Account… → Delete Account, backed by the `delete-account` edge
       function. The server side needs the steps below before it works.
-- [ ] **Account deletion, server side** (#127, owner only, in this order;
+- [x] **Account deletion, server side** (#127; done 2026-10-31: migration pushed,
+      `APPLE_*` secrets set, `delete-account` deployed; only step 5, the device
+      test, remains and is part of #139. Kept for the next key rotation; in this order;
       the migration must go first, or the first deletion cascades the
       user's bodegas away):
       1. `supabase db push --linked --yes` (applies
@@ -30,7 +32,9 @@ Status as of 2026-10-29 is in brackets.
          the hosted project): delete a throwaway Apple account, then check
          Settings → Apple Account → Sign in with Apple no longer lists My
          Bodegas. Part of #139.
-- [ ] **Sentry and PostHog projects** (#147, owner only). `SENTRY_DSN` and
+- [x] **Sentry and PostHog projects** (#147; all four steps done by 2026-11-02,
+      `POSTHOG_PERSONAL_API_KEY` and `POSTHOG_PROJECT_ID` are set on the linked
+      project). `SENTRY_DSN` and
       `POSTHOG_API_KEY` are committed (Sentry org `heerheer`; both are public
       client keys). An empty key would skip that vendor with a log line.
       1. [DSN committed] Sentry: sign up at sentry.io (US region), create an org and a
@@ -53,13 +57,12 @@ Status as of 2026-10-29 is in brackets.
          project and redeploy `delete-account`. Until set, the function logs
          "analytics cleanup skipped" and the runbook below covers deletions
          by hand.
-- [ ] **App record in App Store Connect**: bundle id `Yukichi.BodegasNYC`,
-      name "My Bodegas" (check it is free in App Store Connect; names are
-      unique across the store), primary category Food & Drink (or Travel), age
-      rating questionnaire (user-generated content: photos and reviews are
-      user content, so answer "yes" to UGC and make sure the flag-an-issue flow
-      and a way to contact you are in place; that is what Apple checks for
-      guideline 1.2). [not created]
+- [ ] **App record in App Store Connect** (#137): bundle id `Yukichi.BodegasNYC`,
+      name "My Bodegas". Every field, with the text to paste, is in
+      `docs/APP_STORE.md`: record, App Information, age rating (expect 13+ for
+      user-generated content), pricing, App Privacy, the 1.0 page, review
+      notes. [not created; a US store search on 2026-11-03 found no "My
+      Bodegas"]
 - [ ] **Sign in with Apple** is on for the App ID in the developer portal.
       Automatic signing adds it; confirm under Certificates, Identifiers &
       Profiles → Identifiers → BodegasNYC → Capabilities.
@@ -70,7 +73,8 @@ Status as of 2026-10-29 is in brackets.
       the URL into App Store Connect → App Information → Privacy Policy URL.
       Guideline 5.1.1(i) also wants the link reachable inside the app: the
       Account menu and the Account sheet both carry it (#127).
-- [ ] **App Privacy questionnaire** in App Store Connect. Answer from
+- [ ] **App Privacy questionnaire** in App Store Connect (row-by-row table in
+      `docs/APP_STORE.md` section 5). Answer from
       `BodegasNYC/PrivacyInfo.xcprivacy`, which is the source of truth:
       precise location (not linked, app functionality), email address and
       user id (linked), photos and other user content (linked), and for
@@ -81,7 +85,8 @@ Status as of 2026-10-29 is in brackets.
       reports carry their user id. No tracking. Change the manifest first if
       the answers change.
 - [ ] **App Review notes** (App Store Connect → version → App Review
-      Information). Paste something like:
+      Information). The final text is in `docs/APP_STORE.md` section 6; the
+      location paragraph reads:
 
       > Finding bodegas uses When-In-Use location only. "Streets Walked" is an
       > optional feature, off by default, started from its own menu in the app,
@@ -99,18 +104,23 @@ Status as of 2026-10-29 is in brackets.
       fields only if the Release build can accept it (it cannot: the
       email/password sign-in is `#if DEBUG`). So say "Sign in with Apple only;
       no demo account needed, all browsing works signed out."
-- [ ] **Screenshots**. The app is iPhone only (`TARGETED_DEVICE_FAMILY = 1`),
-      so App Store Connect needs iPhone 6.9" and 6.5" (or 6.7") sets. Take
-      them from the Simulator (`Cmd-S`) on a build with real data, not UI-test
-      fixtures. Adding iPad back means an iPad layout pass first.
-- [ ] **Hosted Supabase is production**. The Release build reads
+- [ ] **Screenshots** (#138). The app is iPhone only (`TARGETED_DEVICE_FAMILY = 1`),
+      so App Store Connect needs one iPhone set: upload 6.9" (1320 × 2868) and
+      it scales down to the other sizes; add 6.5" only if the scaled frames look
+      wrong. Taken 2026-11-03 on the shipped map look (dark and light, dark
+      recommended); owner sign-off and the framed marketing versions pending.
+      Order and filenames are in `docs/APP_STORE.md` section 6. Adding iPad
+      back means an iPad layout pass first.
+- [x] **Hosted Supabase is production** (checked 2026-11-03: no pending
+      migrations, `delete-account` v3 deployed, `APPLE_*` and `POSTHOG_*` secrets
+      set; re-run the checks before the archive). The Release build reads
       `SUPABASE_URL` / `SUPABASE_ANON_KEY` from the target's build settings
       (same project as Debug: `fdzjfdvotkodwimtsiuu`). Confirm every migration
       in `supabase/migrations` has been pushed (`supabase db push --linked
       --dry-run` prints nothing pending), that RLS is on for every table, and
       that every function in `supabase/functions` is deployed (`supabase
       functions list`) with its secrets set (`supabase secrets list`).
-- [ ] **Encryption**. `ITSAppUsesNonExemptEncryption` is `NO` in `Info.plist`
+- [x] **Encryption**. `ITSAppUsesNonExemptEncryption` is `NO` in `Info.plist`
       (HTTPS only, no custom crypto), so the export-compliance question is
       skipped on each upload.
 
