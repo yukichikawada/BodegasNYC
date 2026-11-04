@@ -72,6 +72,7 @@ everything from this author" toggle, tracked as a follow-up when it comes.
 | Price | Free (USD 0, tier "Free") |
 | Availability | All countries and regions. The data is NYC-only, but the app is a portfolio piece and a free listing has no downside abroad. Narrow to United States only if the owner prefers. |
 | Pre-order | No |
+| Apple Silicon Macs, Apple Vision Pro | Both "Make this app available" boxes unchecked (iPhone-only app, untested on either; one checkbox each to turn on later). |
 | Tax category | leave the default (free app, no agreements beyond the free-apps one) |
 
 ## 5. App Privacy
@@ -174,7 +175,7 @@ bodega,deli,new york,manhattan,brooklyn,queens,bronx,cat,hot food,beer,lotto,atm
 | --- | --- |
 | Sign-in required | **Off**. Browsing works signed out; contributing uses Sign in with Apple, which works on the reviewer's device with their own Apple Account. |
 | Demo account | none (the email/password sign-in is `#if DEBUG` and absent from the Release build) |
-| Contact first/last name, phone, email | the owner's; App Review calls the number if a question needs an answer today |
+| Contact first/last name, phone, email | the owner's; App Review calls the number if a question needs an answer today. The phone number is required: without it App Store Connect drops the whole block (notes, contact, sign-in toggle) on Save and shows no error (the API returns 409 `contactPhone` required). |
 | Attachment | none |
 
 **Notes** (paste as one block):
@@ -187,17 +188,30 @@ bodega,deli,new york,manhattan,brooklyn,queens,bronx,cat,hot food,beer,lotto,atm
 >
 > Analytics: crash reports (Sentry) and product analytics (PostHog) are on by default and can be turned off in the Account menu under Share Usage and Diagnostics. Neither is used for tracking or advertising.
 
-## 7. Agreements
+## 7. Agreements and regulations
+
+Digital Services Act: App Store Connect shows a banner until the account's
+trader status is provided (App Information → App Store Regulations & Permits →
+Digital Services Act → Set Up; non-trader is the answer for a free app with no
+business behind it). Without it Apple can remove the app from the EU store,
+which matters because availability is all countries.
+
 
 Free app: the Apple Developer Program License Agreement and the free-apps
 schedule must be accepted under Business → Agreements. No banking or tax
 forms until the app charges money.
 
-## What is left for the owner
+## Status
 
-Everything here is pasteable, but App Store Connect has no API for creating
-the app record, the App Privacy answers or the age rating, so the record is
-created by hand. Two ways to do the rest:
+Filled in and verified on 2026-11-03 (app id 6830464647): sections 1 to 6,
+including the published App Privacy answers and the App Review block. Open:
+screenshots, attaching the build, the Digital Services Act setup, Submit.
+
+## How it was filled
+
+App Store Connect has no API for creating the app record, the App Privacy
+answers or the age rating, so the record is created by hand. Two ways to do
+the rest:
 
 - **By hand**, from this file, in one sitting (about 30 minutes).
 - **Assisted**: sign in to App Store Connect in Chrome and let the Claude
