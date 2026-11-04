@@ -5,5 +5,6 @@ description: Find and share bodegas in New York City. iOS app.
 theme: jekyll-theme-primer
 exclude:
   - RELEASE.md
+  - APP_STORE.md
   - MVP_BACKLOG.md
   - REACH_GOALS.md
