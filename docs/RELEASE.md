@@ -169,6 +169,31 @@ Status as of 2026-11-03 is in brackets.
    ARCHIVE=~/Library/Developer/Xcode/Archives/<date>/<archive>.xcarchive
    sentry-cli debug-files upload --org heerheer --project my-bodegas-ios "$ARCHIVE/dSYMs"
    ```
+6c. **Command-line alternative to 5, 6 and 6a** (used for build 1 of 1.0 on
+   2026-11-03; no Xcode UI, works while another session uses Xcode). The
+   App Store Connect app record must exist first or the upload is refused.
+   ```sh
+   until [ "$(pgrep -x xcodebuild | wc -l)" -lt 2 ]; do sleep 30; done
+   xcodebuild archive -project BodegasNYC.xcodeproj -scheme BodegasNYC \
+     -configuration Release -destination 'generic/platform=iOS' \
+     -archivePath build/archives/MyBodegas-<ver>-<build>.xcarchive \
+     -derivedDataPath build/dd-archive -skipPackagePluginValidation \
+     -allowProvisioningUpdates
+   xcodebuild -exportArchive \
+     -archivePath build/archives/MyBodegas-<ver>-<build>.xcarchive \
+     -exportOptionsPlist build/ExportOptions-upload.plist -allowProvisioningUpdates
+   ```
+   `build/ExportOptions-upload.plist` (gitignored with the rest of `build/`,
+   recreate if missing): `method` `app-store-connect`, `destination` `upload`,
+   `teamID` `3BAMVTHBKF`, `signingStyle` `automatic`, `uploadSymbols` true,
+   `manageAppVersionAndBuildNumber` false. The archive signs with the
+   development identity and the export re-signs with a cloud-managed
+   distribution certificate, so no distribution certificate appears in the
+   keychain. Expect one warning: "Upload Symbols Failed … no dSYM for
+   Sentry.framework". The Sentry package ships as a binary framework without
+   its dSYM, so Apple's own crash reports lack Sentry frames; Sentry
+   symbolicates its framework itself and the app's dSYM is unaffected.
+   Steps 6a, 6b and 7 still apply.
 6b. **Check the symbols match the binary** (#147 E8, AC 15; required on the
    first TestFlight build, a spot check after): the UUIDs of the archived app
    binary must be listed under Sentry → Settings → Debug Files.
