@@ -7,28 +7,30 @@
 # simulators, and slow or hung UI-test runs on those clones.
 #
 # Usage: scripts/run-tests.sh [--ui] [timeout_seconds]
-#   --ui                  also run BodegasNYCUITests. Passes
-#                          `-parallel-testing-enabled NO`, so every test
-#                          runs on the pinned device itself and xcodebuild
-#                          never clones it (#101). With parallel testing on,
-#                          xcodebuild fanned the run out to three fresh
-#                          "Clone N of iPhone 17 Pro" devices, the first UI
-#                          launch on a fresh clone took ~60s, and the run hit
-#                          the cap. Measured with the flag: ~45-55s of
-#                          testing after a warm build, no clones. Its
-#                          default cap is 300s, not 180s: with the machine
-#                          at its limits (two builds, three booted devices)
-#                          a --ui run took 231s, 2026-10-24.
-#   TEST_TIMEOUT_SECONDS env var overrides the default (180s / 3min, or
-#   300s / 5min with --ui) too.
+#   --ui                  also run BodegasNYCUITests.
+#   TEST_TIMEOUT_SECONDS env var overrides the default cap (480s / 8min, or
+#   600s / 10min with --ui) too. The first run after build/dd is cold
+#   (fresh checkout, worktree, toolchain change) compiles every package and
+#   takes about 7 minutes before testing starts; pass 900 for that one.
+#
+# Every run passes `-parallel-testing-enabled NO`, so every test runs on the
+# pinned device itself and xcodebuild never clones it (#101). With parallel
+# testing on, xcodebuild fanned --ui runs out to three fresh "Clone N of
+# iPhone 17 Pro" devices and the first UI launch on a clone took ~60s; on
+# 2026-11-04 the unit path's single clone hung at app install for the whole
+# cap. Measured without clones: ~45-55s of testing after a warm build.
+#
+# Toolchain: on macOS 27.2 Xcode 26.6's `xcodebuild test` can no longer
+# reach a simulator's instruments service ("DTServiceHubClient failed to
+# bless service hub"; the runner hangs at install), while Xcode 27.2's can.
+# So when Xcode 27.2 is installed and DEVELOPER_DIR is unset, this script
+# runs under it. Set DEVELOPER_DIR yourself to override. Archives for the
+# App Store still use Xcode 26.6 for 1.0 (docs/RELEASE.md).
 #
 # Clones live in xcodebuild's own device set
 # (~/Library/Developer/XCTestDevices), not the default one, so the sweep
 # below lists and deletes them with `simctl --set testing` (shut-down
-# leftovers only; that set is shared machine-wide). Unit-only runs
-# keep xcodebuild's default parallel testing, so they can still boot one
-# "Clone 1 of" device for the duration of the run; xcodebuild deletes it
-# afterwards and the sweep catches any it leaves behind.
+# leftovers only; that set is shared machine-wide).
 #
 # The pinned device is shut down after the run if it was shut down before
 # it (machine rule in ~/.claude/CLAUDE.md: a simulator stays booted only
@@ -42,6 +44,12 @@
 set -uo pipefail
 
 cd "$(dirname "$0")/.."
+
+# See the header: Xcode 27.2's toolchain for tests when it is installed.
+XCODE_27_DEVELOPER_DIR="/Applications/Xcode_27.2.app/Contents/Developer"
+if [ -z "${DEVELOPER_DIR:-}" ] && [ -d "$XCODE_27_DEVELOPER_DIR" ]; then
+  export DEVELOPER_DIR="$XCODE_27_DEVELOPER_DIR"
+fi
 
 DEVICE_NAME="iPhone 17 Pro"
 
@@ -57,8 +65,8 @@ for arg in "$@"; do
     *) TIMEOUT_ARG="$arg" ;;
   esac
 done
-DEFAULT_TIMEOUT=180
-[ "$INCLUDE_UI_TESTS" -eq 1 ] && DEFAULT_TIMEOUT=300
+DEFAULT_TIMEOUT=480
+[ "$INCLUDE_UI_TESTS" -eq 1 ] && DEFAULT_TIMEOUT=600
 TIMEOUT_SECONDS="${TEST_TIMEOUT_SECONDS:-${TIMEOUT_ARG:-$DEFAULT_TIMEOUT}}"
 
 TIMEOUT_BIN=""
@@ -124,12 +132,10 @@ fi
 
 xcrun simctl boot "$DEVICE_UDID" >/dev/null 2>&1 || true
 
-TEST_ARGS=()
+# No parallel testing on either path, so no clones: see the header (#101).
+TEST_ARGS=(-parallel-testing-enabled NO)
 if [ "$INCLUDE_UI_TESTS" -eq 0 ]; then
   TEST_ARGS+=(-only-testing:BodegasNYCTests)
-else
-  # No parallel testing, so no clones: see the header (#101).
-  TEST_ARGS+=(-parallel-testing-enabled NO)
 fi
 
 "$TIMEOUT_BIN" "$TIMEOUT_SECONDS" xcodebuild test \
