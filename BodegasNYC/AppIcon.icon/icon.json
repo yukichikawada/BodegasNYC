@@ -1,0 +1,165 @@
+{
+  "fill": {
+    "solid": "extended-srgb:0.91373,0.92941,0.91765,1.00000"
+  },
+  "fill-specializations": [
+    {
+      "appearance": "dark",
+      "value": {
+        "solid": "extended-srgb:0.08627,0.10588,0.09412,1.00000"
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "disc.svg",
+          "name": "pin",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "extended-srgb:0.03922,0.47843,0.26275,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.20392,0.78039,0.48235,1.00000"
+              }
+            }
+          ]
+        },
+        {
+          "image-name": "ring.svg",
+          "name": "stroke",
+          "glass": true,
+          "fill": {
+            "solid": "extended-srgb:1.00000,1.00000,1.00000,1.00000"
+          }
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.55
+      },
+      "specular": true,
+      "lighting": "individual",
+      "translucency": {
+        "enabled": true,
+        "value": 0.2
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "dots.svg",
+          "name": "breadcrumbs",
+          "glass": true,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "extended-srgb:0.03137,0.56863,0.69804,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.35294,0.89020,1.00000,1.00000"
+              }
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.4
+      },
+      "specular": true,
+      "lighting": "individual",
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
+    },
+    {
+      "layers": [
+        {
+          "image-name": "halo.svg",
+          "name": "glow",
+          "glass": false,
+          "fill": {
+            "solid": "extended-srgb:0.20392,0.78039,0.48235,1.00000"
+          },
+          "opacity-specializations": [
+            {
+              "value": 0.3
+            },
+            {
+              "appearance": "dark",
+              "value": 0.42
+            }
+          ]
+        },
+        {
+          "image-name": "ribbon.svg",
+          "name": "ribbon",
+          "glass": false,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "extended-srgb:0.03137,0.56863,0.69804,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.35294,0.89020,1.00000,1.00000"
+              }
+            }
+          ],
+          "opacity": 0.27
+        },
+        {
+          "image-name": "streets.svg",
+          "name": "West Village streets",
+          "glass": false,
+          "fill-specializations": [
+            {
+              "value": {
+                "solid": "extended-srgb:1.00000,1.00000,1.00000,1.00000"
+              }
+            },
+            {
+              "appearance": "dark",
+              "value": {
+                "solid": "extended-srgb:0.16471,0.20000,0.18039,1.00000"
+              }
+            }
+          ],
+          "opacity-specializations": [
+            {
+              "value": 0.9
+            },
+            {
+              "appearance": "tinted",
+              "value": 0.28
+            }
+          ]
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0.5
+      },
+      "specular": false,
+      "lighting": "individual"
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "iOS"
+    ]
+  }
+}

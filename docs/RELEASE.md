@@ -123,6 +123,16 @@ Status as of 2026-11-03 is in brackets.
 - [x] **Encryption**. `ITSAppUsesNonExemptEncryption` is `NO` in `Info.plist`
       (HTTPS only, no custom crypto), so the export-compliance question is
       skipped on each upload.
+- [x] **App icon** (#136; done 2026-11-04). `BodegasNYC/AppIcon.icon` is the
+      Icon Composer document (the West Village map with the walked trail and
+      the pin; three groups, Liquid Glass on the pin and the breadcrumbs), picked
+      up automatically by the synchronized `BodegasNYC` folder. The
+      `AppIcon.appiconset` PNGs of the same name are the system's own flattened
+      renders of it (light, dark, mono) and act as the fallback. The candidates,
+      the generator scripts and the OpenStreetMap extract live under
+      `~/.gstack/projects/yukichikawada-BodegasNYC/app-icon/`; open the `.icon`
+      in Icon Composer (Xcode 27.2's copy) to change it, then regenerate the
+      three PNGs with `tools/carx.swift` from an `actool` compile.
 
 ## Every release
 

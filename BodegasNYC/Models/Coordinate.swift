@@ -13,7 +13,9 @@ nonisolated struct Coordinate: Codable, Sendable, Hashable {
 }
 
 #if canImport(CoreLocation)
-extension Coordinate {
+// `nonisolated` like the struct: pure value helpers, called from synchronous
+// Swift Testing cases, which Xcode 27.2 rejects under default main-actor isolation.
+nonisolated extension Coordinate {
     init(_ coordinate: CLLocationCoordinate2D) {
         self.init(latitude: coordinate.latitude, longitude: coordinate.longitude)
     }

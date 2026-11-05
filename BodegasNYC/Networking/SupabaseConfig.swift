@@ -6,7 +6,10 @@ nonisolated struct SupabaseConfig: Sendable {
     var anonKey: String
 }
 
-extension SupabaseConfig {
+// `nonisolated` like the struct: under default main-actor isolation an unmarked
+// extension makes `init(infoDictionary:)` main-actor-only, which Xcode 27.2's
+// compiler rejects from the synchronous Swift Testing cases.
+nonisolated extension SupabaseConfig {
     /// Failure modes when loading connection details out of an Info.plist-backed
     /// bundle dictionary — `SUPABASE_URL`/`SUPABASE_ANON_KEY`, populated via
     /// `$(SUPABASE_URL)`/`$(SUPABASE_ANON_KEY)` substitution in `Info.plist`.
