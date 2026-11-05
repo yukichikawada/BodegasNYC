@@ -136,9 +136,12 @@ Status as of 2026-11-03 is in brackets.
 
 ## Every release
 
-1. **Pick the version.** `MARKETING_VERSION` is what users see (1.0, 1.1,
-   1.1.1). `CURRENT_PROJECT_VERSION` (the build number) must go up on every
-   upload, even for the same marketing version. Set both in Xcode → target
+1. **Pick the version.** `MARKETING_VERSION` is what users see and follows
+   semantic versioning, always three parts (1.0.0, then 1.0.1 for a fix-only
+   release, 1.1.0 for new features, 2.0.0 for a break in what people expect;
+   decided 2026-11-04). `CURRENT_PROJECT_VERSION` (the build number) is a
+   plain integer that must go up on every upload, even for the same
+   marketing version, and never resets. Set both in Xcode → target
    BodegasNYC → General → Identity. They are set per configuration in
    `project.pbxproj`; Xcode edits all of them together.
 2. **Main is green.** `git checkout main && git pull`, no open PRs you want in
@@ -171,10 +174,15 @@ Status as of 2026-11-03 is in brackets.
 6. **Upload**: Organizer → Distribute App → App Store Connect → Upload.
    Keep "Upload your app's symbols" on. Automatic signing handles the
    distribution certificate and profile.
-6c. **Command-line alternative to 5 and 6** (used for build 1 of 1.0 on
-   2026-11-03; no Xcode UI, works while another session uses Xcode). The
+6c. **Command-line alternative to 5 and 6** (used for builds 1 to 3 of 1.0 on
+   2026-11-03/04; no Xcode UI, works while another session uses Xcode). The
    App Store Connect app record must exist first or the upload is refused.
+   Archive 1.0 with Xcode 26.6 (the toolchain every 1.0 device check used),
+   even though tests now run under Xcode 27.2 (see CLAUDE.md): set
+   `DEVELOPER_DIR` explicitly so the choice does not depend on `xcode-select`.
+   Move archives to 27.2 after a device pass on an iOS 27 SDK build.
    ```sh
+   export DEVELOPER_DIR=/Applications/Xcode26_6.app/Contents/Developer
    until [ "$(pgrep -x xcodebuild | wc -l)" -lt 2 ]; do sleep 30; done
    xcodebuild archive -project BodegasNYC.xcodeproj -scheme BodegasNYC \
      -configuration Release -destination 'generic/platform=iOS' \
@@ -216,9 +224,10 @@ Status as of 2026-11-03 is in brackets.
    upload again from this archive before relying on crash reports.
 7. **Tag the commit** you archived from, so the build maps back to source:
    ```sh
-   git tag -a v1.0-1 -m "App Store build 1 of 1.0" && git push origin v1.0-1
+   git tag -a v1.0.0-3 -m "App Store build 3 of 1.0.0" && git push origin v1.0.0-3
    ```
-   Format: `v<MARKETING_VERSION>-<CURRENT_PROJECT_VERSION>`.
+   Format: `v<MARKETING_VERSION>-<CURRENT_PROJECT_VERSION>` (builds 1 and 2
+   predate semantic versioning and are tagged `v1.0-1` and `v1.0-2`).
 8. **App Store Connect**: wait for processing (a few minutes to an hour),
    attach the build to the version, fill in "What's New", check the App
    Review notes still describe the build, then Submit for Review.

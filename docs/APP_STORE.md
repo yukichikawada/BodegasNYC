@@ -163,7 +163,7 @@ bodega,deli,new york,manhattan,brooklyn,queens,bronx,cat,hot food,beer,lotto,atm
 | --- | --- |
 | Support URL | `https://yukichikawada.github.io/BodegasNYC/` (live; lists the privacy page, the source and the PRD; add the contact email there if App Review asks for it on the support page itself) |
 | Marketing URL | `https://github.com/yukichikawada/BodegasNYC` (optional) |
-| Version | `1.0` (must match `MARKETING_VERSION`) |
+| Version | `1.0.0` (must match `MARKETING_VERSION`; the record was created as `1.0` on 2026-11-03 and is renamed to `1.0.0` before submission, an editable field while the version is unreleased) |
 | Copyright | `2026 Yukichi Kawada` |
 | Routing app coverage file | none |
 | Build | attach after the first upload (#139) |
