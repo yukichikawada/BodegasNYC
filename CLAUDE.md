@@ -73,7 +73,9 @@ When Claude Code orchestrates work with subagents:
   them are `needs-decision` issues and anything one-way (schema migrations against the hosted
   database, deleting data, anything that cannot be reverted with a follow-up PR).
 - `.github/workflows/claude-code-review.yml` runs an automated Claude review on every PR as a
-  second set of eyes. When reviewing in CI (Linux runner, no Xcode): read the diff against the
+  second set of eyes, except docs-only PRs (every changed file under `docs/` or `README.md`),
+  where the job reports the required `review` check green in seconds without calling the
+  model; `CLAUDE.md` and `DESIGN.md` always get the full review. When reviewing in CI (Linux runner, no Xcode): read the diff against the
   conventions in this file and `docs/PRD.md`; do not try to run `xcodebuild`, the test script, or
   a simulator.
 - Items that touch the same view (e.g. all three bodega-detail actions) are built as a stack:
