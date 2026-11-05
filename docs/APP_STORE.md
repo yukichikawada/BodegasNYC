@@ -70,7 +70,7 @@ everything from this author" toggle, tracked as a follow-up when it comes.
 | Field | Value |
 | --- | --- |
 | Price | Free (USD 0, tier "Free") |
-| Availability | All countries and regions. The data is NYC-only, but the app is a portfolio piece and a free listing has no downside abroad. Narrow to United States only if the owner prefers. |
+| Availability | United States only (owner's decision 2026-11-05, set in App Store Connect under Pricing and Availability → App Availability → Manage → Manage Availability; the "future countries or regions" box at the bottom of the list left unchecked). The record was first saved as all 175 regions on 2026-11-03. The data is NYC-only; widening later is the same dialog. |
 | Pre-order | No |
 | Apple Silicon Macs, Apple Vision Pro | Both "Make this app available" boxes unchecked (iPhone-only app, untested on either; one checkbox each to turn on later). |
 | Tax category | leave the default (free app, no agreements beyond the free-apps one) |
@@ -193,8 +193,10 @@ bodega,deli,new york,manhattan,brooklyn,queens,bronx,cat,hot food,beer,lotto,atm
 Digital Services Act: App Store Connect shows a banner until the account's
 trader status is provided (App Information → App Store Regulations & Permits →
 Digital Services Act → Set Up; non-trader is the answer for a free app with no
-business behind it). Without it Apple can remove the app from the EU store,
-which matters because availability is all countries.
+business behind it). Apple asks for the declaration even for apps not
+distributed in the EU, so it is still answered once; with availability set to
+the United States only, the EU consumer notice never shows and there is no EU
+store to be removed from.
 
 
 Free app: the Apple Developer Program License Agreement and the free-apps
