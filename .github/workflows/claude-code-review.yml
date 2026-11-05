@@ -28,6 +28,13 @@
 # On "opened" events the job first waits 90s: reviews started within about a minute of
 # the PR being opened reliably ended without a comment, and the same job re-run later
 # worked.
+#
+# Docs-only PRs (every changed file under docs/ or README.md) skip the Claude review:
+# the job still runs and reports the required `review` check green, in seconds, with no
+# model call. CLAUDE.md and DESIGN.md are not docs in this sense: they are the reviewer's
+# own rulebook and the builders' conventions, so they take the full path. Decided
+# 2026-11-05 after five of eight review runs in two days were RELEASE.md/APP_STORE.md
+# edits, each costing the 90s settle plus an Opus run to say "No issues found".
 name: Claude Code Review
 on:
   pull_request:
@@ -81,13 +88,32 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 1
+      - name: Classify the change (docs-only PRs skip the Claude review)
+        id: classify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          files=$(gh api "repos/$REPO/pulls/$PR/files" --paginate --jq '.[].filename')
+          printf 'Changed files:\n%s\n' "$files"
+          # Docs-only: at least one file, and none outside docs/ or README.md. A count, not
+          # `grep -q -v`, whose exit code differs between grep implementations.
+          outside=$(printf '%s\n' "$files" | grep -cvE '^(docs/.+|README\.md)$' || true)
+          if [ -n "$files" ] && [ "${outside:-0}" -eq 0 ]; then
+            echo "docs_only=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::PR #$PR changes only docs/ and README.md; the Claude review is skipped and the review check passes."
+          else
+            echo "docs_only=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Let GitHub finish preparing a just-opened PR
-        if: github.event.action == 'opened'
+        if: github.event.action == 'opened' && steps.classify.outputs.docs_only != 'true'
         # Measured on #54, #55 and #63: reviews started within ~70s of the PR being opened
         # ended after 2-4 turns with no comment, while the same job re-run minutes later
         # reviewed normally. Waiting before the first attempt avoids burning the retry.
         run: sleep 90
       - name: Review
+        if: steps.classify.outputs.docs_only != 'true'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -107,6 +133,7 @@ jobs:
           show_full_output: true
       - name: Check that a review comment was posted
         id: first_check
+        if: steps.classify.outputs.docs_only != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
@@ -126,7 +153,7 @@ jobs:
           echo "found=$found" >> "$GITHUB_OUTPUT"
           echo "Claude comments on PR #$PR: $found"
       - name: Review again (first run ended without a comment)
-        if: steps.first_check.outputs.found == '0'
+        if: steps.classify.outputs.docs_only != 'true' && steps.first_check.outputs.found == '0'
         uses: anthropics/claude-code-action@v1
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
@@ -145,7 +172,7 @@ jobs:
           # (#85). The repo is private, so the diff appearing in the log is fine.
           show_full_output: true
       - name: Fail if the review still posted nothing
-        if: steps.first_check.outputs.found == '0'
+        if: steps.classify.outputs.docs_only != 'true' && steps.first_check.outputs.found == '0'
         env:
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
