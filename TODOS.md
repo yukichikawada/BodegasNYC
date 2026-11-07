@@ -125,3 +125,15 @@
 **Effort:** S
 **Priority:** P3
 **Depends on:** #150 merged
+
+### List tab width rule on wide layouts
+
+**What:** A width rule for the List tab on landscape phones and the iPhone Duo's unfolded panel: a centred column or a maximum row width, so rows and the search field do not run edge to edge at 874 pt.
+
+**Why:** DESIGN.md caps floating overlays at 480 pt and onboarding content at 560 pt but has no rule for the list page; on a wide window a row's name and its trailing distance value sit far apart, and the search field spans the whole screen.
+
+**Context:** Raised in the #160 design review (DS6, 2026-11-06) and kept out of that PR, which is the toolbar only. Start in `BodegaListView.swift` and `BodegaRow.swift` with the Duo unfolded (`--display=3`) and the 17 Pro in landscape once #160 is on `main`; the `{components.card.maxWidth}` and onboarding `maxWidth: 560pt` rules are the precedents. The Duo screenshot set (#140 post-launch list) will hit this.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** #160

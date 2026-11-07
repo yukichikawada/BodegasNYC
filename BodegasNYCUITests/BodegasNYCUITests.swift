@@ -93,6 +93,106 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(detailTitle.waitForExistence(timeout: 10), "detail title never appeared after tapping the pin")
     }
 
+    // MARK: Wide layouts (#160)
+
+    /// Must match `BrowseView.principalModeSwitchID` / `trailingModeSwitchID`.
+    private static let principalSwitchID = "browseMode.principal"
+    private static let trailingSwitchID = "browseMode.trailing"
+
+    /// Waits until the switch is in `expected` (principal or trailing) and the other form is gone.
+    @MainActor
+    private func assertOnlySwitch(
+        _ expected: String, in app: XCUIApplication, _ step: String, line: UInt = #line
+    ) -> XCUIElement {
+        let other = expected == Self.principalSwitchID ? Self.trailingSwitchID : Self.principalSwitchID
+        let shown = app.descendants(matching: .any)[expected].firstMatch
+        let hidden = app.descendants(matching: .any)[other].firstMatch
+        XCTAssertTrue(shown.waitForExistence(timeout: 10), "\(step): \(expected) never appeared", line: line)
+        XCTAssertTrue(hidden.waitForNonExistence(timeout: 5), "\(step): \(other) is still there", line: line)
+        return shown
+    }
+
+    /// protects: on the iPhone 17 Pro in landscape (874 pt) the Map/List switch leaves the principal slot for the
+    /// trailing group as a one-tap toggle naming the other tab, in the order Locate Me, Streets Walked, List,
+    /// Account, Add; it goes to the List and back in one tap each, keeps its slot on the List tab while Locate Me
+    /// and Streets Walked drop; rotating with the Account menu open closes the menu without changing the tab; and
+    /// portrait puts the switch back in the centre, with exactly one form present at every step (#160 AC 4 to 6,
+    /// DS1 to DS3).
+    /// fails_when: the principal form survives in landscape, the trailing toggle is missing, misnamed or out of
+    /// order, a tap does not switch tabs, the List tab keeps the map-only items, both forms or neither exist, a
+    /// rotation with the menu open switches tabs or leaves the menu up, or portrait keeps the trailing toggle.
+    /// no_claim: the haze (screenshots, live QA), the toggle's colour and glass look, widths between 540 pt and
+    /// 874 pt (unit tests), the Duo, VoiceOver's spoken order; the fixture launch stands in for the network.
+    @MainActor
+    func testLandscapeMovesTheModeSwitchToTheTrailingGroup() throws {
+        let app = launchWithFixtures()
+        // Restored before any assertion can throw: a device left in landscape
+        // fails the Streets Walked intro and photo viewer tests.
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(app.buttons["Locate Me"].firstMatch.waitForExistence(timeout: 20), "the map never appeared")
+        _ = assertOnlySwitch(Self.principalSwitchID, in: app, "portrait launch")
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let toggle = assertOnlySwitch(Self.trailingSwitchID, in: app, "landscape")
+        XCTAssertEqual(toggle.label, "List", "on the map the toggle does not name the List")
+
+        let order = ["Locate Me", "Streets Walked", "List", "Account", "Add Bodega"]
+        let buttons = order.map { label -> XCUIElement in
+            label == "List" ? toggle : app.buttons[label].firstMatch
+        }
+        for (label, button) in zip(order, buttons) {
+            XCTAssertTrue(button.exists, "landscape: \(label) is missing from the toolbar")
+        }
+        let xs = buttons.map(\.frame.minX)
+        XCTAssertEqual(xs, xs.sorted(), "landscape trailing order is not \(order): x origins \(xs)")
+
+        toggle.tap()
+        // The list page's search field (the map's pin shares the row's name, so a row match proves nothing).
+        let listSearch = app.searchFields.firstMatch
+        XCTAssertTrue(listSearch.waitForExistence(timeout: 10), "the List toggle did not show the list")
+        let backToggle = assertOnlySwitch(Self.trailingSwitchID, in: app, "List tab")
+        XCTAssertEqual(backToggle.label, "Map", "on the List tab the toggle does not name the Map")
+        XCTAssertTrue(app.buttons["Locate Me"].waitForNonExistence(timeout: 5), "Locate Me stayed on the List tab")
+        XCTAssertFalse(app.buttons["Streets Walked"].exists, "Streets Walked stayed on the List tab")
+
+        backToggle.tap()
+        let locateMe = app.buttons["Locate Me"].firstMatch
+        XCTAssertTrue(locateMe.waitForExistence(timeout: 10), "the Map toggle did not return")
+        XCTAssertTrue(listSearch.waitForNonExistence(timeout: 5), "the list stayed up after the Map toggle")
+        XCTAssertEqual(assertOnlySwitch(Self.trailingSwitchID, in: app, "back on the map").label, "List")
+
+        // DS3: an open menu dismisses on the slot swap; the tab stays.
+        app.buttons["Account"].firstMatch.tap()
+        let menuRow = app.buttons["Show Intro Again"].firstMatch
+        XCTAssertTrue(menuRow.waitForExistence(timeout: 5), "the Account menu did not open")
+        XCUIDevice.shared.orientation = .portrait
+        _ = assertOnlySwitch(Self.principalSwitchID, in: app, "portrait with the menu open")
+        XCTAssertTrue(menuRow.waitForNonExistence(timeout: 5), "the Account menu stayed up through the rotation")
+        XCTAssertTrue(app.buttons["Locate Me"].firstMatch.exists, "the rotation changed the tab")
+        XCTAssertFalse(listSearch.exists, "the rotation showed the list")
+    }
+
+    /// protects: at the largest accessibility text size in landscape the toolbar still shows all six controls,
+    /// the switch included, so none is dropped or folded into an overflow menu (#160 eng D3).
+    /// fails_when: any of Filters, the trailing toggle, Locate Me, Streets Walked, Account or Add is missing.
+    /// no_claim: that they do not overlap or truncate (screenshots), other text sizes, the Duo's unfolded panel
+    /// (owner-side capture).
+    @MainActor
+    func testLandscapeAtAccessibilitySizeKeepsEveryToolbarControl() throws {
+        let app = launchWithFixtures([
+            "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"
+        ])
+        defer { XCUIDevice.shared.orientation = .portrait }
+        XCTAssertTrue(app.buttons["Locate Me"].firstMatch.waitForExistence(timeout: 20), "the map never appeared")
+
+        XCUIDevice.shared.orientation = .landscapeLeft
+        let toggle = assertOnlySwitch(Self.trailingSwitchID, in: app, "AX5 landscape")
+        XCTAssertEqual(toggle.label, "List")
+        for label in ["Filters", "Locate Me", "Streets Walked", "Account", "Add Bodega"] {
+            XCTAssertTrue(app.buttons[label].firstMatch.exists, "AX5 landscape: \(label) is missing from the toolbar")
+        }
+    }
+
     /// protects: a detail opened from the List shows the map preview and a Directions button, and Show on Map
     /// lands on the Map tab with the detail gone and the bodega's pin on screen to tap (#150 AC 1, AC 3, R5).
     /// fails_when: the preview or Directions is missing, Show on Map leaves the detail up or the List tab

@@ -69,6 +69,8 @@ struct BrowseView: View {
     /// With `browseWidth`, picks `modePicker`'s form: see `BrowseModePickerStyle` (#44, #143).
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var browseWidth: CGFloat = 0
+    /// Read by `BrowseView+ModePicker` and `BrowseView+Content` (#160).
+    var modePickerStyle: BrowseModePickerStyle { .resolve(dynamicTypeSize: dynamicTypeSize, width: browseWidth) }
 
     private let bodegaService: BodegaService
     private let reviewService: ReviewService
@@ -127,51 +129,20 @@ struct BrowseView: View {
         self.streetsWalkedViewModel = streetsWalkedViewModel
     }
 
-    /// The Map/List switch in the toolbar's principal slot. A text
-    /// segmented control where it fits; from `.xLarge` up, or on phones
-    /// narrower than 400 pt, a single-button `Menu` wrapping the same
-    /// `Picker` (see `BrowseModePickerStyle`).
-    @ViewBuilder
-    private var modePicker: some View {
-        let picker = Picker("Browse Mode", selection: tabSelection) {
-            ForEach(Tab.allCases) { tab in
-                Label(tab.label, systemImage: tab.systemImage).tag(tab)
-            }
-        }
-        if BrowseModePickerStyle.resolve(dynamicTypeSize: dynamicTypeSize, width: browseWidth) == .menu {
-            Menu {
-                picker
-            } label: {
-                // The principal slot gives a bare icon (no glass button), so the
-                // label carries its own target: 44 pt wide, and as tall as the
-                // toolbar allows (it caps items at 36 pt, the same as the
-                // system Filters button), so taps near the glyph's edge count.
-                Label(activeTab.label, systemImage: activeTab.systemImage)
-                    .labelStyle(.iconOnly)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(.rect)
-            }
-            .accessibilityLabel("Browse Mode")
-            .accessibilityValue(activeTab.label)
-        } else {
-            picker
-                .pickerStyle(.segmented)
-                .labelStyle(.titleOnly)
-                .frame(maxWidth: 200)
-        }
-    }
-
     var body: some View {
         NavigationStack(path: $path) {
             content
                 .toolbar {
-                    ToolbarItem(placement: .principal) {
-                        modePicker
+                    // The switch's centre forms; the wide one is in `content` (#160).
+                    if !modePickerStyle.isInTrailingGroup {
+                        ToolbarItem(placement: .principal) {
+                            modePicker(modePickerStyle)
+                        }
                     }
                     ToolbarItem(placement: .topBarLeading) {
                         filterButton
                     }
-                    // Account and Add: see `trailingToolbar`.
+                    // The wide-layout switch, Account and Add: see `content`.
                 }
                 .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { browseWidth = $0 }
                 .navigationDestination(for: Bodega.self) { bodega in
