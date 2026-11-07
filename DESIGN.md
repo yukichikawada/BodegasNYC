@@ -109,6 +109,15 @@ components:
     rounded: 10pt
   nav-link:
     textColor: "{colors.primary}"
+  browse-toolbar:                # #160; widths are the measured browse width, not the window
+    segmentedMinWidth: 400pt     # below it at default text size the switch is the compact menu (#143)
+    trailingMinWidth: 540pt      # measured browse width, inside safe areas (the folded Duo is ~402 in a 466pt window)
+    modeSwitch:
+      segmented: "centre, 400 to 539pt"
+      menu: "centre, below 400pt, or from .xLarge below 540pt"
+      toggle: "trailing, 540pt and up: destination glyph + text, one tap"
+    switchColor: label           # the glass default; no tint
+    scrollEdgeEffect: "List tab only; the map's top edge is clear at every width"   # decided, not yet met: see #160
 ---
 
 # BodegasNYC
@@ -132,7 +141,14 @@ a New Yorker." Every decision below serves that: the data and the words carry th
 **Mode per surface:**
 - Persuade: onboarding (3 pages). Quiet ground, heavy condensed title, orange symbol spine.
 - Operate: map, list, filters, add flow, placement card. System controls in the tint; glass for
-  controls, material for the one content card.
+  controls, material for the one content card. The browse toolbar's Map/List switch takes one of
+  three forms by measured browse width (`{components.browse-toolbar.modeSwitch}`, #160): the
+  segmented control or the compact menu in the centre on portrait phones, a one-tap toggle naming
+  the other tab in the trailing group from 540pt. The navigation bar's scroll-edge fade belongs
+  to the List tab only; the map's top edge is clear at every width
+  (`{components.browse-toolbar.scrollEdgeEffect}`). Not yet met: iOS 26.5 draws no band over the
+  map, and on iOS 27.2 neither `toolbarBackgroundVisibility` nor `scrollEdgeEffectHidden` on the
+  browse content removes the one it draws (#160).
 - Read: bodega detail, reviews, photos. Opaque page, system sections, display register on the name.
 - Experience: the first add. The only authored choreography in the app.
 
@@ -177,7 +193,8 @@ corner at night; the map tiles already switch, so the chrome follows the system 
 **Rules:**
 - Deli Green signals "tappable" in content: buttons, links, text actions, toggles-on, the
   selected tab. Icon and text buttons on Liquid Glass toolbars (filter, account, add, Locate Me,
-  walked; a sheet's Cancel) take the label color, which is the iOS 26 system behavior for glass;
+  walked, the wide-layout Map/List toggle `{components.browse-toolbar.switchColor}`; a sheet's
+  Cancel) take the label color, which is the iOS 26 system behavior for glass;
   do not force the tint on them. It is never used for a status ("open now", success, loading
   spinners). The `pin` asset carries the same green for bodega pins, cluster badges, the
   first-add legend symbol (an icon, not a control) and the placement crosshair (#154); it is a
@@ -665,7 +682,18 @@ on the card and in the popover it is `.primary` (#95 D11).
     opacity: the page is opaque, so the map never ghosts through it); 0.25s fade under Reduce
     Motion or Prefer Cross-Fade Transitions. The list is a page, not a sheet: it leaves by the
     Map/List control, no drag to dismiss. Locate Me and Streets Walked leave the toolbar on the
-    List tab without animation.
+    List tab without animation. When the map's top edge is cleared
+    (`{components.browse-toolbar.scrollEdgeEffect}`, open), the fade flips with the tab inside
+    the same 0.3s animation: hidden over the map, present on the settled List.
+  - Browse toolbar (#160 DS3, `{components.browse-toolbar}`): the toolbar never animates on its
+    own. The switch's move between the centre and the trailing group follows the system rotation;
+    an open menu or popover dismisses on that swap without changing the tab; a list slide in
+    flight completes; placement mode and sheets are untouched (the toolbar belongs to Browse).
+    The one-frame centre-to-trailing jump on a landscape cold start is accepted (an unmeasured
+    width keeps the segmented control, so narrow phones never flash the menu, #143). Reduce
+    Motion needs no special case. Left to right: Filters (leading) | Locate Me, Streets Walked,
+    the switch, Account, Add; on the List tab the switch, Account, Add, so the switch keeps its
+    screen position on both tabs.
   - Placement: the crosshair lands with the pin's spring (0.5s, bounce 0.35, from 0.6 scale) and
     the card enters through the bottom slot (move with opacity, 0.25s ease-in-out); the tip
     appears at +0.3s. Leaving: tip dismissed, card leaves through the slot, crosshair fades 0.15s.
@@ -737,3 +765,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-01 | #147 Share Usage and Diagnostics: the Account menu becomes three sections, [Your Account… / Sign In] / [Show Intro Again] / [Share Usage and Diagnostics, Privacy Policy]; the switch is a native `Toggle` (checkmark item, system VoiceOver value, no custom accessibility value), on by default, per device, unchanged by sign-out or account deletion; flipping it closes the menu with no confirmation, toast or delay, and off means off (no final event) | `/plan-design-review` DS1 to DS7 with two outside voices; owner accepted all. "and", not "&", because the label voice rule rejects an ampersand; the policy link directly under the switch is its explanation, following the Streets Walked menu's own `Toggle` section |
 | 2026-11-02 | #150 DS1 to DS11 detail map preview, Directions and Show on Map: preview at a 300 m camera (DS1's ~400 m tuned in QA; not the main map's 0.004° span), grey grouped ground with the pin centred in every state and no spinner, header → preview → row → data points in a 12pt group, Directions prominent first with `arrow.triangle.turn.up.right.diamond`, seven `AppCopy` strings, Locate Me's flight rule with a no-op when already there, the preview kept as a tap alias of Show on Map, a VoiceOver announcement after the landing, the "Maps didn't open." footnote, default control size with 44pt targets deferred to one pass over the detail (TODOS) | `/plan-design-review` with two outside voices; owner accepted all. The 0.004° span showed the neighbourhood with side-street names dropped; the List → detail path was the one place the map was out of sight |
 | 2026-11-03 | #154 map look: muted standard tiles on both maps following the system appearance; `POIFilter` (commercial exclusions above block zoom, a wayfinding include list at block zoom and on the preview, DS8 amending D2); the `pin` asset becomes Deli Green (= `AccentColor`), so red is text only; pins glow from `pinGlow` / `catPinGlow` blurred circles behind the circle (7/20, selected 10/28), none under Increase Contrast (DS2, DS3, DS5, DS7); the glyph takes the fill's on-colour (DS1, closing D9); cluster badges green with no glow (DS4); the placement crosshair is the resting pin (DS10); the walked trail becomes cyan breadcrumbs at 8 and 5pt over a 35% track, drawn tracks-then-dots, and a solid line at 3 and 2pt (D1, D3, DS9), with a 500-run cap while breadcrumbs draw (D8); device A/B against main after merge (D4, D7); no wordmark (DS11) | `/plan-eng-review` D1 to D10 and `/plan-design-review` DS1 to DS11 with outside voices; owner accepted all. Four simulator probe rounds (`probe/map-look`): the muted ground makes the pins the subject; red read as stop; indigo vanished at night; the pattern was too busy zoomed out |
+| 2026-11-06 | #160 wide layouts: the Map tab is to hide the navigation bar's top scroll-edge effect at every width and the List tab keeps it (D1; decided, not yet met: on iOS 27.2 neither candidate modifier removes the band, iOS 26.5 draws none); at a measured browse width of 540pt or more (inside the safe areas, eng D1) the Map/List switch leaves the centre for the trailing group as a one-tap toggle naming the other tab, glyph and text, label colour (D2, D3, DS1), between Streets Walked and Account so it keeps its screen position on both tabs (DS2); below 540pt the segmented control and compact menu stay in the centre (#44, #143); no bespoke toolbar motion (DS3); item 3 (onboarding edges) closed as system sheet behaviour (D4); haze measured by a same-band main-vs-branch luminance comparison (eng D2, `scripts/band-luminance.py`); an AX5 landscape UI case (eng D3); dark landscape and Duo captures (DS4); `components.browse-toolbar` tokens (DS5); the List tab's width on wide layouts is a TODO (DS6) | Spec D1 to D4, `/plan-eng-review` D1 to D3 and `/plan-design-review` DS1 to DS6 with outside voices; owner accepted all. The haze was a white band over a map that does not scroll; an icon-only menu took two taps and named the tab you were already on |
