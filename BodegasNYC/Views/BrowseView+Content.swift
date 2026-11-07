@@ -53,6 +53,12 @@ extension BrowseView {
             .allowsHitTesting(activeTab == .map)
             .accessibilityHidden(activeTab == .list)
 
+            // Hosts the wide-layout Map/List switch (#160 DS2) after the
+            // map's own items and before Account and Add.
+            Color.clear
+                .frame(width: 0, height: 0)
+                .toolbar { trailingModeToolbar }
+
             // Hosts Account and Add after the map's own toolbar items, so
             // those sit innermost (toolbar items merge in view order).
             Color.clear
