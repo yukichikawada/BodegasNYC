@@ -79,8 +79,10 @@ final class AddCompletionCoordinator {
     /// along the bearing `heading + 180°`. The add flow lands north-up and
     /// passes 0, which is exactly today's sixth of the span south; Show on
     /// Map keeps the settled heading and passes it.
-    static func cameraCenter(for pin: Coordinate, heading: Double) -> Coordinate {
-        let offset = cameraSpan / 6
+    /// `scale` shortens the offset for a closer view (a level block-zoom
+    /// landing, `BodegaMapViewModel.landingOffsetScale`); 1 is the 74 m.
+    static func cameraCenter(for pin: Coordinate, heading: Double, scale: Double = 1) -> Coordinate {
+        let offset = cameraSpan / 6 * scale
         let radians = heading * .pi / 180
         let cosine = cos(pin.latitude * .pi / 180)
         return Coordinate(

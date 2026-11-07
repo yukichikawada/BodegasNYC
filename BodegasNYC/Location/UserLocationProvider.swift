@@ -87,9 +87,39 @@ final class UserLocationProvider {
                 LocationPermissionClient.canRequestCurrentLocation(authorizationStatus: client.authorizationStatus)
             },
             isFullAccuracy: { client.accuracyAuthorization == .fullAccuracy },
-            requestFix: { await client.requestCurrentFix() }
+            requestFix: {
+                let fix = await client.requestCurrentFix()
+                #if DEBUG
+                if let accuracy = Self.debugAccuracyOverride, let fix {
+                    return Self.location(fix, accuracy: accuracy)
+                }
+                #endif
+                return fix
+            }
         )
     }
+
+    #if DEBUG
+    /// `-UITestLocationAccuracy <metres>` (DEBUG only): every fix the app
+    /// receives reports this accuracy, so Locate Me's coarse-fix path (1500)
+    /// and invalid-fix path (-1) can be driven on the simulator, whose
+    /// `simctl location set` fixes are always precise (#156 DS9).
+    static let debugAccuracyOverrideArgument = "UITestLocationAccuracy"
+    static var debugAccuracyOverride: Double? {
+        guard UserDefaults.standard.object(forKey: debugAccuracyOverrideArgument) != nil else { return nil }
+        return UserDefaults.standard.double(forKey: debugAccuracyOverrideArgument)
+    }
+
+    private static func location(_ fix: CLLocation, accuracy: Double) -> CLLocation {
+        CLLocation(
+            coordinate: fix.coordinate,
+            altitude: fix.altitude,
+            horizontalAccuracy: accuracy,
+            verticalAccuracy: fix.verticalAccuracy,
+            timestamp: fix.timestamp
+        )
+    }
+    #endif
 
     /// What the view triggers call: starts `refresh()` unless one is already
     /// in flight, in which case it does nothing (the running one is at most

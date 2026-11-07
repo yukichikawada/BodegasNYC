@@ -459,6 +459,18 @@ struct BlockZoomCameraTests {
         #expect(Model.landingPitch(reduceMotion: reduceMotion, compact: compact, userLevelled: userLevelled) == expected)
     }
 
+    /// A level landing shortens the 74 m screen-down offset to about 30 m
+    /// (the full 74 m put the pin 7% from the top of a level 420 m view on
+    /// the simulator); a pitched one keeps it (eng D5).
+    @MainActor
+    @Test func levelLandingsUseFourTenthsOfTheOffset() {
+        #expect(Model.landingOffsetScale(pitch: 55) == 1)
+        #expect(Model.landingOffsetScale(pitch: 0) == 0.4)
+        let pin = Self.block
+        let level = AddCompletionCoordinator.cameraCenter(for: pin, heading: 0, scale: Model.landingOffsetScale(pitch: 0))
+        #expect(abs(pin.distance(to: level) - 29.6) < 0.5)
+    }
+
     @Test func clusterZoomHalvesTheDistanceAndKeepsPitchAndHeading() {
         let camera = Model.clusterZoomCamera(from: Self.camera(distance: 2000, heading: 90, pitch: 40), to: Self.block)
         #expect(camera.distance == 1000)

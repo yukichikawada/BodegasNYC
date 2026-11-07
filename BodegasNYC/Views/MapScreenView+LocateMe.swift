@@ -155,15 +155,19 @@ extension MapScreenView {
     /// lands in the upper half, clear of the bottom card.
     private func land(on coordinate: Coordinate) {
         let heading = lastSettledCamera?.heading ?? 0
+        let pitch = pinMotion.landingPitch
         let camera = BodegaMapViewModel.blockZoomCamera(
-            center: AddCompletionCoordinator.cameraCenter(for: coordinate, heading: heading),
+            center: AddCompletionCoordinator.cameraCenter(
+                for: coordinate, heading: heading, scale: BodegaMapViewModel.landingOffsetScale(pitch: pitch)
+            ),
             heading: heading,
-            pitch: pinMotion.landingPitch
+            pitch: pitch
         )
         let target = Coordinate(camera.centerCoordinate)
+        let move = lastSettledCamera.map { Coordinate($0.centerCoordinate).distance(to: target) }
         let seconds = Self.locateMeFlightSeconds(
             ratio: lastSettledCamera.map { $0.distance / camera.distance } ?? .infinity,
-            centreMoveMeters: lastSettledCamera.map { Coordinate($0.centerCoordinate).distance(to: target) } ?? .infinity
+            centreMoveMeters: move ?? .infinity
         )
         // The nearby fetch waits for the landing's settle rather than
         // fetching around the old centre first (#84 review: one card swap).
@@ -195,9 +199,27 @@ extension MapScreenView {
             heading: settled?.heading ?? 0,
             pitch: 0
         )
+        let follow = MapCameraPosition.userLocation(followsHeading: false, fallback: .camera(fallback))
+        guard let settled, settled.pitch >= BodegaMapViewModel.levelPitchMaximum else {
+            cameraPosition = follow
+            return
+        }
+        // `.userLocation` keeps the current pitch (iPhone 17 Pro simulator,
+        // 2026-11-07: from the 55° landing it framed the fix at 6.6 km, still
+        // at 55°), so the map is levelled in place first, then handed over.
         pinMotion.noteAppLevelWrite()
-        cameraPosition = .userLocation(followsHeading: false, fallback: .camera(fallback))
+        cameraPosition = .camera(MapCamera(
+            centerCoordinate: settled.centerCoordinate, distance: settled.distance, heading: settled.heading, pitch: 0
+        ))
+        Task { @MainActor in
+            try? await Task.sleep(for: Self.levelBeforeFollowDelay)
+            cameraPosition = follow
+        }
     }
+
+    /// How long the in-place level gets before `.userLocation` takes over:
+    /// one MapKit camera update, so the follow inherits pitch 0.
+    nonisolated static let levelBeforeFollowDelay: Duration = .milliseconds(150)
 
     /// The toolbar glyph, pulsing while a fix is awaited (design D1).
     var locateMeLabel: some View {

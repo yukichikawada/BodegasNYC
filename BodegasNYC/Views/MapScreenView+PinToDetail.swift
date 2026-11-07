@@ -80,10 +80,13 @@ final class PinMotionState {
     /// the flight's settle (a fallback covers a settle that never comes).
     private func moveCamera(to bodega: Bodega) {
         let heading = settledCamera?.heading ?? 0
+        let pitch = landingPitch
         let target = BodegaMapViewModel.blockZoomCamera(
-            center: AddCompletionCoordinator.cameraCenter(for: bodega.coordinate, heading: heading),
+            center: AddCompletionCoordinator.cameraCenter(
+                for: bodega.coordinate, heading: heading, scale: BodegaMapViewModel.landingOffsetScale(pitch: pitch)
+            ),
             heading: heading,
-            pitch: landingPitch
+            pitch: pitch
         )
         dropPendingAnnouncement()
         guard let seconds = Self.spotlightFlightSeconds(from: settledCamera, to: target) else {

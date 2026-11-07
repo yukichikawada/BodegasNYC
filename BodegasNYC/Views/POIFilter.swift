@@ -29,3 +29,21 @@ enum POIFilter: Equatable {
         .standard(elevation: elevation, emphasis: .muted, pointsOfInterest: categories)
     }
 }
+
+extension View {
+    /// The browse map's look: its style (`browseMapElevation`, the POI
+    /// filter for the zoom) and MapKit's controls (#156 design DS7): the
+    /// compass on MapKit's own rule, and the pitch toggle, the way back from
+    /// the tilt, only where `showsPitchToggle` says.
+    func browseMapLook(isBlockZoom: Bool, showsPitchToggle: Bool) -> some View {
+        mapStyle(
+            BodegaMapViewModel.poiFilter(isBlockZoom: isBlockZoom)
+                .mapStyle(elevation: BodegaMapViewModel.browseMapElevation)
+        )
+        .mapControls {
+            MapCompass()
+            MapPitchToggle()
+                .mapControlVisibility(showsPitchToggle ? .visible : .hidden)
+        }
+    }
+}

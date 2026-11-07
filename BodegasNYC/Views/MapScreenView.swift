@@ -269,21 +269,13 @@ struct MapScreenView: View {
         .tint(.blue)
         // Muted, following the system appearance; ours are the only
         // business names, and at block zoom only wayfinding stays (#154).
-        .mapStyle(
-            BodegaMapViewModel.poiFilter(isBlockZoom: viewModel.pinLabels.isBlockZoom)
-                .mapStyle(elevation: BodegaMapViewModel.browseMapElevation)
+        // 3D buildings when pitched, and the compass and pitch toggle (#156).
+        .browseMapLook(
+            isBlockZoom: viewModel.pinLabels.isBlockZoom,
+            showsPitchToggle: BodegaMapViewModel.showsPitchToggle(
+                settledDistance: lastSettledCamera?.distance, isPlacing: isPlacingBodega
+            )
         )
-        // The way back from the tilt (#156 design DS7): MapKit's compass and
-        // pitch toggle, the toggle only near block zoom and never while placing.
-        .mapControls {
-            MapCompass()
-            MapPitchToggle()
-                .mapControlVisibility(
-                    BodegaMapViewModel.showsPitchToggle(
-                        settledDistance: lastSettledCamera?.distance, isPlacing: isPlacingBodega
-                    ) ? .visible : .hidden
-                )
-        }
         .onMapCameraChange(frequency: .onEnd) { cameraDidSettle($0, proxy: proxy) }
         .onChange(of: selectedItemID) { _, newValue in
             guard let newValue else { return }
