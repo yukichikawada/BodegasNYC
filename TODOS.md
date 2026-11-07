@@ -137,3 +137,17 @@
 **Effort:** S
 **Priority:** P3
 **Depends on:** #160
+
+### Far-field clamp for the walked trail under pitch
+
+**What:** When a pitched settle's reported region trips the 500-run cap at block zoom, clamp the culling region's north extent to N × the level-equivalent height (N about 3) instead of hiding the layer.
+
+**Why:** #156 eng D3 keeps MapKit's region for the walked culling so the trail runs to the far field at the pitched landing; a long history could hide the whole layer ("Zoom in to see your blocks.") exactly where the user looks for it.
+
+**Pros:** the trail stays at the landing on any history. **Cons:** a new rule and constant; the far field loses trail past the clamp; N needs the seeded device check to size.
+
+**Context:** `BodegasNYC/Views/MapScreenView+WalkedBlocks.swift` (`refreshWalkedOverlay`, `WalkedRegion(lastVisibleRegion)`), `WalkedOverlay.maxVisibleRuns(for:)`; the settled frame's `heightMeters` is the level-equivalent height. Start after #156 AC 12's seeded run (5,000 blocks, pitched landing) shows whether the cap bites; attach its numbers.
+
+**Effort:** S
+**Priority:** P3
+**Depends on:** #156 merged; #156 AC 12 result
