@@ -15,15 +15,28 @@ final class PinMotionState {
     /// The map's proxy from the last placement, so later events can re-place.
     @ObservationIgnored private var proxy: MapProxy?
     @ObservationIgnored private var onPush: (Bodega) -> Void = { _ in }
-    /// Show on Map's camera flight (#150 R2, DS7): the camera centre
-    /// (`AddCompletionCoordinator.cameraCenter(for:)`) and the flight's
-    /// seconds. Bound by `BrowseView`, which owns the camera position.
-    @ObservationIgnored var flyCamera: (Coordinate, TimeInterval) -> Void = { _, _ in }
+    /// Show on Map's camera flight (#150 R2, DS7; #156): the block-zoom
+    /// camera over `AddCompletionCoordinator.cameraCenter(for:heading:)` and
+    /// the flight's seconds. Bound by `BrowseView`, which owns the camera
+    /// position.
+    @ObservationIgnored var flyCamera: (MapCamera, TimeInterval) -> Void = { _, _ in }
     /// Show on Map's VoiceOver landing (DS9).
     @ObservationIgnored var announce: (String) -> Void = { AddCompletionCoordinator.postHighPriorityAnnouncement($0) }
-    /// The map's last settled region (`cameraDidSettle`): the flight's
-    /// duration and DS7's no-op are measured from it.
-    @ObservationIgnored private(set) var settledRegion: MKCoordinateRegion?
+    /// The map's last settled camera (`cameraDidSettle`): the flight's
+    /// duration, its heading and DS7's no-op are measured from it.
+    @ObservationIgnored private(set) var settledCamera: MapCamera?
+    /// Design DS6: the user levelled a pitched map by hand (the pitch toggle
+    /// or two fingers), so both landings stay level until a settle arrives
+    /// pitched again. Session state: it lives as long as the browse screen.
+    @ObservationIgnored private(set) var userLevelled = false
+    /// An app camera write that levels a pitched map is in flight (the add
+    /// flow, Locate Me's coarse-fix fallback or a level landing): its settle
+    /// is not the user's level.
+    @ObservationIgnored private var appLevelWriteInFlight = false
+    /// The landing pitch's other inputs (design DS5, DS8), kept current by
+    /// `MapScreenView`, which reads the environment.
+    @ObservationIgnored var reduceMotion = false
+    @ObservationIgnored var isCompactHeight = false
     /// The spotlit bodega whose announcement waits for the flight's settle.
     @ObservationIgnored private var pendingAnnouncement: Bodega?
     @ObservationIgnored private var announcementFallback: Task<Void, Never>?
@@ -66,14 +79,23 @@ final class PinMotionState {
     /// nowhere and announces at once. Otherwise the announcement waits for
     /// the flight's settle (a fallback covers a settle that never comes).
     private func moveCamera(to bodega: Bodega) {
-        let center = AddCompletionCoordinator.cameraCenter(for: bodega.coordinate)
+        let heading = settledCamera?.heading ?? 0
+        let pitch = landingPitch
+        let target = BodegaMapViewModel.blockZoomCamera(
+            center: AddCompletionCoordinator.cameraCenter(
+                for: bodega.coordinate, heading: heading, scale: BodegaMapViewModel.landingOffsetScale(pitch: pitch)
+            ),
+            heading: heading,
+            pitch: pitch
+        )
         dropPendingAnnouncement()
-        guard let seconds = Self.spotlightFlightSeconds(from: settledRegion, to: center) else {
+        guard let seconds = Self.spotlightFlightSeconds(from: settledCamera, to: target) else {
             announce(AppCopy.showOnMapAnnouncement(name: bodega.name).text)
             return
         }
         pendingAnnouncement = bodega
-        flyCamera(center, seconds)
+        if target.pitch < BodegaMapViewModel.levelPitchMaximum { noteAppLevelWrite() }
+        flyCamera(target, seconds)
         announcementFallback = Task { [weak self] in
             try? await Task.sleep(for: .seconds(seconds + Self.announcementGraceSeconds))
             guard !Task.isCancelled else { return }
@@ -82,10 +104,34 @@ final class PinMotionState {
     }
 
     /// The map settled (`MapScreenView.cameraDidSettle`, on both tabs): the
-    /// next flight measures from here, and a pending landing is announced.
-    func cameraDidSettle(region: MKCoordinateRegion) {
-        settledRegion = region
+    /// next flight measures from here, the user's level is judged (DS6), and
+    /// a pending landing is announced.
+    func cameraDidSettle(camera: MapCamera) {
+        userLevelled = BodegaMapViewModel.userLevelled(
+            was: userLevelled,
+            previousPitch: settledCamera?.pitch,
+            settledPitch: camera.pitch,
+            appLevelWriteInFlight: appLevelWriteInFlight
+        )
+        appLevelWriteInFlight = false
+        settledCamera = camera
         announcePending()
+    }
+
+    /// The pitch both landings fly to now (design DS5, DS6, DS8).
+    var landingPitch: Double {
+        BodegaMapViewModel.landingPitch(
+            reduceMotion: reduceMotion, compact: isCompactHeight, userLevelled: userLevelled
+        )
+    }
+
+    /// An app camera write is about to level the map: when the settled
+    /// camera is pitched, its settle must not count as the user's level
+    /// (DS6). A level map needs no flag (no settle could set it), so a write
+    /// that never settles cannot leave one behind.
+    func noteAppLevelWrite() {
+        guard let pitch = settledCamera?.pitch, pitch > BodegaMapViewModel.pitchedPitchMinimum else { return }
+        appLevelWriteInFlight = true
     }
 
     private func announcePending() {
@@ -104,29 +150,29 @@ final class PinMotionState {
     /// How long past the flight a missing settle is waited for.
     nonisolated static let announcementGraceSeconds: TimeInterval = 0.5
 
-    /// DS7: `nil` (no flight) when `settled` is already centred within
-    /// `settleTolerance` of `center` at the street span, else Locate Me's
-    /// rule: 0.9 s when it zooms in more than three levels or moves more
-    /// than 2 km, 0.6 s otherwise. The span compared is the smaller of the
-    /// two, the one MapKit fits the requested square span to. With no settle
-    /// yet, the long flight.
-    static func spotlightFlightSeconds(
-        from settled: MKCoordinateRegion?,
-        to center: Coordinate
-    ) -> TimeInterval? {
+    /// How close the settled centre must be to the target for Show on Map to
+    /// count as already there (#156 eng D6): about a sixth of the landing's
+    /// 173 m level-equivalent height, and still over MapKit's settle rounding.
+    nonisolated static let spotlightCentreToleranceMeters: Double = 30
+    /// The no-op's distance (relative) and pitch tolerances: MapKit may
+    /// settle a pitched camera a little off the requested values.
+    nonisolated static let spotlightDistanceTolerance: Double = 0.10
+    nonisolated static let spotlightPitchToleranceDegrees: Double = 5
+
+    /// DS7 on cameras (#156): `nil` (no flight) when `settled` is already on
+    /// `target`: centre within 30 m, distance within 10% and pitch within
+    /// 5°. Else Locate Me's rule: 0.9 s when it zooms in more than three
+    /// levels or moves more than 2 km, 0.6 s otherwise. With no settle yet,
+    /// the long flight.
+    nonisolated static func spotlightFlightSeconds(from settled: MapCamera?, to target: MapCamera) -> TimeInterval? {
         guard let settled else { return MapScreenView.locateMeLongFlightSeconds }
-        let target = AddCompletionCoordinator.cameraSpan
-        let tolerance = AddCompletionCoordinator.settleTolerance
-        let span = min(settled.span.latitudeDelta, settled.span.longitudeDelta)
-        if abs(settled.center.latitude - center.latitude) <= tolerance,
-           abs(settled.center.longitude - center.longitude) <= tolerance,
-           abs(span - target) <= tolerance {
+        let move = Coordinate(settled.centerCoordinate).distance(to: Coordinate(target.centerCoordinate))
+        if move <= spotlightCentreToleranceMeters,
+           abs(settled.distance - target.distance) <= target.distance * spotlightDistanceTolerance,
+           abs(settled.pitch - target.pitch) <= spotlightPitchToleranceDegrees {
             return nil
         }
-        return MapScreenView.locateMeFlightSeconds(
-            ratio: span / target,
-            centreMoveMeters: Coordinate(settled.center).distance(to: center)
-        )
+        return MapScreenView.locateMeFlightSeconds(ratio: settled.distance / target.distance, centreMoveMeters: move)
     }
 
     /// A tap MapKit reported (its selection tag): feeds `pinTapped` or

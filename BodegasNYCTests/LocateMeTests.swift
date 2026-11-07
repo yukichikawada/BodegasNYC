@@ -17,6 +17,8 @@
 //
 
 import Foundation
+import MapKit
+import SwiftUI
 import Testing
 
 @testable import BodegasNYC
@@ -148,6 +150,34 @@ struct LocateMeTests {
     @Test func shortFlightsTakeSixTenths() {
         #expect(MapScreenView.locateMeFlightSeconds(ratio: 8, centreMoveMeters: 2000) == 0.6)
         #expect(MapScreenView.locateMeFlightSeconds(ratio: 1, centreMoveMeters: 0) == 0.6)
+    }
+
+    // MARK: landsOnSettledCamera (#84 R4, #156)
+
+    /// protects: a re-tap on the landed camera (same centre, distance and
+    /// pitch) has no settle to wait for, so the nearby fetch runs at once.
+    /// fails_when: the shortcut misses an identical camera (the fetch would
+    /// wait for a settle that never comes). no_claim: the region it fetches
+    /// with (C1, code reading) or MapKit's settle rounding.
+    @Test func theSettledCameraItselfLandsAtOnce() {
+        let target = BodegaMapViewModel.blockZoomCamera(center: Self.block, heading: 30, pitch: 55)
+        #expect(BodegaMapViewModel.landsOnSettledCamera(settled: target, target: target))
+        // Identity (eng D4): a level landing on a level settle.
+        let level = BodegaMapViewModel.blockZoomCamera(center: Self.block, heading: 0, pitch: 0)
+        #expect(BodegaMapViewModel.landsOnSettledCamera(settled: level, target: level))
+    }
+
+    /// protects: a hand-levelled or slightly tilted map is not the landing,
+    /// so Locate Me flies (re-pitches) and waits for its settle.
+    /// fails_when: pitch is ignored (a 1° difference counts as landed), or
+    /// no settle yet counts as landed. no_claim: none beyond protects.
+    @Test func aPitchDifferenceOrNoSettleIsNotLanded() {
+        let target = BodegaMapViewModel.blockZoomCamera(center: Self.block, heading: 0, pitch: 55)
+        let tilted = BodegaMapViewModel.blockZoomCamera(center: Self.block, heading: 0, pitch: 54)
+        let level = BodegaMapViewModel.blockZoomCamera(center: Self.block, heading: 0, pitch: 0)
+        #expect(!BodegaMapViewModel.landsOnSettledCamera(settled: tilted, target: target))
+        #expect(!BodegaMapViewModel.landsOnSettledCamera(settled: level, target: target))
+        #expect(!BodegaMapViewModel.landsOnSettledCamera(settled: nil, target: target))
     }
 
     // MARK: ignoresLocateMe (design D6)

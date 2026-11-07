@@ -72,19 +72,11 @@ private struct SpotlightWiring: ViewModifier {
         content
             .onAppear {
                 let camera = camera
-                // Locate Me's easing; the pan stays under Reduce Motion
-                // (DESIGN.md Motion), like the add flow's.
-                pinMotion.flyCamera = { center, seconds in
+                // Locate Me's easing and camera (#156); the pan stays under
+                // Reduce Motion, which lands level (DESIGN.md Motion).
+                pinMotion.flyCamera = { target, seconds in
                     withAnimation(.easeInOut(duration: seconds)) {
-                        camera.wrappedValue = .region(
-                            MKCoordinateRegion(
-                                center: center.clLocationCoordinate,
-                                span: MKCoordinateSpan(
-                                    latitudeDelta: AddCompletionCoordinator.cameraSpan,
-                                    longitudeDelta: AddCompletionCoordinator.cameraSpan
-                                )
-                            )
-                        )
+                        camera.wrappedValue = .camera(target)
                     }
                 }
             }

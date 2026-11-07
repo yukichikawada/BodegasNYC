@@ -194,11 +194,14 @@ final class BodegasNYCUITests: XCTestCase {
     }
 
     /// protects: a detail opened from the List shows the map preview and a Directions button, and Show on Map
-    /// lands on the Map tab with the detail gone and the bodega's pin on screen to tap (#150 AC 1, AC 3, R5).
+    /// lands on the Map tab with the detail gone and the bodega's pin on screen to tap (#150 AC 1, AC 3, R5);
+    /// the landing is pitched, MapKit's pitch toggle levels it, and the pin still opens its detail (#156 AC 8).
     /// fails_when: the preview or Directions is missing, Show on Map leaves the detail up or the List tab
-    /// showing, or the pin is not hittable afterwards (clustered away, under the page, never drawn).
-    /// no_claim: Apple Maps opening (never launched here), the camera's centre and flight, the pin's selected
-    /// look, the announcement, the pin-opened path's pop-then-fly (unit tests and live QA).
+    /// showing, the pin is not hittable afterwards (clustered away, under the page, never drawn), the pitch
+    /// toggle is missing after the landing or does not switch to 3D, or the levelled pin no longer opens.
+    /// no_claim: Apple Maps opening (never launched here), the camera's centre, pitch and flight (unit tests and
+    /// the PR's simulator log), the pin's selected look, the announcement, the pin-opened path's pop-then-fly;
+    /// portrait only (a landscape landing is level by design DS8, so the toggle offers 3D there).
     @MainActor
     func testShowOnMapFromAListOpenedDetail() throws {
         let app = launchWithFixtures()
@@ -229,6 +232,21 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(pin.waitForExistence(timeout: 10), "the fixture pin is not on the map after Show on Map")
         let hittable = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pin)
         wait(for: [hittable], timeout: 5)
+
+        // #156: the landing is pitched, so MapKit's pitch toggle offers 2D (design DS7); tapping it levels the
+        // map, the toggle then offers 3D, and the spotlit pin is still there to tap through to its detail.
+        // The identifiers are MapKit's own (`ModeButton2D` / `ModeButton3D`, labels "2D mode" / "3D mode").
+        let toTwoD = app.buttons["ModeButton2D"]
+        XCTAssertTrue(toTwoD.waitForExistence(timeout: 5), "no pitch toggle offering 2D after the pitched landing")
+        toTwoD.tap()
+        XCTAssertTrue(app.buttons["ModeButton3D"].waitForExistence(timeout: 5), "the pitch toggle did not level the map")
+        let levelHittable = expectation(for: NSPredicate(format: "isHittable == true"), evaluatedWith: pin)
+        wait(for: [levelHittable], timeout: 5)
+        pin.tap()
+        XCTAssertTrue(
+            app.navigationBars[Self.fixtureBodegaName].waitForExistence(timeout: 10),
+            "the spotlit pin did not open its detail after levelling"
+        )
     }
 
     /// protects: tapping a thumbnail opens the viewer on that photo, swipes page in gallery order with the

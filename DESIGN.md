@@ -118,6 +118,13 @@ components:
       toggle: "trailing, 540pt and up: destination glyph + text, one tap"
     switchColor: label           # the glass default; no tint
     scrollEdgeEffect: "List tab only; the map's top edge is clear at every width"   # met on iOS 26; the iOS 27.2 nav-bar band is #166
+  map-controls:                  # #156 DS7; MapKit's own glass controls, nothing joins the toolbar
+    controls: "MapCompass + MapPitchToggle (.mapControls)"
+    placement: "MapKit's top-trailing corner inside the map, under the glass toolbar"
+    compassVisibility: automatic # shows only when the heading is not north
+    pitchToggleVisibility: "visible at a settled camera distance of 840 m (2 x blockZoomCameraDistance) or less and not while placing; else hidden"
+    voiceOverOrder: "toolbar, map controls, map content"
+    label: "MapKit's own: \"2D mode\" while pitched, \"3D mode\" while level (ids ModeButton2D / ModeButton3D); the one string on the map outside AppCopy"
 ---
 
 # BodegasNYC
@@ -222,9 +229,12 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   the way out. Visible height is the app's measure, not the screen's: the ground distance from
   the top-centre to the bottom-centre of the Map's laid-out frame (`visibleHeightMeters`). On the
   iPhone 17 Pro simulator (iOS 26.5, #113 QA) that measured about 0.75 of the full screen's
-  height; the ratio varies with device and safe areas. There, Locate Me's 850 m camera distance
+  height; the ratio varies with device and safe areas. There, an 850 m level camera
   measures about 350 m while about 480 m of street is on a full screen, so the bands are roughly
-  530 m / 2.6 km / 10.5 km of full-screen height on that device. Past 1,000 visible runs (2,000 in the spec, lowered after the R3 device check) the layer hides and the bottom card says "Zoom in to see
+  530 m / 2.6 km / 10.5 km of full-screen height on that device. Pitched, the bands read the level
+  equivalent (#156 spec D3, as for the pin labels), so a tilt at block zoom keeps the 8pt
+  breadcrumbs; the culling keeps MapKit's own region, so every run in view draws up to the far
+  field and the run caps below stay the one valve (#156 eng D3; a far-field clamp is TODOS). Past 1,000 visible runs (2,000 in the spec, lowered after the R3 device check) the layer hides and the bottom card says "Zoom in to see
   your blocks."; it never draws a subset. Changes land at camera rest and swap in place, with no
   fade: MapKit does not animate `MapPolyline` changes (#113 dropped D10's 0.2s fade), so Reduce
   Motion needs nothing special. Nothing is written mid-gesture, and a settle that changes nothing
@@ -355,9 +365,20 @@ circle (#67). Block zoom is a visible map height (top-centre to bottom-centre of
 400 m or less; labels stay until it passes 440 m, so a settle near the line never blinks them.
 That height is the app's `visibleHeightMeters`, the Map's laid-out frame, not the full screen.
 On the iPhone 17 Pro simulator (iOS 26.5, #113 QA) it measured about 0.75 of the full screen's
-height (the ratio varies with device and safe areas): Locate Me's 850 m camera measures about
+height (the ratio varies with device and safe areas): an 850 m level camera measures about
 350 m with about 480 m of street on a full screen, so 400 / 440 m are roughly 530 / 590 m of
-full-screen height on that device.
+full-screen height on that device. Pitched, the height is the level equivalent (#156 spec D3):
+the camera distance times the height-to-distance ratio the last level settle measured at this
+map height (0.412 on that simulator), so a hand tilt or the pitched landing keeps block zoom and
+its labels; no threshold moved. A pitched settle with no ratio for this map height (a rotation
+while pitched) uses the raw measure, which up the street is past 440 m or off the ground, so the
+labels drop until the pitch toggle levels the map or the next level settle calibrates. The label
+pan guarantee below holds for uniform screen translations; a pan while pitched is not one, so it
+may swap which neighbour is named. Pins over buildings (#156 DS1): at the pitched landing the
+destination pin, its capsule and the next street name read first in light, dark and Increase
+Contrast over low-rise and tall blocks, label text at 4.5:1 or better against the composited
+building faces; if not, the ladder is an opaque `systemBackground` capsule, then 45° instead of
+55°, then `.flat`; never a stronger glow.
 Placement: held and dropping labels first, always kept; then north to south, then by id; a label
 that would touch another label (4pt clearance) or another pin's, cluster's or the location
 dot's drawn circle is hidden, never moved. The location dot counts as drawn, a 24pt square for
@@ -396,9 +417,21 @@ hidden from VoiceOver; the card's title is the instruction.
 **Cluster badge:** same family as the pin, `pin` green fill, the count in the pin glyph's colour,
 same stroke and shadow, no glow (#154 DS4). Never labelled.
 
-**Map tiles** (#67 design D1, #154): `.standard(elevation: .flat, emphasis: .muted)` on both maps,
+**Map tiles** (#67 design D1, #154, #156): `.standard(emphasis: .muted)` on both maps,
 following the system appearance (no view forces a colour scheme on a `Map`; the muted map at night
-is the night look). Above block zoom Apple's commercial points of interest are excluded
+is the night look). Elevation (`POIFilter.mapStyle(elevation:)`): `.realistic` on the browse map
+(`BodegaMapViewModel.browseMapElevation`), whose 3D buildings MapKit draws only when the camera is
+pitched, so every level view looks as it did flat; `.flat` on the detail preview (#150 R1's
+memory gate). The fallback for the device A/B (#156 AC 12) or a trail the buildings hide (AC 13)
+is one constant: `browseMapElevation = .flat`, pitch kept. Measured on the simulator (iOS 26,
+2026-11-07), MapKit extrudes buildings at a pitched camera under `.flat` too (a hand tilt on
+main showed them), so `.flat` changes the tiles' rendering detail, not whether buildings stand
+in front of the trail. At a pitched camera the **near field**
+is the level-equivalent box around the camera (the settled frame's data region, below): pins
+there are clustered on the block grid and are the only label candidates (#156 DS2). The **far
+field** is the rest of what MapKit shows up the street: its pins keep their size and glow, never
+labelled, no second clustering pass (DS3). In `.nearby` a pitched settle fetches out to MapKit's
+own north edge, clamped 200 m to 1 km (DS4), so the streets in view have their bodegas. Above block zoom Apple's commercial points of interest are excluded
 (`POIFilter.commercialHidden`), so the map's only business names are ours: store, food market, restaurant, cafe,
 bakery, brewery, winery, nightlife, pharmacy, laundry, ATM, bank, gas station, EV charger, car
 rental, hotel, fitness center, movie theater, theater, marina, spa, beauty, automotive repair,
@@ -411,6 +444,17 @@ schools, universities, hospitals, libraries, museums, landmarks, airports, stadi
 parks, beaches, zoos, aquariums, amusement parks, fire stations, police, post offices, restrooms.
 Pin labels are placed clear of the location dot itself (24pt) at each settle; the dot may drift
 under a label between settles, and its accuracy halo may sit under a label.
+
+**Map controls** (#156 DS7, `{components.map-controls}`): MapKit's compass and pitch toggle,
+declared with `.mapControls` and drawn by MapKit in its top-trailing corner inside the map, under
+the glass toolbar; nothing joins the toolbar (#160). The compass keeps MapKit's rule (only when
+the heading is not north). The pitch toggle is the way back from the tilt and the explicit 3D
+action: shown at a settled camera distance of 840 m or less (twice the landing's) and never while
+placing (a pitch there would slide the crosshair's ground point), hidden otherwise, so a wide view
+is never pitched by it. VoiceOver reads the toolbar, then the map controls, then the map's
+content; the toggle's label is MapKit's, the one string on the map outside `AppCopy`. Rotating to
+landscape while pitched may drop the labels (the level ratio is per map height); the toggle or
+the next level landing brings them back (DS8).
 
 **Onboarding page** (`OnboardingView`, DD1 + D5): opaque `systemBackground`; 44pt symbol in
 `.catPin` (`cat`, `line.3.horizontal.decrease.circle`, `mappin.and.ellipse`); title in the
@@ -449,9 +493,11 @@ DS5), then Show on Map `.bordered` with `map`, default control size (DS11). Dire
 Maps walking to the pin's coordinate, named for the bodega, signed in or not and with location
 denied; if Maps does not open, "Maps didn't open." in `.footnote` `.primary` under the row,
 announced, cleared on the next tap (DS10). Show on Map pops the detail (from a list-opened
-detail the Map tab is chosen under it first, and the pop follows one main-actor turn later) and flies to the pin at street zoom on Locate Me's
-duration rule, `easeInOut`, the pan kept under Reduce Motion, no flight when the camera is
-already there (DS7); from a pin-opened detail the zoom pop runs first and the camera flies after
+detail the Map tab is chosen under it first, and the pop follows one main-actor turn later) and flies to the pin on Locate Me's
+block-zoom camera and duration rule (#156: 420 m, pitched 55° unless Reduce Motion, compact
+height or the user's level, see Motion), `easeInOut`, the pan kept under Reduce Motion, no
+flight when the camera is already there (DS7, judged on centre, distance and pitch since #156);
+the preview stays level and flat, so it no longer resembles the pitched landing (accepted, #156); from a pin-opened detail the zoom pop runs first and the camera flies after
 the release. The pin stays in the selected look, its own pin and labelled first until the next
 pin or cluster tap, the List tab, placement or an add; VoiceOver hears "<Name>. On the map." once
 the camera settles (DS9).
@@ -653,28 +699,56 @@ on the card and in the popover it is `.primary` (#95 D11).
   advance 0.3s, onboarding exit 0.35s); `easeOut` 0.15 to 0.2s for small state flips.
 - **Duration:** micro 0.15s, short 0.25s, medium 0.3 to 0.4s, long 0.5 to 0.6s (camera pans);
   camera flights over three zoom levels 0.9s.
-- **Locate Me (#84):** a precise fix (100 m or better) flies the camera to block zoom,
-  `locateMeCameraDistance` 850 m, about 350 m of visible height (measured
-  350.2 m on the iPhone 17 Pro simulator; the app's measure, which there was about 0.75 of the
-  screen, so about 480 m of street is on a full screen, #113), heading kept, pitch levelled, `easeInOut`
+- **Locate Me (#84, #156):** a precise fix (100 m or better) flies the camera to the block-zoom
+  camera (`BodegaMapViewModel.blockZoomCamera`): `blockZoomCameraDistance` 420 m, heading kept,
+  pitched 55°, centred about 74 m screen-down of the fix like Show on Map's so the dot lands in
+  the upper half (26% from the map's top on the iPhone 17 Pro simulator; a level landing uses
+  0.4 of the offset, about 30 m, and lands at 33%, `landingOffsetScale`); the pitch rides the
+  same flight. Level equivalent about 173 m of visible height
+  (420 × the level ratio 0.412 measured on the iPhone 17 Pro simulator), block zoom with margin.
+  Heading kept means the first landing faces north, not the walking direction: a choice, not a
+  gap. The landing is level (420 m, pitch 0) under Reduce Motion (the pan stays, the tilt does
+  not; the pitch toggle is the explicit 3D action, #156 DS5), in the compact vertical size class
+  (landscape phones, DS8), and while the user's own level holds (DS6, below). `easeInOut`
   0.9s when the flight zooms in more than three levels (a ratio of 8) or moves more than 2 km,
-  0.6s otherwise. A precise fix kept from the last 60s lands at once; otherwise the toolbar
+  0.6s otherwise. A re-tap on the landed camera (centre and distance within 1 m, pitch within
+  0.5°) fetches at once with the settle's data region; a hand-levelled map is not landed, so
+  the tap re-pitches it unless the user's level holds. A precise fix kept from the last 60s lands at once; otherwise the toolbar
   symbol pulses while the fix is awaited (no spinner). The landing is one-shot: the camera does not follow the user afterwards and a
   second tap re-centres (probe P1: handing over to `.userLocation` at the landing's settle made
   MapKit re-zoom to its own follow distance, 2,425 m of visible height, so the handover was
-  dropped and the toolbar symbol has no follow state). Without a precise fix, Locate
-  Me lands where MapKit lands it, at its zoom, with the accuracy halo; no hint. A fix older than
+  dropped and the toolbar symbol has no follow state). Without a precise fix (coarse or no
+  location), Locate Me lands where MapKit lands it, `.userLocation` at its zoom with the accuracy
+  halo, level (#156 DS9: `.userLocation` keeps the current pitch, so a pitched map is levelled in
+  place first and handed over 0.15s later), with a level 420 m camera over the settled centre as
+  MapKit's fallback; no hint (#84 D1). A fix older than
   10 minutes never lands block zoom. A result that comes back after a pan (the centre moved over
   20 m; rotation and layout settles do not count), a newer tap, the List tab, a pushed detail or a
   change of placement is dropped, and the pulse stops. Ignored during the first add's drop and
   card. The `.nearby` radius keeps its 200 m floor, so an empty block shows noneOnBlock; the
   nearby fetch waits for the landing's settle, so the bottom card changes once.
+- **Show on Map (#150, #156):** the same block-zoom camera as Locate Me (420 m, heading kept,
+  55° or level by the same rule), centred `AddCompletionCoordinator.cameraCenter(for:heading:)`:
+  about 74 m along the bearing heading + 180° (about 30 m on a level landing), screen-down at any
+  rotation, so the pin sits in the upper half clear of the bottom card (26% pitched at headings 0
+  and 90, 33% level, on the iPhone 17 Pro simulator). No flight when the settled camera is already there:
+  centre within `spotlightCentreToleranceMeters` (30 m), distance within 10%, pitch within 5°
+  (#156 eng D6); otherwise Locate Me's duration rule.
+- **The user's level (#156 DS6):** levelling a pitched map by hand (the pitch toggle or two
+  fingers) holds for the session: both landings then fly level until a settle arrives pitched
+  again (the toggle or a hand tilt). App writes that level the map (the add flow's region write,
+  the no-fix fallback, a level landing) never count as the user's. A fresh launch lands pitched.
+- **Cluster zoom (#156):** a cluster tap halves the settled camera distance, never under 420 m
+  and never farther than before (closer than 420 m it recentres), keeping pitch and heading; it
+  never levels a tilt. Unanimated, as before.
+- **The add flow** stays a level, north-up region write (#156 spec D2): from a pitched camera
+  the map levels during the 0.6s pan, accepted.
 - **The one authored moment:** the first add. Sheet closes, camera settles, pin drops with a
   spring and a success haptic; at +0.6s the first-add card rises; if the bodega has a cat, the
   cat enters from +24pt with a spring and bounces once; the card auto-dismisses after 8s (never
   under VoiceOver). `AddCompletionCoordinator` owns the clock.
 - **Reduce Motion:** pin fades in at rest (0.2s), cat appears in place, no breathe, onboarding
-  exit opacity only, camera pan stays. Bottom slot fades in place (map card and placement card,
+  exit opacity only, camera pan stays, the landings' tilt does not (they land level, #156 DS5). Bottom slot fades in place (map card and placement card,
   0.25s), held pin keeps its stroke and label without the scale, crosshair fades in (0.2s), list
   fades (0.25s; also under Prefer Cross-Fade Transitions), a list order change is instant (#81).
 - **Transitions (#23):** the map stays mounted through map, list and detail; it is never rebuilt
@@ -767,3 +841,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-02 | #150 DS1 to DS11 detail map preview, Directions and Show on Map: preview at a 300 m camera (DS1's ~400 m tuned in QA; not the main map's 0.004° span), grey grouped ground with the pin centred in every state and no spinner, header → preview → row → data points in a 12pt group, Directions prominent first with `arrow.triangle.turn.up.right.diamond`, seven `AppCopy` strings, Locate Me's flight rule with a no-op when already there, the preview kept as a tap alias of Show on Map, a VoiceOver announcement after the landing, the "Maps didn't open." footnote, default control size with 44pt targets deferred to one pass over the detail (TODOS) | `/plan-design-review` with two outside voices; owner accepted all. The 0.004° span showed the neighbourhood with side-street names dropped; the List → detail path was the one place the map was out of sight |
 | 2026-11-03 | #154 map look: muted standard tiles on both maps following the system appearance; `POIFilter` (commercial exclusions above block zoom, a wayfinding include list at block zoom and on the preview, DS8 amending D2); the `pin` asset becomes Deli Green (= `AccentColor`), so red is text only; pins glow from `pinGlow` / `catPinGlow` blurred circles behind the circle (7/20, selected 10/28), none under Increase Contrast (DS2, DS3, DS5, DS7); the glyph takes the fill's on-colour (DS1, closing D9); cluster badges green with no glow (DS4); the placement crosshair is the resting pin (DS10); the walked trail becomes cyan breadcrumbs at 8 and 5pt over a 35% track, drawn tracks-then-dots, and a solid line at 3 and 2pt (D1, D3, DS9), with a 500-run cap while breadcrumbs draw (D8); device A/B against main after merge (D4, D7); no wordmark (DS11) | `/plan-eng-review` D1 to D10 and `/plan-design-review` DS1 to DS11 with outside voices; owner accepted all. Four simulator probe rounds (`probe/map-look`): the muted ground makes the pins the subject; red read as stop; indigo vanished at night; the pattern was too busy zoomed out |
 | 2026-11-06 | #160 wide layouts: the map's top edge is clear and the List tab keeps the scroll-edge fade (D1): iOS 26, the shipping OS, draws no band over the map, and the 3 to 5% band the iOS 27.2 navigation bar draws, which neither `toolbarBackgroundVisibility` nor `scrollEdgeEffectHidden` reaches, is tracked in #166 with the iOS 27 map-style check; at a measured browse width of 540pt or more (inside the safe areas, eng D1) the Map/List switch leaves the centre for the trailing group as a one-tap toggle naming the other tab, glyph and text, label colour (D2, D3, DS1), between Streets Walked and Account so it keeps its screen position on both tabs (DS2); below 540pt the segmented control and compact menu stay in the centre (#44, #143); no bespoke toolbar motion (DS3); item 3 (onboarding edges) closed as system sheet behaviour (D4); haze measured by a same-band main-vs-branch luminance comparison (eng D2, `scripts/band-luminance.py`); an AX5 landscape UI case (eng D3); dark landscape and Duo captures (DS4); `components.browse-toolbar` tokens (DS5); the List tab's width on wide layouts is a TODO (DS6) | Spec D1 to D4, `/plan-eng-review` D1 to D3 and `/plan-design-review` DS1 to DS6 with outside voices; owner accepted all. The haze was a white band over a map that does not scroll; an icon-only menu took two taps and named the tab you were already on |
+| 2026-11-07 | #156 phase two, the tilt: Locate Me and Show on Map land on one block-zoom camera, 420 m, heading kept, pitched 55° with the pitch on the same flight (spec D2, D5); `.realistic` elevation on the browse map, `.flat` on the preview, `.flat` the one-constant fallback (spec D4, AC 12, AC 13); block zoom, the trail bands, the clustering grid and the label candidates read a pitch-blind settled frame (level-equivalent height = distance × the level ratio per map height; the near-field data region), the walked culling keeps MapKit's region (spec D3, eng D2, D3, Shape B, DS2); Show on Map's centre is 74 m screen-down at any heading and its no-op is 30 m / 10% / 5° (eng D5, D6); a cluster tap keeps pitch and heading and never zooms out (`minimumZoomSpan` retired); the pitched `.nearby` radius is MapKit's north edge clamped 200 m to 1 km (DS4); landings level under Reduce Motion, in compact height and while the user's own level holds for the session (DS5, DS6, DS8); the coarse-fix fallback is level (DS9); MapKit's compass and pitch toggle, the toggle only at 840 m or closer and not while placing (DS7); Liquid Glass pins not adopted (spec D1) | Spec D1 to D5, `/plan-eng-review` D1 to D7 and `/plan-design-review` DS1 to DS10 with outside voices; owner accepted all. The probe's tilt frame was the one look decision left from #154; every wide view stays level |

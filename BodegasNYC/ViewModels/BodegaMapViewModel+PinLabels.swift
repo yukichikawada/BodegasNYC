@@ -88,17 +88,11 @@ nonisolated extension BodegaMapViewModel {
     /// Block zoom is entered at a visible map height of 400 m or less and
     /// left above 440 m (design D2: hysteresis, so a settle near the line
     /// never blinks every label). The height is
-    /// `MapScreenView.visibleHeightMeters`, not the full screen (#113).
+    /// `MapScreenView.visibleHeightMeters`, not the full screen (#113), or
+    /// its level equivalent when pitched (#156,
+    /// `BodegaMapViewModel+BlockZoomCamera.swift`).
     static let blockZoomEnterMeters: Double = 400
     static let blockZoomExitMeters: Double = 440
-
-    /// The `MapCamera.distance` Locate Me lands at (#84 spec D3): about
-    /// 350 m of visible height, inside the 400 m entry with margin for the
-    /// 440 m exit. Calibrated on the iPhone 17 Pro simulator (iOS 26.5,
-    /// pitch 0): the first settle after Locate Me measured 350.2 m by
-    /// `visibleHeightMeters` (700 m measured 288.4 m; the height is 0.412
-    /// times the distance at this screen size).
-    static let locateMeCameraDistance: Double = 850
 
     /// The label sits this far above the circle's top edge (DD3's 4pt).
     static let labelGap: CGFloat = 4

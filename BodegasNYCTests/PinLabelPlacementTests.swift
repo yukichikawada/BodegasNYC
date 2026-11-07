@@ -23,6 +23,7 @@
 import CoreGraphics
 import Foundation
 import MapKit
+import SwiftUI
 import Testing
 
 @testable import BodegasNYC
@@ -405,5 +406,224 @@ struct PinLabelPlacementTests {
             best = min(best, elapsed)
         }
         #expect(best < .milliseconds(50))
+    }
+}
+
+// MARK: - The block-zoom camera and the pitch-blind measure (#156)
+
+/// Card for this suite: protects=both landings and the cluster zoom produce
+/// the agreed camera, and block zoom, the trail bands, the clustering grid
+/// and the nearby radius are blind to pitch while a level camera keeps
+/// today's values (eng D4 identity rows); fails_when=distance, pitch, heading
+/// or the 420 m floor drifts, a cluster tap zooms out, a pitched settle
+/// changes the height or the region spans, or a level settle stops
+/// returning MapKit's values; no_claim=MapKit's real pitched region, its
+/// pitch clamp or the felt landing (AC 2 to 7 on the simulator).
+@Suite
+struct BlockZoomCameraTests {
+    typealias Model = BodegaMapViewModel
+    static let block = Coordinate(latitude: 40.7291, longitude: -73.9965)
+    static let portrait = CGSize(width: 402, height: 650)
+
+    static func camera(distance: Double, heading: Double = 0, pitch: Double) -> MapCamera {
+        MapCamera(centerCoordinate: block.clLocationCoordinate, distance: distance, heading: heading, pitch: pitch)
+    }
+
+    static func region(latitudeSpan: Double, longitudeSpan: Double) -> MKCoordinateRegion {
+        MKCoordinateRegion(
+            center: block.clLocationCoordinate,
+            span: MKCoordinateSpan(latitudeDelta: latitudeSpan, longitudeDelta: longitudeSpan)
+        )
+    }
+
+    // MARK: Camera builders (spec D2, D5; design DS5, DS6, DS8)
+
+    @Test func blockZoomCameraIsFourTwentyMetresWithTheHeadingKept() {
+        let camera = Model.blockZoomCamera(center: Self.block, heading: 132, pitch: Model.blockZoomPitch)
+        #expect(camera.distance == 420)
+        #expect(camera.pitch == 55)
+        #expect(camera.heading == 132)
+        #expect(Coordinate(camera.centerCoordinate) == Self.block)
+    }
+
+    @Test(arguments: [
+        (false, false, false, 55.0),
+        (true, false, false, 0.0),
+        (false, true, false, 0.0),
+        (false, false, true, 0.0),
+        (true, true, true, 0.0)
+    ])
+    func landingPitchIsLevelUnderReduceMotionCompactHeightOrTheUsersLevel(
+        reduceMotion: Bool, compact: Bool, userLevelled: Bool, expected: Double
+    ) {
+        #expect(Model.landingPitch(reduceMotion: reduceMotion, compact: compact, userLevelled: userLevelled) == expected)
+    }
+
+    /// A level landing shortens the 74 m screen-down offset to about 30 m
+    /// (the full 74 m put the pin 7% from the top of a level 420 m view on
+    /// the simulator); a pitched one keeps it (eng D5).
+    @MainActor
+    @Test func levelLandingsUseFourTenthsOfTheOffset() {
+        #expect(Model.landingOffsetScale(pitch: 55) == 1)
+        #expect(Model.landingOffsetScale(pitch: 0) == 0.4)
+        let pin = Self.block
+        let level = AddCompletionCoordinator.cameraCenter(for: pin, heading: 0, scale: Model.landingOffsetScale(pitch: 0))
+        #expect(abs(pin.distance(to: level) - 29.6) < 0.5)
+    }
+
+    @Test func clusterZoomHalvesTheDistanceAndKeepsPitchAndHeading() {
+        let camera = Model.clusterZoomCamera(from: Self.camera(distance: 2000, heading: 90, pitch: 40), to: Self.block)
+        #expect(camera.distance == 1000)
+        #expect(camera.pitch == 40)
+        #expect(camera.heading == 90)
+    }
+
+    @Test func clusterZoomStopsAtFourTwentyAndNeverZoomsOut() {
+        #expect(Model.clusterZoomCamera(from: Self.camera(distance: 600, pitch: 55), to: Self.block).distance == 420)
+        // Already closer than 420 m: recentres at the same distance (the old
+        // 0.002 span floor zoomed out here).
+        #expect(Model.clusterZoomCamera(from: Self.camera(distance: 300, pitch: 55), to: Self.block).distance == 300)
+    }
+
+    /// Identity (eng D4): at a level, north-up camera a tap still halves.
+    @Test func clusterZoomAtALevelCameraStillHalvesLevel() {
+        let camera = Model.clusterZoomCamera(from: Self.camera(distance: 5000, pitch: 0), to: Self.block)
+        #expect(camera.distance == 2500)
+        #expect(camera.pitch == 0)
+        #expect(camera.heading == 0)
+    }
+
+    @Test func pitchToggleShowsAtOrUnderEightFortyMetresAndNeverWhilePlacing() {
+        #expect(Model.showsPitchToggle(settledDistance: 420, isPlacing: false))
+        #expect(Model.showsPitchToggle(settledDistance: 840, isPlacing: false))
+        #expect(!Model.showsPitchToggle(settledDistance: 841, isPlacing: false))
+        #expect(!Model.showsPitchToggle(settledDistance: 420, isPlacing: true))
+        #expect(!Model.showsPitchToggle(settledDistance: nil, isPlacing: false))
+    }
+
+    // MARK: The measure (spec D3)
+
+    @Test func levelHeightRatioIsMeasuredOverDistanceAtALevelCamera() {
+        #expect(Model.levelHeightRatio(measuredMeters: 350.2, distance: 850, pitch: 0) == 350.2 / 850)
+        #expect(Model.levelHeightRatio(measuredMeters: 173, distance: 420, pitch: 0.4) == 173.0 / 420)
+    }
+
+    @Test func levelHeightRatioIsNilPitchedOrWithoutAMeasure() {
+        #expect(Model.levelHeightRatio(measuredMeters: 900, distance: 420, pitch: 55) == nil)
+        #expect(Model.levelHeightRatio(measuredMeters: 0, distance: 420, pitch: 0) == nil)
+        #expect(Model.levelHeightRatio(measuredMeters: nil, distance: 420, pitch: 0) == nil)
+    }
+
+    /// Identity (eng D4): level, the measured height, the ratio ignored.
+    @Test func levelEquivalentHeightAtALevelCameraIsTheMeasure() {
+        let ratio = LevelHeightRatio(mapHeight: 650, ratio: 0.412)
+        let height = Model.levelEquivalentHeight(
+            measuredMeters: 350.2, distance: 850, pitch: 0, ratio: ratio, mapHeight: 650
+        )
+        #expect(height == 350.2)
+        #expect(Model.levelEquivalentHeight(measuredMeters: nil, distance: 850, pitch: 0, ratio: ratio, mapHeight: 650) == nil)
+    }
+
+    @Test func levelEquivalentHeightPitchedIsDistanceTimesTheRatioForThisMapHeight() {
+        let ratio = LevelHeightRatio(mapHeight: 650, ratio: 0.412)
+        let height = Model.levelEquivalentHeight(
+            measuredMeters: 1900, distance: 420, pitch: 55, ratio: ratio, mapHeight: 650
+        )
+        #expect(abs((height ?? 0) - 173.04) < 0.001)
+    }
+
+    @Test func levelEquivalentHeightPitchedWithoutARatioForThisHeightIsTheMeasure() {
+        let landscape = LevelHeightRatio(mapHeight: 300, ratio: 0.3)
+        #expect(Model.levelEquivalentHeight(
+            measuredMeters: 1900, distance: 420, pitch: 55, ratio: landscape, mapHeight: 650
+        ) == 1900)
+        #expect(Model.levelEquivalentHeight(
+            measuredMeters: nil, distance: 420, pitch: 55, ratio: nil, mapHeight: 650
+        ) == nil)
+    }
+
+    // MARK: The data region (eng D2) and the frame (Shape B)
+
+    /// Identity (eng D4): level, MapKit's region unchanged.
+    @Test func levelEquivalentRegionAtALevelCameraIsMapKitsRegion() {
+        let region = Self.region(latitudeSpan: 0.0031, longitudeSpan: 0.0026)
+        let result = Model.levelEquivalentRegion(
+            camera: Self.camera(distance: 420, pitch: 0), region: region, heightMeters: 173, mapSize: Self.portrait
+        )
+        #expect(result.span.latitudeDelta == 0.0031)
+        #expect(result.span.longitudeDelta == 0.0026)
+    }
+
+    @Test func levelEquivalentRegionPitchedTakesItsSpansFromTheHeightAndAspect() {
+        let reported = Self.region(latitudeSpan: 0.02, longitudeSpan: 0.012)
+        let result = Model.levelEquivalentRegion(
+            camera: Self.camera(distance: 420, pitch: 55), region: reported, heightMeters: 173, mapSize: Self.portrait
+        )
+        let latitudeDelta = 173 / Model.metersPerDegreeLatitude
+        #expect(abs(result.span.latitudeDelta - latitudeDelta) < 1e-12)
+        let longitudeDelta = latitudeDelta * (402.0 / 650.0) / cos(Self.block.latitude * .pi / 180)
+        #expect(abs(result.span.longitudeDelta - longitudeDelta) < 1e-12)
+        #expect(Coordinate(result.center) == Self.block)
+    }
+
+    @Test func settledFrameComposesTheHeightTheDataRegionAndThePitchedRadius() {
+        let ratio = LevelHeightRatio(mapHeight: 650, ratio: 0.412)
+        // MapKit's pitched region: about 1.1 km to the north edge.
+        let reported = Self.region(latitudeSpan: 0.02, longitudeSpan: 0.012)
+        let pitched = Model.settledFrame(
+            camera: Self.camera(distance: 420, pitch: 55), region: reported,
+            measuredHeight: 2400, mapSize: Self.portrait, ratio: ratio
+        )
+        #expect(abs((pitched.heightMeters ?? 0) - 173.04) < 0.001)
+        #expect(pitched.dataRegion.span.latitudeDelta < 0.002)
+        #expect(pitched.nearbyRadiusMeters == 1000)
+        // A shallow pitched region: the 200 m floor.
+        let shallow = Model.settledFrame(
+            camera: Self.camera(distance: 420, pitch: 55),
+            region: Self.region(latitudeSpan: 0.001, longitudeSpan: 0.001),
+            measuredHeight: 300, mapSize: Self.portrait, ratio: ratio
+        )
+        #expect(shallow.nearbyRadiusMeters == 200)
+        // Level (identity): MapKit's region, the measured height, no radius.
+        let level = Model.settledFrame(
+            camera: Self.camera(distance: 420, pitch: 0), region: reported,
+            measuredHeight: 173, mapSize: Self.portrait, ratio: ratio
+        )
+        #expect(level.heightMeters == 173)
+        #expect(level.dataRegion.span.latitudeDelta == 0.02)
+        #expect(level.nearbyRadiusMeters == nil)
+    }
+
+    /// Design DS2: label candidates come from the data region, so at a
+    /// pitched settle a pin up the street (inside MapKit's region) is not a
+    /// candidate; level, the data region is MapKit's and nothing changes.
+    @Test func labelCandidatesFromThePitchedDataRegionLeaveTheFarField() throws {
+        let near = try makeTestBodega(name: "Near", latitude: Self.block.latitude + 0.0005, longitude: Self.block.longitude)
+        let far = try makeTestBodega(name: "Far", latitude: Self.block.latitude + 0.008, longitude: Self.block.longitude)
+        let items: [MapDisplayItem] = [.pin(near), .pin(far)]
+        let reported = Self.region(latitudeSpan: 0.02, longitudeSpan: 0.012)
+        let ratio = LevelHeightRatio(mapHeight: 650, ratio: 0.412)
+        let pitched = Model.settledFrame(
+            camera: Self.camera(distance: 420, pitch: 55), region: reported,
+            measuredHeight: 2400, mapSize: Self.portrait, ratio: ratio
+        )
+        #expect(Model.labelCandidates(items, near: pitched.dataRegion).map(\.id) == [MapDisplayItem.pin(near).id])
+        let level = Model.settledFrame(
+            camera: Self.camera(distance: 420, pitch: 0), region: reported,
+            measuredHeight: 173, mapSize: Self.portrait, ratio: ratio
+        )
+        #expect(Model.labelCandidates(items, near: level.dataRegion).count == 2)
+    }
+
+    // MARK: The user's level (design DS6)
+
+    @Test func userLevelledIsSetByAHandLevelAndClearedByAPitchedSettle() {
+        #expect(Model.userLevelled(was: false, previousPitch: 55, settledPitch: 0, appLevelWriteInFlight: false))
+        #expect(!Model.userLevelled(was: false, previousPitch: 55, settledPitch: 0, appLevelWriteInFlight: true))
+        #expect(!Model.userLevelled(was: true, previousPitch: 0, settledPitch: 40, appLevelWriteInFlight: false))
+        #expect(Model.userLevelled(was: true, previousPitch: 0, settledPitch: 0, appLevelWriteInFlight: false))
+        // A shallow tilt (under 5°) neither sets nor clears it.
+        #expect(!Model.userLevelled(was: false, previousPitch: 3, settledPitch: 0, appLevelWriteInFlight: false))
+        #expect(Model.userLevelled(was: true, previousPitch: 0, settledPitch: 3, appLevelWriteInFlight: false))
     }
 }

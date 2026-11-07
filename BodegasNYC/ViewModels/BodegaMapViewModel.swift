@@ -103,6 +103,8 @@ final class BodegaMapViewModel {
     private let telemetry: Telemetry
     private var loadedBodegas: [Bodega] = []
     private var lastRegion: MKCoordinateRegion?
+    /// The pitched settle's `.nearby` radius (design DS4), `nil` when level.
+    private var lastNearbyRadiusMeters: Double?
     private var fetchTask: Task<Void, Never>?
     /// Monotonic counter guarding against a stale fetch's result overwriting
     /// a newer one that happens to finish first — `Task.cancel()` alone
@@ -145,8 +147,14 @@ final class BodegaMapViewModel {
     /// Reclusters against whatever data is already loaded regardless of
     /// mode, and — only in `.nearby` mode — kicks off a fresh
     /// region-radius-scaled refetch.
-    func regionDidSettle(_ region: MKCoordinateRegion) {
+    ///
+    /// `region` is the settle's data region (#156 eng D2: the level
+    /// equivalent when the camera is pitched); `nearbyRadiusMeters`, given at
+    /// a pitched settle, replaces the region's radius for the `.nearby`
+    /// fetch (design DS4).
+    func regionDidSettle(_ region: MKCoordinateRegion, nearbyRadiusMeters: Double? = nil) {
         lastRegion = region
+        lastNearbyRadiusMeters = nearbyRadiusMeters
         recluster(region: region)
         guard browseMode == .nearby else { return }
         refetch(mode: .nearby, region: region)
@@ -154,11 +162,16 @@ final class BodegaMapViewModel {
 
     /// Driven by an explicit user action (locate-me tap), never by
     /// incidental panning — see `MapScreenView`.
-    func browseModeDidChange(_ mode: BrowseMode, currentRegion: MKCoordinateRegion?) {
+    func browseModeDidChange(
+        _ mode: BrowseMode,
+        currentRegion: MKCoordinateRegion?,
+        nearbyRadiusMeters: Double? = nil
+    ) {
         guard mode != browseMode else { return }
         browseMode = mode
         if let currentRegion {
             lastRegion = currentRegion
+            lastNearbyRadiusMeters = nearbyRadiusMeters
         }
         refetch(mode: mode, region: lastRegion)
     }
@@ -183,6 +196,7 @@ final class BodegaMapViewModel {
         // This fetch starts after every change buffered so far, so its
         // result already reflects them.
         pendingLocalChanges = PendingBodegaChanges()
+        let nearbyRadius = lastNearbyRadiusMeters
 
         fetchTask = Task { [bodegaService] in
             do {
@@ -191,7 +205,7 @@ final class BodegaMapViewModel {
                     bodegas = try await bodegaService.fetchNearby(
                         latitude: region.center.latitude,
                         longitude: region.center.longitude,
-                        radiusMeters: Self.radiusMeters(for: region)
+                        radiusMeters: nearbyRadius ?? Self.radiusMeters(for: region)
                     )
                 } else {
                     bodegas = try await bodegaService.fetchAll()
@@ -337,13 +351,7 @@ final class BodegaMapViewModel {
     /// fixed constant, so "nearby" widens/narrows with zoom; clamped so
     /// extreme zoom levels don't request an absurdly small or large radius.
     private static func radiusMeters(for region: MKCoordinateRegion) -> Double {
-        let center = CLLocation(latitude: region.center.latitude, longitude: region.center.longitude)
-        let northEdge = CLLocation(
-            latitude: region.center.latitude + region.span.latitudeDelta / 2,
-            longitude: region.center.longitude
-        )
-        let distance = center.distance(from: northEdge)
-        return min(max(distance, nearbyRadiusRange.lowerBound), nearbyRadiusRange.upperBound)
+        min(max(northEdgeMeters(of: region), nearbyRadiusRange.lowerBound), nearbyRadiusRange.upperBound)
     }
 
     /// `items` with the given bodega ids moved to the end, in their

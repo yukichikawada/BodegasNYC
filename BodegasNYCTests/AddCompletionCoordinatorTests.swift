@@ -163,7 +163,7 @@ final class AddCompletionCoordinatorTests {
 
         coordinator.bodegaWasSubmitted(deli)
 
-        let target = AddCompletionCoordinator.cameraCenter(for: deli.coordinate)
+        let target = AddCompletionCoordinator.cameraCenter(for: deli.coordinate, heading: 0)
         #expect(target.latitude < deli.coordinate.latitude)
         #expect(abs(deli.coordinate.latitude - target.latitude - AddCompletionCoordinator.cameraSpan / 6) < 1e-12)
         #expect(events == [
@@ -188,7 +188,7 @@ final class AddCompletionCoordinatorTests {
         #expect(coordinator.dropState == .pending(deli.id))
         #expect(coordinator.hapticTrigger == 0)
 
-        coordinator.cameraDidSettle(center: AddCompletionCoordinator.cameraCenter(for: deli.coordinate))
+        coordinator.cameraDidSettle(center: AddCompletionCoordinator.cameraCenter(for: deli.coordinate, heading: 0))
         #expect(coordinator.dropState == .dropping(deli.id))
         #expect(coordinator.pinPhase(for: deli.id) == .dropping)
         #expect(coordinator.hapticTrigger == 1)
@@ -275,7 +275,7 @@ final class AddCompletionCoordinatorTests {
         // MapKit rounds the settled center, and the top chrome makes the
         // visible area's centre differ from the full view's, so a settle a
         // fraction of the span off the camera's (offset) target still counts.
-        let target = AddCompletionCoordinator.cameraCenter(for: deli.coordinate)
+        let target = AddCompletionCoordinator.cameraCenter(for: deli.coordinate, heading: 0)
         coordinator.cameraDidSettle(
             center: Coordinate(latitude: target.latitude - 0.0008, longitude: target.longitude)
         )

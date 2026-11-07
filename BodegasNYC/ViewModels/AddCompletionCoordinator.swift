@@ -74,8 +74,21 @@ final class AddCompletionCoordinator {
     /// card floats over the map without insetting it (#58), and at large
     /// text sizes it covers much of the lower half, so a centred pin could
     /// land under it.
-    static func cameraCenter(for pin: Coordinate) -> Coordinate {
-        Coordinate(latitude: pin.latitude - cameraSpan / 6, longitude: pin.longitude)
+    ///
+    /// The offset is screen-down at any rotation (#156 eng D5): about 74 m
+    /// along the bearing `heading + 180°`. The add flow lands north-up and
+    /// passes 0, which is exactly today's sixth of the span south; Show on
+    /// Map keeps the settled heading and passes it.
+    /// `scale` shortens the offset for a closer view (a level block-zoom
+    /// landing, `BodegaMapViewModel.landingOffsetScale`); 1 is the 74 m.
+    static func cameraCenter(for pin: Coordinate, heading: Double, scale: Double = 1) -> Coordinate {
+        let offset = cameraSpan / 6 * scale
+        let radians = heading * .pi / 180
+        let cosine = cos(pin.latitude * .pi / 180)
+        return Coordinate(
+            latitude: pin.latitude - offset * cos(radians),
+            longitude: pin.longitude - offset * sin(radians) / cosine
+        )
     }
 
     private(set) var dropState: DropState = .none
@@ -157,7 +170,7 @@ final class AddCompletionCoordinator {
         current = bodega
         currentIsFirstAdd = isFirstAdd
         dropState = .pending(bodega.id)
-        moveCamera(Self.cameraCenter(for: bodega.coordinate))
+        moveCamera(Self.cameraCenter(for: bodega.coordinate, heading: 0))
 
         let clock = clock
         let telemetry = telemetry
@@ -180,7 +193,7 @@ final class AddCompletionCoordinator {
     func cameraDidSettle(center: Coordinate? = nil) {
         guard case .pending(let id) = dropState, let bodega = current, bodega.id == id else { return }
         if let center {
-            let target = Self.cameraCenter(for: bodega.coordinate)
+            let target = Self.cameraCenter(for: bodega.coordinate, heading: 0)
             let latOff = abs(center.latitude - target.latitude)
             let lonOff = abs(center.longitude - target.longitude)
             guard latOff <= Self.settleTolerance, lonOff <= Self.settleTolerance else { return }

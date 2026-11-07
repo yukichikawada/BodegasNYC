@@ -20,7 +20,6 @@ struct MapScreenView: View {
         center: CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060),
         span: MKCoordinateSpan(latitudeDelta: 0.2, longitudeDelta: 0.2)
     )
-    private static let minimumZoomSpan = 0.002
     /// Extra bottom padding that keeps the card 8pt above the map's
     /// attribution row (Apple Maps logo + Legal, ~16pt measured, fixed at
     /// every text size) rather than on top of it (#58).
@@ -34,13 +33,17 @@ struct MapScreenView: View {
     @State var selectedItemID: MapDisplayItem.ID?
     @State var lastVisibleRegion: MKCoordinateRegion?
     @State var showingClearConfirmation = false
-    /// A settle held back under the List tab, and the last one delivered:
-    /// the held one is replayed on return only if the camera really moved.
-    @State var pendingSettledRegion: MKCoordinateRegion?
+    /// A settle held back under the List tab, and the last data region
+    /// delivered: the held one is replayed on return only if it changed.
+    @State var pendingSettledFrame: SettledFrame?
     @State var deliveredRegion: MKCoordinateRegion?
     /// Pin labels (#67, see `MapScreenView+PinLabels.swift`).
     @State var isCameraMoving = false
     @State var lastSettledCamera: MapCamera?
+    /// The pitch-blind measure (#156): the level ratio the last level settle
+    /// measured at this map height, and the last settle's frame.
+    @State var levelHeightRatio: LevelHeightRatio?
+    @State var lastSettledFrame: SettledFrame?
     @State var mapSize: CGSize = .zero
     /// Placement card height (slot chrome included) and the crosshair's
     /// global centre, the space `MapProxy.convert` reads (#23 T3).
@@ -50,6 +53,9 @@ struct MapScreenView: View {
     /// pulse, and the settles that moved the camera's centre.
     @State var locateRequest: LocateRequest?
     @State var isLocating = false
+    /// The coarse-fix fallback's deferred `.userLocation` handover (#156 DS9),
+    /// cancelled with the request so it never lands over a newer gesture.
+    @State var followHandover: Task<Void, Never>?
     @State var cameraTakeoverCount = 0
     @State var mapResizedAt: Date?
     /// Walked blocks (#108, `MapScreenView+WalkedBlocks.swift`): what the
@@ -66,6 +72,7 @@ struct MapScreenView: View {
     @State var streetsSceneToken = StreetsWalkedViewModel.SceneToken.make()
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.accessibilityReduceMotion) var reduceMotion
+    @Environment(\.verticalSizeClass) var verticalSizeClass // compact height lands level (#156 DS8)
     @Environment(\.dynamicTypeSize) var dynamicTypeSize
     @Environment(\.colorSchemeContrast) var colorSchemeContrast // trail track (#154 DS7)
     @Environment(PinMotionState.self) var pinMotion // held pin (#23 T1)
@@ -265,7 +272,13 @@ struct MapScreenView: View {
         .tint(.blue)
         // Muted, following the system appearance; ours are the only
         // business names, and at block zoom only wayfinding stays (#154).
-        .mapStyle(BodegaMapViewModel.poiFilter(isBlockZoom: viewModel.pinLabels.isBlockZoom).mapStyle)
+        // 3D buildings when pitched, and the compass and pitch toggle (#156).
+        .browseMapLook(
+            isBlockZoom: viewModel.pinLabels.isBlockZoom,
+            showsPitchToggle: BodegaMapViewModel.showsPitchToggle(
+                settledDistance: lastSettledCamera?.distance, isPlacing: isPlacingBodega
+            )
+        )
         .onMapCameraChange(frequency: .onEnd) { cameraDidSettle($0, proxy: proxy) }
         .onChange(of: selectedItemID) { _, newValue in
             guard let newValue else { return }
@@ -295,16 +308,20 @@ struct MapScreenView: View {
     }
 
     /// Standard map UX for a cluster tap: zoom in rather than navigate,
-    /// since a cluster has no single `Bodega` to show detail for. Halves
-    /// the current span each tap, clamped to a minimum so repeated taps on
-    /// a cluster that never fully separates don't zoom to nothing.
+    /// since a cluster has no single `Bodega` to show detail for. Halves the
+    /// settled distance, keeping pitch and heading, never under the landing's
+    /// 420 m and never zooming out (`clusterZoomCamera`, #156). Before the
+    /// first settle, half the launch region.
     private func zoom(into cluster: MapDisplayItem.Cluster) {
-        let baseSpan = lastVisibleRegion?.span ?? Self.newYorkCityDefault.span
-        let span = MKCoordinateSpan(
-            latitudeDelta: max(baseSpan.latitudeDelta / 2, Self.minimumZoomSpan),
-            longitudeDelta: max(baseSpan.longitudeDelta / 2, Self.minimumZoomSpan)
-        )
-        cameraPosition = .region(MKCoordinateRegion(center: cluster.coordinate.clLocationCoordinate, span: span))
+        guard let settled = lastSettledCamera else {
+            let span = Self.newYorkCityDefault.span
+            cameraPosition = .region(MKCoordinateRegion(
+                center: cluster.coordinate.clLocationCoordinate,
+                span: MKCoordinateSpan(latitudeDelta: span.latitudeDelta / 2, longitudeDelta: span.longitudeDelta / 2)
+            ))
+            return
+        }
+        cameraPosition = .camera(BodegaMapViewModel.clusterZoomCamera(from: settled, to: cluster.coordinate))
     }
 }
 

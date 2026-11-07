@@ -210,7 +210,12 @@ struct BrowseView: View {
                     // not a spinner (#23).
                     listViewModel.loadInitialIfNeeded()
                 }
-                .addCompletion(addCompletion, camera: $cameraPosition, hasLeftMap: !path.isEmpty || activeTab == .list)
+                .addCompletion(
+                    addCompletion,
+                    camera: $cameraPosition,
+                    motion: pinMotion,
+                    hasLeftMap: !path.isEmpty || activeTab == .list
+                )
                 .onChange(of: isPlacingBodega) { _, isPlacing in
                     syncTipParameters()
                     if !isPlacing { addRoute.placementEnded() }
