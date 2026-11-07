@@ -117,6 +117,8 @@ extension MapScreenView {
     func cancelLocateRequest() {
         locateRequest = nil
         isLocating = false
+        followHandover?.cancel()
+        followHandover = nil
     }
 
     /// The live-state cancels, read where they change rather than captured
@@ -211,8 +213,10 @@ extension MapScreenView {
         cameraPosition = .camera(MapCamera(
             centerCoordinate: settled.centerCoordinate, distance: settled.distance, heading: settled.heading, pitch: 0
         ))
-        Task { @MainActor in
+        followHandover?.cancel()
+        followHandover = Task { @MainActor in
             try? await Task.sleep(for: Self.levelBeforeFollowDelay)
+            guard !Task.isCancelled else { return }
             cameraPosition = follow
         }
     }

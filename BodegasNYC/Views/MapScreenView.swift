@@ -53,6 +53,9 @@ struct MapScreenView: View {
     /// pulse, and the settles that moved the camera's centre.
     @State var locateRequest: LocateRequest?
     @State var isLocating = false
+    /// The coarse-fix fallback's deferred `.userLocation` handover (#156 DS9),
+    /// cancelled with the request so it never lands over a newer gesture.
+    @State var followHandover: Task<Void, Never>?
     @State var cameraTakeoverCount = 0
     @State var mapResizedAt: Date?
     /// Walked blocks (#108, `MapScreenView+WalkedBlocks.swift`): what the
