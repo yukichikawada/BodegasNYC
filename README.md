@@ -7,7 +7,7 @@ never tells you: is there a cat, is there hot food, do they sell beer, lotto,
 cigarettes, is there an ATM, and are the hours actually right.
 
 Privacy policy: <https://yukichikawada.github.io/BodegasNYC/privacy/>
-App Store: coming soon.
+App Store: <https://apps.apple.com/us/app/my-bodegas/id6830464647> (released 2026-11-06)
 
 ## What it does
 
