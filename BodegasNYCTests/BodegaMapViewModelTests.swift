@@ -155,6 +155,47 @@ struct BodegaMapViewModelTests {
         #expect(json["radius_meters"] as? Double == 5000)
     }
 
+    /// protects: design DS4: a pitched settle's `.nearby` fetch uses the
+    /// radius the settled frame gives (MapKit's north edge, 200 m to 1 km)
+    /// around the level-equivalent region's centre, and the next level
+    /// settle goes back to the region's own radius.
+    /// fails_when: the pitched radius is ignored (the near-field box's 200 m
+    /// floor would leave the streets in view empty), or it sticks after the
+    /// camera levels.
+    /// no_claim: the size of MapKit's real pitched region (simulator check).
+    @Test func aPitchedSettleFetchesWithTheFramesRadiusAndALevelOneWithTheRegions() async throws {
+        MockURLProtocol.reset()
+        let capturedRequest = Captured<URLRequest?>(nil)
+        // One stub per request: the queue consumes them in order.
+        for _ in 0..<3 {
+            MockURLProtocol.stub(body: Data("[\(Self.bodegaJSON(name: "El Sol"))]".utf8)) { request in
+                capturedRequest.set(request)
+            }
+        }
+        let viewModel = makeViewModel()
+        let tinyRegion = MKCoordinateRegion(
+            center: Self.sampleRegion.center,
+            span: MKCoordinateSpan(latitudeDelta: 0.0000001, longitudeDelta: 0.0000001)
+        )
+        func sentRadius() throws -> Double? {
+            let body = try #require(capturedRequest.get()?.httpBody)
+            let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+            return json["radius_meters"] as? Double
+        }
+
+        viewModel.browseModeDidChange(.nearby, currentRegion: tinyRegion, nearbyRadiusMeters: 750)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(try sentRadius() == 750)
+
+        viewModel.regionDidSettle(tinyRegion, nearbyRadiusMeters: 1000)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(try sentRadius() == 1000)
+
+        viewModel.regionDidSettle(tinyRegion)
+        await viewModel.waitForPendingFetchForTesting()
+        #expect(try sentRadius() == 200)
+    }
+
     @Test func aFailedRequestDrivesLoadStateToFailed() async throws {
         MockURLProtocol.reset()
         MockURLProtocol.stub(statusCode: 500, body: Data("{\"message\":\"boom\"}".utf8))

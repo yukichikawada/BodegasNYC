@@ -24,10 +24,10 @@ nonisolated struct LocateRequest: Equatable, Sendable {
 }
 
 /// Locate Me lands at block zoom (#84 item 1). A precise fix flies the camera
-/// to `BodegaMapViewModel.locateMeCameraDistance` over it, once: the camera
-/// does not follow the user afterwards, and a later tap re-centres. Without a
-/// precise fix the camera goes where MapKit puts it (`.userLocation`, its
-/// zoom, the accuracy halo).
+/// to `BodegaMapViewModel.blockZoomCamera` over it (#156: 420 m, pitched
+/// 55°), once: the camera does not follow the user afterwards, and a later
+/// tap re-centres. Without a precise fix the camera goes level where MapKit
+/// puts it (`.userLocation`, its zoom, the accuracy halo).
 ///
 /// One-shot, not a handover to following (probe P1, 2026-10-21, iPhone 17
 /// Pro simulator): setting `.userLocation(followsHeading: false, fallback:
@@ -93,8 +93,7 @@ extension MapScreenView {
         if let fix {
             land(on: fix)
         } else {
-            viewModel.browseModeDidChange(.nearby, currentRegion: nil)
-            cameraPosition = .userLocation(followsHeading: false, fallback: .region(Self.newYorkCityDefault))
+            landWithoutPreciseFix()
         }
     }
 
@@ -129,6 +128,12 @@ extension MapScreenView {
                 if hasLeft { cancelLocateRequest() }
             }
             .onChange(of: isPlacingBodega) { cancelLocateRequest() }
+            // The landing pitch's environment inputs (#156 design DS5, DS8),
+            // read by both landings through `PinMotionState.landingPitch`.
+            .onChange(of: reduceMotion, initial: true) { _, isOn in pinMotion.reduceMotion = isOn }
+            .onChange(of: verticalSizeClass, initial: true) { _, sizeClass in
+                pinMotion.isCompactHeight = sizeClass == .compact
+            }
     }
 
     /// Called at every settle, before `lastSettledCamera` moves on.
@@ -143,30 +148,55 @@ extension MapScreenView {
         cameraTakeoverCount += 1
     }
 
-    /// Flies to block zoom over `coordinate`, keeping the heading and
-    /// levelling the pitch (so the landing height is the calibrated one).
+    /// Flies to the block-zoom camera over `coordinate` (#156): 420 m, the
+    /// heading kept, pitched 55° unless Reduce Motion, compact height or the
+    /// user's own level asks for level (`PinMotionState.landingPitch`). The
+    /// centre sits screen-down of the fix like Show on Map's, so the dot
+    /// lands in the upper half, clear of the bottom card.
     private func land(on coordinate: Coordinate) {
-        let distance = BodegaMapViewModel.locateMeCameraDistance
         let heading = lastSettledCamera?.heading ?? 0
-        let move = lastSettledCamera.map { Coordinate($0.centerCoordinate).distance(to: coordinate) }
-        let seconds = Self.locateMeFlightSeconds(
-            ratio: lastSettledCamera.map { $0.distance / distance } ?? .infinity,
-            centreMoveMeters: move ?? .infinity
+        let camera = BodegaMapViewModel.blockZoomCamera(
+            center: AddCompletionCoordinator.cameraCenter(for: coordinate, heading: heading),
+            heading: heading,
+            pitch: pinMotion.landingPitch
         )
-        let camera = MapCamera(
-            centerCoordinate: coordinate.clLocationCoordinate, distance: distance, heading: heading, pitch: 0
+        let target = Coordinate(camera.centerCoordinate)
+        let seconds = Self.locateMeFlightSeconds(
+            ratio: lastSettledCamera.map { $0.distance / camera.distance } ?? .infinity,
+            centreMoveMeters: lastSettledCamera.map { Coordinate($0.centerCoordinate).distance(to: target) } ?? .infinity
         )
         // The nearby fetch waits for the landing's settle rather than
         // fetching around the old centre first (#84 review: one card swap).
-        // A landing on the settled camera itself has no settle to wait for.
-        let isSettledCamera = (move ?? .infinity) < 1
-            && abs((lastSettledCamera?.distance ?? 0) - distance) < 1
-        if isSettledCamera {
-            viewModel.browseModeDidChange(.nearby, currentRegion: lastVisibleRegion)
+        // A landing on the settled camera itself has no settle to wait for,
+        // and fetches with the settle's data region (#156 C1).
+        if BodegaMapViewModel.landsOnSettledCamera(settled: lastSettledCamera, target: camera) {
+            viewModel.browseModeDidChange(
+                .nearby,
+                currentRegion: lastSettledFrame?.dataRegion ?? lastVisibleRegion,
+                nearbyRadiusMeters: lastSettledFrame?.nearbyRadiusMeters
+            )
         } else {
             viewModel.enterNearbyAtNextSettle()
         }
+        if camera.pitch < BodegaMapViewModel.levelPitchMaximum { pinMotion.noteAppLevelWrite() }
         withAnimation(.easeInOut(duration: seconds)) { cameraPosition = .camera(camera) }
+    }
+
+    /// Without a precise fix (design DS9): MapKit's own `.userLocation`
+    /// framing with its halo, no hint (#84 D1), level: any pitch is dropped
+    /// first, and the fallback is a level 420 m camera over the settled
+    /// centre.
+    private func landWithoutPreciseFix() {
+        viewModel.browseModeDidChange(.nearby, currentRegion: nil)
+        let settled = lastSettledCamera
+        let fallback = MapCamera(
+            centerCoordinate: settled?.centerCoordinate ?? Self.newYorkCityDefault.center,
+            distance: BodegaMapViewModel.blockZoomCameraDistance,
+            heading: settled?.heading ?? 0,
+            pitch: 0
+        )
+        pinMotion.noteAppLevelWrite()
+        cameraPosition = .userLocation(followsHeading: false, fallback: .camera(fallback))
     }
 
     /// The toolbar glyph, pulsing while a fix is awaited (design D1).

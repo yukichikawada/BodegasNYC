@@ -36,6 +36,7 @@
 import CoreGraphics
 import MapKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import BodegasNYC
@@ -279,28 +280,34 @@ struct BrowseMotionTests {
         #expect(log.flights.isEmpty)
         await waitUntil { !log.flights.isEmpty }
 
-        let center = AddCompletionCoordinator.cameraCenter(for: edited.coordinate)
-        #expect(log.flights.map(\.0) == [center])
+        // The block-zoom camera (#156): screen-down of the pin, 420 m,
+        // pitched 55°, north-up with no settle yet.
+        let center = AddCompletionCoordinator.cameraCenter(for: edited.coordinate, heading: 0)
+        let flown = try #require(log.flights.first?.0)
+        #expect(log.flights.count == 1)
+        #expect(Coordinate(flown.centerCoordinate) == center)
+        #expect(flown.distance == BodegaMapViewModel.blockZoomCameraDistance)
+        #expect(flown.pitch == BodegaMapViewModel.blockZoomPitch)
+        #expect(flown.heading == 0)
         // No settle reported yet: the long flight.
         #expect(log.flights.map(\.1) == [MapScreenView.locateMeLongFlightSeconds])
         #expect(log.announcements.isEmpty)
-        motion.cameraDidSettle(region: Self.streetRegion(at: center))
+        motion.cameraDidSettle(camera: flown)
         #expect(log.announcements == ["Renamed Deli. On the map."])
     }
 
-    /// protects: DS7's no-op: a camera already settled on the target at
-    /// street span does not fly, and the landing is announced at once.
+    /// protects: DS7's no-op: a camera already settled on the target block
+    /// zoom camera does not fly, and the landing is announced at once.
     /// fails_when: a pointless flight runs, or the announcement waits for a
     /// settle that will never come.
-    /// no_claim: MapKit's own settle rounding (the tolerance is the add
-    /// flow's `settleTolerance`).
+    /// no_claim: MapKit's own settle rounding (the tolerances, eng D6, are
+    /// the rule rows below).
     @Test func showOnMapOnTheSettledCameraAnnouncesWithoutFlying() {
         let motion = PinMotionState()
         let log = FlightLog()
         motion.flyCamera = { log.flights.append(($0, $1)) }
         motion.announce = { log.announcements.append($0) }
-        let center = AddCompletionCoordinator.cameraCenter(for: pin.coordinate)
-        motion.cameraDidSettle(region: Self.streetRegion(at: center))
+        motion.cameraDidSettle(camera: Self.landing(on: pin))
 
         motion.send(.showOnMap(pin))
 
@@ -308,27 +315,133 @@ struct BrowseMotionTests {
         #expect(log.announcements == ["Held Deli. On the map."])
     }
 
-    /// protects: the flight follows Locate Me's rule (design DS7): 0.6 s
-    /// for a short hop, 0.9 s when zooming in more than three levels or
-    /// moving over 2 km, none when already there.
-    /// fails_when: a long flight is rushed, a short one dawdles, or a
-    /// settled camera at the target flies again.
-    /// no_claim: how the flight looks.
+    /// protects: the flight follows Locate Me's rule (design DS7), on
+    /// cameras since #156: 0.6 s for a short hop, 0.9 s when zooming in more
+    /// than three levels or moving over 2 km, none when already there
+    /// (centre within 30 m, distance within 10%, pitch within 5°, eng D6).
+    /// fails_when: a long flight is rushed, a short one dawdles, a settled
+    /// camera at the target flies again, a camera 40 m off or levelled by
+    /// hand counts as already there.
+    /// no_claim: how the flight looks, or where the pin lands on screen
+    /// (AC 6, simulator).
     @Test func spotlightFlightFollowsTheLocateMeRule() {
-        let center = AddCompletionCoordinator.cameraCenter(for: pin.coordinate)
+        let target = Self.landing(on: pin)
+        let center = Coordinate(target.centerCoordinate)
         let rule = PinMotionState.spotlightFlightSeconds
-        #expect(rule(nil, center) == 0.9)
-        #expect(rule(Self.streetRegion(at: center), center) == nil)
-        // Portrait fit: the latitude span is the larger one.
-        #expect(rule(Self.region(at: center, latitudeSpan: 0.007, longitudeSpan: 0.004), center) == nil)
+        #expect(rule(nil, target) == 0.9)
+        #expect(rule(target, target) == nil)
+        // MapKit's settle rounding (replaces the region rows' portrait fit):
+        // 5 m off, 3% farther, the pitch clamped 2.5° lower.
+        #expect(rule(Self.camera(at: Self.north(of: center, meters: 5), distance: 432.6, pitch: 52.5), target) == nil)
         // A block away at a slightly wider zoom: short.
         let nearby = Coordinate(latitude: center.latitude + 0.002, longitude: center.longitude)
-        #expect(rule(Self.region(at: nearby, latitudeSpan: 0.01, longitudeSpan: 0.01), center) == 0.6)
+        #expect(rule(Self.camera(at: nearby, distance: 1050, pitch: 0), target) == 0.6)
         // Zooming in from a borough-wide view (ratio over 8): long.
-        #expect(rule(Self.region(at: nearby, latitudeSpan: 0.05, longitudeSpan: 0.05), center) == 0.9)
+        #expect(rule(Self.camera(at: nearby, distance: 5250, pitch: 0), target) == 0.9)
         // Same zoom, 3 km away: long.
         let far = Coordinate(latitude: center.latitude + 0.027, longitude: center.longitude)
-        #expect(rule(Self.streetRegion(at: far), center) == 0.9)
+        #expect(rule(Self.camera(at: far, distance: 420, pitch: 55), target) == 0.9)
+    }
+
+    /// protects: eng D6's metre tolerance and the pitch test: 25 m off the
+    /// target is already there, 40 m flies; a hand-levelled camera on the
+    /// target (pitch 0 against 55) flies again, and so does one 15% farther.
+    /// fails_when: the old 0.001° (about 111 m) tolerance comes back, or the
+    /// pitch or distance is ignored.
+    /// no_claim: MapKit's real rounding (AC 5 on the simulator).
+    @Test func spotlightNoOpIsThirtyMetresTenPercentAndFiveDegrees() {
+        let target = Self.landing(on: pin)
+        let center = Coordinate(target.centerCoordinate)
+        let rule = PinMotionState.spotlightFlightSeconds
+        #expect(rule(Self.camera(at: Self.north(of: center, meters: 25), distance: 420, pitch: 55), target) == nil)
+        #expect(rule(Self.camera(at: Self.north(of: center, meters: 40), distance: 420, pitch: 55), target) == 0.6)
+        #expect(rule(Self.camera(at: center, distance: 420, pitch: 0), target) == 0.6)
+        #expect(rule(Self.camera(at: center, distance: 483, pitch: 55), target) == 0.6)
+        // A level target (Reduce Motion, compact height, the user's level)
+        // against a level settle: already there.
+        let level = Self.camera(at: center, distance: 420, pitch: 0)
+        #expect(rule(level, level) == nil)
+    }
+
+    /// protects: design DS6: a level the user made holds for the session;
+    /// an app write that levels the map (the add flow, a level landing, the
+    /// coarse-fix fallback) is not the user's; a settle arriving pitched
+    /// clears it; Reduce Motion and compact height land level (DS5, DS8).
+    /// fails_when: the user's level is forgotten at the next landing, the
+    /// add flow's level counts as the user's, or a re-pitch keeps landings
+    /// level.
+    /// no_claim: that MapScreenView flags every app write (code reading) or
+    /// the live toggle (AC 5, simulator).
+    @Test func userLevelledHoldsUntilAPitchedSettle() {
+        let motion = PinMotionState()
+        let center = Coordinate(latitude: 40.7291, longitude: -73.9965)
+        #expect(motion.landingPitch == 55)
+        motion.cameraDidSettle(camera: Self.camera(at: center, distance: 420, pitch: 55))
+        // The app levels it (the add flow): not the user's.
+        motion.noteAppLevelWrite()
+        motion.cameraDidSettle(camera: Self.camera(at: center, distance: 420, pitch: 0))
+        #expect(!motion.userLevelled)
+        #expect(motion.landingPitch == 55)
+        // Pitched again, then levelled by hand.
+        motion.cameraDidSettle(camera: Self.camera(at: center, distance: 420, pitch: 55))
+        motion.cameraDidSettle(camera: Self.camera(at: center, distance: 420, pitch: 0))
+        #expect(motion.userLevelled)
+        #expect(motion.landingPitch == 0)
+        // A level pan keeps it; a pitched settle clears it.
+        motion.cameraDidSettle(camera: Self.camera(at: Self.north(of: center, meters: 300), distance: 420, pitch: 0))
+        #expect(motion.userLevelled)
+        motion.cameraDidSettle(camera: Self.camera(at: center, distance: 420, pitch: 40))
+        #expect(!motion.userLevelled)
+        #expect(motion.landingPitch == 55)
+        motion.reduceMotion = true
+        #expect(motion.landingPitch == 0)
+        motion.reduceMotion = false
+        motion.isCompactHeight = true
+        #expect(motion.landingPitch == 0)
+    }
+
+    /// protects: eng D5: the camera centre sits about 74 m screen-down of
+    /// the pin at any heading (bearing heading + 180°), and heading 0 is
+    /// exactly the add flow's old sixth of the span south.
+    /// fails_when: the offset stays geographic south at a rotated heading
+    /// (the pin would land beside or below the centre), or the add flow's
+    /// target moves.
+    /// no_claim: the pin's exact screen fraction (AC 6 captures).
+    @Test func cameraCenterIsScreenDownAtEveryHeading() {
+        let pin = Coordinate(latitude: 40.7291, longitude: -73.9965)
+        let north = AddCompletionCoordinator.cameraCenter(for: pin, heading: 0)
+        #expect(north == Coordinate(latitude: pin.latitude - AddCompletionCoordinator.cameraSpan / 6, longitude: pin.longitude))
+        let offset = pin.distance(to: north)
+        #expect(abs(offset - 74) < 1)
+        for heading in [90.0, 180, 270] {
+            let center = AddCompletionCoordinator.cameraCenter(for: pin, heading: heading)
+            #expect(abs(pin.distance(to: center) - offset) < 0.5)
+        }
+        // Heading 90 (east up): the centre is west of the pin; 180: north;
+        // 270: east.
+        let east = AddCompletionCoordinator.cameraCenter(for: pin, heading: 90)
+        #expect(east.longitude < pin.longitude && abs(east.latitude - pin.latitude) < 1e-9)
+        let south = AddCompletionCoordinator.cameraCenter(for: pin, heading: 180)
+        #expect(south.latitude > pin.latitude && abs(south.longitude - pin.longitude) < 1e-9)
+        let west = AddCompletionCoordinator.cameraCenter(for: pin, heading: 270)
+        #expect(west.longitude > pin.longitude && abs(west.latitude - pin.latitude) < 1e-9)
+    }
+
+    /// The Show on Map landing for `bodega` with no settle (heading 0, 55°).
+    private static func landing(on bodega: Bodega) -> MapCamera {
+        BodegaMapViewModel.blockZoomCamera(
+            center: AddCompletionCoordinator.cameraCenter(for: bodega.coordinate, heading: 0),
+            heading: 0,
+            pitch: BodegaMapViewModel.blockZoomPitch
+        )
+    }
+
+    private static func camera(at center: Coordinate, distance: Double, pitch: Double) -> MapCamera {
+        MapCamera(centerCoordinate: center.clLocationCoordinate, distance: distance, heading: 0, pitch: pitch)
+    }
+
+    private static func north(of center: Coordinate, meters: Double) -> Coordinate {
+        Coordinate(latitude: center.latitude + meters / BodegaMapViewModel.metersPerDegreeLatitude, longitude: center.longitude)
     }
 
     /// protects: a detail counts as pin-opened (zoom transition, Show on
@@ -343,18 +456,6 @@ struct BrowseMotionTests {
         #expect(opens(.map, otherPin.id, pin.id))
         #expect(!opens(.map, pin.id, pin.id))
         #expect(!opens(.list, nil, pin.id))
-    }
-
-    private static func streetRegion(at center: Coordinate) -> MKCoordinateRegion {
-        region(at: center, latitudeSpan: 0.004, longitudeSpan: 0.004)
-    }
-
-    private static func region(at center: Coordinate, latitudeSpan: Double, longitudeSpan: Double)
-        -> MKCoordinateRegion {
-        MKCoordinateRegion(
-            center: center.clLocationCoordinate,
-            span: MKCoordinateSpan(latitudeDelta: latitudeSpan, longitudeDelta: longitudeSpan)
-        )
     }
 
     /// protects: the list order cross-fade runs DESIGN.md's content-swap
@@ -383,6 +484,6 @@ struct BrowseMotionTests {
 /// What `PinMotionState`'s bound flight and announcer were handed.
 @MainActor
 private final class FlightLog {
-    var flights: [(Coordinate, TimeInterval)] = []
+    var flights: [(MapCamera, TimeInterval)] = []
     var announcements: [String] = []
 }

@@ -29,10 +29,16 @@ extension AddCompletionCoordinator {
     }
 
     /// Centers the map on the given point (the coordinator passes the pin's
-    /// `cameraCenter(for:)`) at street zoom (span 0.004), animated
-    /// over 0.6 s; the drop waits for it to settle.
-    static func cameraMove(_ cameraPosition: Binding<MapCameraPosition>) -> (Coordinate) -> Void {
+    /// `cameraCenter(for:heading: 0)`) at street zoom (span 0.004), animated
+    /// over 0.6 s; the drop waits for it to settle. A region write lands
+    /// level and north-up (#156 spec D2: the add flow stays level), so it is
+    /// flagged to `motion` as the app's level, not the user's (design DS6).
+    static func cameraMove(
+        _ cameraPosition: Binding<MapCameraPosition>,
+        motion: PinMotionState
+    ) -> (Coordinate) -> Void {
         { coordinate in
+            motion.noteAppLevelWrite()
             withAnimation(.easeInOut(duration: 0.6)) {
                 cameraPosition.wrappedValue = .region(
                     MKCoordinateRegion(
@@ -119,10 +125,11 @@ extension View {
     func addCompletion(
         _ coordinator: AddCompletionCoordinator,
         camera: Binding<MapCameraPosition>,
+        motion: PinMotionState,
         hasLeftMap: Bool
     ) -> some View {
         sensoryFeedback(.success, trigger: coordinator.hapticTrigger)
-            .onAppear { coordinator.moveCamera = AddCompletionCoordinator.cameraMove(camera) }
+            .onAppear { coordinator.moveCamera = AddCompletionCoordinator.cameraMove(camera, motion: motion) }
             .onChange(of: hasLeftMap) { _, hasLeft in
                 if hasLeft { coordinator.cancel() }
             }

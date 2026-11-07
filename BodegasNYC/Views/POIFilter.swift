@@ -20,10 +20,12 @@ enum POIFilter: Equatable {
         }
     }
 
-    /// The map style both maps draw (#154 D2, AC 1): flat, muted, following
-    /// the system appearance. No view forces a colour scheme on a `Map`: the
-    /// muted map at night is the night look.
-    var mapStyle: MapStyle {
-        .standard(elevation: .flat, emphasis: .muted, pointsOfInterest: categories)
+    /// The map style both maps draw (#154 D2, AC 1): muted, following the
+    /// system appearance. No view forces a colour scheme on a `Map`: the
+    /// muted map at night is the night look. The browse map passes
+    /// `BodegaMapViewModel.browseMapElevation` (3D buildings when pitched,
+    /// #156), the detail preview `.flat`.
+    func mapStyle(elevation: MapStyle.Elevation) -> MapStyle {
+        .standard(elevation: elevation, emphasis: .muted, pointsOfInterest: categories)
     }
 }

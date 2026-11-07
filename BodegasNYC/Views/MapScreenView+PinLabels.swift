@@ -81,30 +81,68 @@ extension MapScreenView {
         isCameraMoving = false
         countLocateTakeover(settledAt: context.camera)
         lastSettledCamera = context.camera
-        pinMotion.cameraDidSettle(region: context.region) // Show on Map's landing (#150)
+        // A level settle calibrates the level ratio at this map height (#156
+        // spec D3), before anything reads the frame.
+        let measured = measuredHeightMeters(proxy)
+        if let ratio = BodegaMapViewModel.levelHeightRatio(
+            measuredMeters: measured, distance: context.camera.distance, pitch: context.camera.pitch
+        ) {
+            levelHeightRatio = LevelHeightRatio(mapHeight: mapSize.height, ratio: ratio)
+        }
+        let frame = settledFrame(measuredHeight: measured)
+        lastSettledFrame = frame
+        pinMotion.cameraDidSettle(camera: context.camera) // Show on Map's landing (#150), DS6
         guard showsToolbar else {
-            pendingSettledRegion = context.region
+            pendingSettledFrame = frame
             return
         }
-        deliveredRegion = context.region
-        viewModel.regionDidSettle(context.region)
+        if let frame { deliver(frame) }
         refreshPinLabels(proxy)
         addCompletion?.cameraDidSettle(center: Coordinate(context.region.center))
         refreshWalkedOverlay(proxy)
+    }
+
+    /// Hands the view model the frame's data region (eng D2), never MapKit's
+    /// pitched one, with the pitched nearby radius (design DS4).
+    private func deliver(_ frame: SettledFrame) {
+        deliveredRegion = frame.dataRegion
+        viewModel.regionDidSettle(frame.dataRegion, nearbyRadiusMeters: frame.nearbyRadiusMeters)
     }
 
     /// The Map tab is back: deliver the settle parked under the List tab,
     /// then always recompute (items, priorities or size may have changed
     /// while refreshes were suppressed).
     func mapTabDidReturn(_ proxy: MapProxy) {
-        if let region = pendingSettledRegion {
-            pendingSettledRegion = nil
-            if !region.isSameCamera(as: deliveredRegion) {
-                deliveredRegion = region
-                viewModel.regionDidSettle(region)
+        if let frame = pendingSettledFrame {
+            pendingSettledFrame = nil
+            if !frame.dataRegion.isSameCamera(as: deliveredRegion) {
+                deliver(frame)
             }
         }
         refreshPinLabels(proxy)
+    }
+
+    /// The last settle with pitch taken out (#156 eng Shape B): the one
+    /// place that decides what pitch means. `measuredHeight` is the live
+    /// top-to-bottom measure; `nil` before the first settle.
+    func settledFrame(measuredHeight: Double?) -> SettledFrame? {
+        guard let camera = lastSettledCamera, let region = lastVisibleRegion else { return nil }
+        return BodegaMapViewModel.settledFrame(
+            camera: camera,
+            region: region,
+            measuredHeight: measuredHeight,
+            mapSize: mapSize,
+            ratio: levelHeightRatio
+        )
+    }
+
+    /// `visibleHeightMeters` from the map's bottom centre, `nil` when the
+    /// map cannot answer.
+    func measuredHeightMeters(_ proxy: MapProxy) -> Double? {
+        guard mapSize.height > 0,
+              let bottom = proxy.convert(CGPoint(x: mapSize.width / 2, y: mapSize.height), from: .local)
+        else { return nil }
+        return visibleHeightMeters(proxy, bottom: bottom)
     }
 
     /// Converts the items near the visible region (and the user-location dot,
@@ -119,7 +157,10 @@ extension MapScreenView {
         else { return }
         viewModel.pinLabels.placedItemsVersion = viewModel.displayItemsVersion
         let contentSize = UIContentSizeCategory(dynamicTypeSize)
-        let isBlockZoom = visibleHeightMeters(proxy, bottom: bottom).map {
+        // Judged on the level-equivalent height (#156 spec D3), so a pitched
+        // camera at block zoom keeps its labels.
+        let frame = settledFrame(measuredHeight: visibleHeightMeters(proxy, bottom: bottom))
+        let isBlockZoom = frame?.heightMeters.map {
             BodegaMapViewModel.isBlockZoom(heightMeters: $0, wasBlockZoom: viewModel.pinLabels.isBlockZoom)
         } ?? false
         // Above block zoom nothing is converted: placement returns no labels.
@@ -129,7 +170,9 @@ extension MapScreenView {
             )
             return
         }
-        let region = lastVisibleRegion ?? Self.newYorkCityDefault
+        // The near field only (design DS2): pitched, MapKit's region reaches
+        // the horizon, and north-first placement would name it first.
+        let region = frame?.dataRegion ?? Self.newYorkCityDefault
         var items = viewModel.displayItems
         // The held pin outside `displayItems` is drawn by its stand-in: it is
         // both a priority candidate and an obstacle (eng F1).

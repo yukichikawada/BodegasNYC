@@ -90,11 +90,11 @@ extension MapScreenView {
     /// changes within a frame either way (design D10, #113).
     func refreshWalkedOverlay(_ proxy: MapProxy) {
         guard let streetsWalkedViewModel else { return }
-        var height: Double?
-        if mapSize.height > 0,
-           let bottom = proxy.convert(CGPoint(x: mapSize.width / 2, y: mapSize.height), from: .local) {
-            height = visibleHeightMeters(proxy, bottom: bottom)
-        }
+        // The bands read the level-equivalent height (#156 spec D3); the
+        // culling keeps MapKit's region, so a pitched view draws every run up
+        // to the far field and the run cap stays the valve (eng D3).
+        let measured = measuredHeightMeters(proxy)
+        let height = settledFrame(measuredHeight: measured).map(\.heightMeters) ?? measured
         var next = walkedDisplay
         let changed = next.refresh(
             index: streetsWalkedViewModel.walkedRunIndex,
