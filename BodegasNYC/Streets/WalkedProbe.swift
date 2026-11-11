@@ -3,6 +3,7 @@ import Foundation
 import MapKit
 import os
 import QuartzCore
+import SwiftUI
 
 /// #119 Phase 0 device probe (probe branch only, not for merge): which
 /// geometry the walked layer draws, and the per-settle signposts and log
@@ -74,6 +75,22 @@ nonisolated enum WalkedProbe {
             }
         }
         return counts
+    }
+
+    /// DEBUG only, simulator look checks: `-WalkedProbeCamera
+    /// "<lat>,<lon>,<distance m>"` starts the map on a level camera there.
+    /// The device driver never passes it (it must run unchanged on main).
+    static var launchCamera: MapCameraPosition? {
+        #if DEBUG
+        guard let value = UserDefaults.standard.string(forKey: "WalkedProbeCamera") else { return nil }
+        let parts = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 3 else { return nil }
+        return .camera(MapCamera(
+            centerCoordinate: CLLocationCoordinate2D(latitude: parts[0], longitude: parts[1]), distance: parts[2]
+        ))
+        #else
+        return nil
+        #endif
     }
 
     /// Settles seen since launch (the A/B divides by the driver's own count).

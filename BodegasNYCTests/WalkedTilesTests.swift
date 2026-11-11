@@ -226,14 +226,23 @@ struct WalkedTilesTests {
         #expect(visible.count == nearTiles.reduce(0) { $0 + (tiles[$1]?.pieces.count ?? 0) })
     }
 
+    /// How far the 0.5 m greedy simplifier lets a drawn line drift from an
+    /// interior vertex on a gentle curve: it compares each vertex with the
+    /// segment from the last kept one, so drops accumulate. Measured on this
+    /// seed with today's runs at 1.87 m (block 67889) and with pieces at
+    /// 2.17 m (block 24862), so this is the simplifier's own error, not a
+    /// coverage gap; DS4's per-block simplification is the after-Go fix.
+    static let simplifierDriftMeters = 2.5
+
     /// protects=the probe's numbers on real geometry: the first 5,006
     /// Manhattan blocks of the bundle (the order the #108 seed walk takes)
-    /// as pieces against runs, logged; every walked block's vertices lie on
-    /// a piece of its tile;
-    /// fails_when=a real block (curved, odd endpoints) is not drawn, or the
-    /// build throws;
+    /// as pieces against runs, logged; every walked block's vertices lie
+    /// within the simplifier's drift of a piece of its tile;
+    /// fails_when=a real block (curved, odd endpoints) is not drawn, a
+    /// block is drawn in another tile, or the build throws;
     /// no_claim=the device seed's exact counts (it is matched from fixes),
-    /// any timing, or a cap (Phase 0 measures it on device).
+    /// any timing, a cap (Phase 0 measures it on device), or the look
+    /// within 2.5 m (DS4, AC7 after Go).
     @Test func seedSanityOnTheBundledGrid() throws {
         let grid = try StreetGrid.loadBundled()
         let walked = Set((0 ..< grid.segmentCount).lazy.filter { grid.borough(for: $0) == .manhattan }
@@ -247,25 +256,28 @@ struct WalkedTilesTests {
         print(report)
         #expect(tiles.values.reduce(0) { $0 + $1.physicalIDs.count } == walked.count)
         #expect(index.pieces.count <= runs.count)
-        var missing = 0
+        var missing: [String] = []
         for tile in tiles.values {
             for physicalID in tile.physicalIDs {
                 guard let block = grid.index(ofPhysicalID: physicalID) else { continue }
-                for vertex in grid.polyline(for: block)
-                where !tile.pieces.contains(where: { Self.distance(vertex, toLine: $0.coordinates) <= 1.1 }) {
-                    missing += 1
+                let line = grid.polyline(for: block)
+                for (offset, vertex) in line.enumerated() {
+                    let nearest = tile.pieces.map { Self.distance(vertex, toLine: $0.coordinates) }.min() ?? .infinity
+                    if nearest > Self.simplifierDriftMeters {
+                        missing.append("\(physicalID) v\(offset)/\(line.count) \(String(format: "%.2f", nearest)) m")
+                    }
                 }
             }
         }
-        #expect(missing == 0, "\(report)")
+        #expect(missing.isEmpty, "\(report); off the pieces: \(missing.prefix(20))")
     }
 
     // MARK: Helpers
 
-    enum WalkCase: CaseIterable, CustomStringConvertible {
+    enum WalkCase: String, CaseIterable, CustomStringConvertible {
         case single, tJunction, tree, cycle, grid, disconnected, selfLoop, parallel
 
-        var description: String { "\(self.self)" }
+        var description: String { rawValue }
 
         var components: Int { self == .disconnected ? 2 : 1 }
 

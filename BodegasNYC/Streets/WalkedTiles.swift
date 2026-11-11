@@ -150,14 +150,19 @@ nonisolated enum WalkedTiles {
     }
 
     /// The walk's vertices: each step's block in its direction, joined at
-    /// the shared node (the next block's first vertex is dropped, as runs
-    /// do: the two ends are the same node, within the 1 m merge).
+    /// the shared node. The next block's first vertex is dropped only when
+    /// it is the same point as the last one: two ends merged into one node
+    /// can be up to 2 m apart (each within 1 m of the node's first point),
+    /// so dropping it as runs do left a block's end up to 2 m off the line
+    /// (the seed test caught 14 such vertices); keeping it draws the short
+    /// connector between the two ends instead.
     static func coordinates(of steps: [Step], polylines: [[Coordinate]]) -> [Coordinate] {
         var result: [Coordinate] = []
         for step in steps {
             let line = polylines[step.block]
             let oriented = step.forward ? line : line.reversed()
-            result.append(contentsOf: result.isEmpty ? oriented[...] : oriented.dropFirst())
+            let skipsFirst = result.last.map { $0 == oriented[0] } ?? false
+            result.append(contentsOf: skipsFirst ? oriented.dropFirst() : oriented[...])
         }
         return result
     }

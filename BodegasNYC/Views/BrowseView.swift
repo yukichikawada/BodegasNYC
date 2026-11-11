@@ -37,7 +37,8 @@ struct BrowseView: View {
 
     @State var activeTab: Tab = .map
     @State var path: [Bodega] = []
-    @State var cameraPosition: MapCameraPosition = .region(MapScreenView.newYorkCityDefault)
+    @State var cameraPosition: MapCameraPosition = WalkedProbe.launchCamera
+        ?? .region(MapScreenView.newYorkCityDefault)
     @State var mapViewModel: BodegaMapViewModel
     @State var listViewModel: BodegaListViewModel
     /// The list's top row, kept here so a Map → List round trip with the
