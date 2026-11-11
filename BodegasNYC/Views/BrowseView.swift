@@ -37,7 +37,7 @@ struct BrowseView: View {
 
     @State var activeTab: Tab = .map
     @State var path: [Bodega] = []
-    @State var cameraPosition: MapCameraPosition = WalkedProbe.launchCamera
+    @State var cameraPosition: MapCameraPosition = WalkedTrace.launchCamera
         ?? .region(MapScreenView.newYorkCityDefault)
     @State var mapViewModel: BodegaMapViewModel
     @State var listViewModel: BodegaListViewModel

@@ -1,23 +1,26 @@
 import Foundation
 import MapKit
 
-/// A piece's identity (#119): its tile and the lowest `physicalid` among its
-/// blocks. Unique because each block is in exactly one tile and the
-/// components within a tile are disjoint. Ordered by (tile, lowest id), the
-/// stable draw order.
+/// A piece's identity (#119): its tile, the lowest `physicalid` among its
+/// patch's blocks, and which part of the patch's walk it is (eng D10: a
+/// walk longer than `WalkedTiles.maxPieceVertices` is split). Unique because
+/// each block is in exactly one tile and the patches within a tile are
+/// disjoint. Ordered by (tile, lowest id, part), the stable draw order.
 nonisolated struct WalkedPieceID: Hashable, Comparable, Sendable {
     let tile: Int64
     let lowestPhysicalID: UInt32
+    var part: UInt16 = 0
 
     static func < (lhs: WalkedPieceID, rhs: WalkedPieceID) -> Bool {
-        (lhs.tile, lhs.lowestPhysicalID) < (rhs.tile, rhs.lowestPhysicalID)
+        (lhs.tile, lhs.lowestPhysicalID, lhs.part) < (rhs.tile, rhs.lowestPhysicalID, rhs.part)
     }
 }
 
-/// One connected patch of walked blocks inside one ~1 km tile, drawn as one
-/// `MapPolyline` (#119): a walk over every block of the patch that retraces
-/// where it turns back. `coordinates` are the drawn (simplified) vertices,
-/// and the bounds are the piece's own, which may cross its tile's edge.
+/// One connected patch of walked blocks inside one ~1 km tile (or one part of
+/// a long patch), drawn as one `MapPolyline` (#119): a walk over every block
+/// of the patch that retraces where it turns back. `coordinates` are the
+/// drawn vertices (each block simplified once, design DS4), and the bounds
+/// are the piece's own, which may cross its tile's edge (eng D5).
 ///
 /// `@unchecked Sendable`: `MKPolyline` is never mutated after `init`.
 nonisolated struct WalkedPiece: Identifiable, @unchecked Sendable, Equatable {
@@ -31,9 +34,10 @@ nonisolated struct WalkedPiece: Identifiable, @unchecked Sendable, Equatable {
 
     var vertexCount: Int { coordinates.count }
 
-    init(id: WalkedPieceID, walk: [Coordinate]) {
+    /// `coordinates` are drawn as given.
+    init(id: WalkedPieceID, coordinates: [Coordinate]) {
         self.id = id
-        coordinates = WalkedOverlay.simplified(walk)
+        self.coordinates = coordinates
         minLatitude = coordinates.map(\.latitude).min() ?? 0
         maxLatitude = coordinates.map(\.latitude).max() ?? 0
         minLongitude = coordinates.map(\.longitude).min() ?? 0
@@ -134,19 +138,53 @@ nonisolated enum WalkedTiles {
         return (tiles, rebuilt)
     }
 
-    /// The pieces of one tile, ascending by lowest `physicalid`.
-    /// `physicalIDs` must be ascending.
+    /// The pieces of one tile, ascending by id. `physicalIDs` must be
+    /// ascending. Each block is simplified once (0.5 m) and that geometry is
+    /// walked in both directions (design DS4), so a retraced curve draws one
+    /// line, not two that the simplifier bent differently each way; the
+    /// joined walk is simplified once more (it can only drop vertices within
+    /// 0.5 m of the line kept) and cut into parts of at most
+    /// `maxPieceVertices` (eng D10).
     static func pieces(tile: Int64, physicalIDs: [UInt32], grid: StreetGrid) -> [WalkedPiece] {
         let polylines = physicalIDs.compactMap { grid.index(ofPhysicalID: $0).map(grid.polyline(for:)) }
         guard polylines.count == physicalIDs.count else { return [] }
-        return walks(polylines: polylines).map { steps in
+        let simplified = polylines.map(WalkedOverlay.simplified)
+        return walks(polylines: polylines).flatMap { steps in
             let lowest = steps.map { physicalIDs[$0.block] }.min() ?? 0
-            return WalkedPiece(
-                id: WalkedPieceID(tile: tile, lowestPhysicalID: lowest),
-                walk: coordinates(of: steps, polylines: polylines)
-            )
+            // A second 0.5 m pass over the joined walk drops the vertices
+            // left where the walk runs straight through a junction (11,801
+            // vertices on the device seed after the per-block pass, 9,624
+            // after this one; the whole walk simplified once gave 9,616).
+            let walk = WalkedOverlay.simplified(coordinates(of: steps, polylines: simplified))
+            let parts = split(walk)
+            return parts.enumerated().map { part, coordinates in
+                WalkedPiece(
+                    id: WalkedPieceID(tile: tile, lowestPhysicalID: lowest, part: UInt16(clamping: part)),
+                    coordinates: coordinates
+                )
+            }
         }
         .sorted { $0.id < $1.id }
+    }
+
+    /// The most vertices one piece holds (eng D10, design DS10): a longer
+    /// walk is cut into consecutive parts sharing their joining vertex, so
+    /// at close zoom only the parts near the view are drawn and a dense
+    /// tile cannot trip the cap at a visible height of 440 m or less.
+    static let maxPieceVertices = 500
+
+    /// `walk` in consecutive parts of at most `maxPieceVertices`, each part
+    /// starting at the previous part's last vertex, so the line is unbroken.
+    static func split(_ walk: [Coordinate]) -> [[Coordinate]] {
+        guard walk.count > maxPieceVertices else { return [walk] }
+        var parts: [[Coordinate]] = []
+        var start = 0
+        while start < walk.count - 1 {
+            let end = min(walk.count, start + maxPieceVertices)
+            parts.append(Array(walk[start ..< end]))
+            start = end - 1
+        }
+        return parts
     }
 
     /// The walk's vertices: each step's block in its direction, joined at
@@ -200,8 +238,7 @@ nonisolated enum WalkedTiles {
     ) -> [Step] {
         var steps: [Step] = []
         var lastNew = -1
-        // (node, next incident position, the step back to the parent)
-        var stack: [(node: Int, next: Int, back: Step?)] = [(start, 0, nil)]
+        var stack = [Frame(node: start, next: 0, back: nil)]
         nodeSeen[start] = true
         while let top = stack.last {
             let incident = graph.incident[top.node]
@@ -225,10 +262,18 @@ nonisolated enum WalkedTiles {
                 steps.append(back) // closes a cycle: out and straight back
             } else {
                 nodeSeen[other] = true
-                stack.append((other, 0, back))
+                stack.append(Frame(node: other, next: 0, back: back))
             }
         }
         return Array(steps.prefix(lastNew + 1))
+    }
+
+    /// A DFS stack entry: the node, its next incident position, and the
+    /// step back to the parent.
+    private struct Frame {
+        let node: Int
+        var next: Int
+        let back: Step?
     }
 }
 

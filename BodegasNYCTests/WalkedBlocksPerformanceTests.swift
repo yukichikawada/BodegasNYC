@@ -225,6 +225,57 @@ final class WalkedBlocksPerformanceTests: XCTestCase {
         return (times, plans)
     }
 
+    /// protects: the #119 tile build for the 4,978-block device seed (every
+    /// tile walked, the summary's work off the main actor after a rebuild or
+    /// at launch) stays inside 100 ms in Release (1 s opted-in Debug).
+    /// fails_when: the median passes its budget.
+    /// no_claim: device timing (the build runs off the main actor, so it
+    /// is not a hitch; the WALKED_BUILD log line times it on device).
+    func testTileBuildForTheSeedBudget() throws {
+        try skipUnlessMeasurable()
+        let grid = try StreetGrid.loadBundled()
+        let walked = Set(WalkedSeedFixture.physicalIDs)
+        var times: [Duration] = []
+        let clock = ContinuousClock()
+        measure(metrics: [XCTClockMetric()]) {
+            let start = clock.now
+            let built = WalkedTiles.build(walkedIDs: walked, grid: grid)
+            times.append(clock.now - start)
+            XCTAssertFalse(built.tiles.isEmpty)
+        }
+        let report = "Tile build for \(walked.count) blocks median: \(Self.median(times))"
+        print(report)
+        XCTContext.runActivity(named: report) { _ in }
+        XCTAssertLessThan(Self.median(times), Self.ceiling(release: .milliseconds(100), debug: .seconds(1)))
+    }
+
+    /// protects: an incremental tile rebuild (one block added to the seed,
+    /// eng D6) walks one tile again and stays inside 10 ms in Release
+    /// (100 ms opted-in Debug).
+    /// fails_when: the median passes its budget, or more than one tile is
+    /// rebuilt.
+    /// no_claim: the store's mask read and the run chaining, which the
+    /// summary also does (the incremental pass budgets above).
+    func testIncrementalTileRebuildBudget() throws {
+        try skipUnlessMeasurable()
+        let grid = try StreetGrid.loadBundled()
+        let walked = Set(WalkedSeedFixture.physicalIDs)
+        let added = try XCTUnwrap((0 ..< grid.segmentCount).lazy.map { grid.physicalIDs[$0] }.first { !walked.contains($0) })
+        let previous = WalkedTiles.build(walkedIDs: walked, grid: grid).tiles
+        var times: [Duration] = []
+        let clock = ContinuousClock()
+        measure(metrics: [XCTClockMetric()]) {
+            let start = clock.now
+            let built = WalkedTiles.build(walkedIDs: walked.union([added]), grid: grid, previous: previous)
+            times.append(clock.now - start)
+            XCTAssertEqual(built.rebuilt, 1)
+        }
+        let report = "Incremental tile rebuild median: \(Self.median(times))"
+        print(report)
+        XCTContext.runActivity(named: report) { _ in }
+        XCTAssertLessThan(Self.median(times), Self.ceiling(release: .milliseconds(10), debug: .milliseconds(100)))
+    }
+
     private static var newestFix: FetchDescriptor<WalkedPoint> {
         var descriptor = FetchDescriptor<WalkedPoint>(sortBy: [SortDescriptor(\.recordedAt, order: .reverse)])
         descriptor.fetchLimit = 1

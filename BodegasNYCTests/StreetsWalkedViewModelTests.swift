@@ -570,7 +570,7 @@ struct StreetsWalkedViewModelTests {
     // MARK: Map content churn (#108 R3 device check)
 
     /// protects: a catch-up that finds nothing new publishes nothing (same
-    /// `walkedRunsVersion`, same run values), and new blocks elsewhere leave
+    /// `walkedPiecesVersion`, same run values), and new blocks elsewhere leave
     /// an unchanged run's `MKPolyline` object in place, so MapKit keeps its
     /// overlay instead of removing and re-adding every run.
     /// fails_when: every refresh republishes the runs, or a data change
@@ -580,19 +580,19 @@ struct StreetsWalkedViewModelTests {
         let harness = try makeHarness()
         try F.seed(Self.blockWalk, in: harness.context)
         await harness.viewModel.refreshWalkedBlocks()
-        let version = harness.viewModel.walkedRunsVersion
+        let version = harness.viewModel.walkedPiecesVersion
         let polyline = try #require(harness.viewModel.walkedRuns.first?.polyline)
 
         await harness.viewModel.refreshWalkedBlocks()
         harness.viewModel.sceneActivityChanged(isActive: true)
         await waitForRefresh(harness.viewModel)
-        #expect(harness.viewModel.walkedRunsVersion == version)
+        #expect(harness.viewModel.walkedPiecesVersion == version)
         #expect(harness.viewModel.walkedRuns.first?.polyline === polyline)
 
         try F.seed(F.walk(from: (0, 68), to: (100, 68), startTime: 3_600), in: harness.context)
         await harness.viewModel.refreshWalkedBlocks()
         #expect(harness.viewModel.walkedBlockIDs == [100, 300])
-        #expect(harness.viewModel.walkedRunsVersion != version)
+        #expect(harness.viewModel.walkedPiecesVersion != version)
         #expect(harness.viewModel.walkedRuns.first { $0.id == 100 }?.polyline === polyline)
     }
 

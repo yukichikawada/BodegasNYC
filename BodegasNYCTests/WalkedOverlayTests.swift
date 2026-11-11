@@ -110,67 +110,55 @@ struct WalkedOverlayTests {
             run(1, x: 0, y: 0), run(2, x: 700, y: 0), run(3, x: 760, y: 0),
             run(4, x: 0, y: -740), run(5, x: 0, y: -760), run(6, x: -760, y: 0)
         ]
-        #expect(WalkedOverlay.visible(runs, in: region) == .runs([runs[0], runs[1], runs[3], runs[5]]))
+        #expect(WalkedOverlay.visibleRuns(runs, in: region, cap: .max) == [runs[0], runs[1], runs[3], runs[5]])
     }
 
-    /// protects: past 1,000 visible runs nothing is drawn, never a partial
-    /// subset (design D3 over eng R3's nearest subset); exactly 1,000 draws.
-    /// The cap was lowered from 2,000 after the R3 device check. Both the
-    /// full scan and the spatial index agree.
-    /// fails_when: the cap draws a subset, hides at 1,000, or drifts.
-    /// no_claim: the frame rate at 1,000 runs (on-device check).
-    @Test func overTheCapHidesTheWholeLayer() {
-        #expect(WalkedOverlay.maxVisibleRuns == 1_000)
-        let region = WalkedRegion(centerLatitude: F.originLatitude, centerLongitude: F.originLongitude, latitudeDelta: 0.1, longitudeDelta: 0.1)
-        let runs = (0 ..< 1_001).map {
-            WalkedRun(id: UInt32($0), coordinates: [F.coordinate(x: Double($0), y: 0), F.coordinate(x: Double($0), y: 10)])
-        }
-        guard case .runs(let drawn) = WalkedOverlay.visible(Array(runs.prefix(1_000)), in: region) else {
-            Issue.record("1,000 runs should draw")
-            return
-        }
-        #expect(drawn.count == 1_000)
-        #expect(WalkedRunIndex(runs: Array(runs.prefix(1_000))).visible(in: region) == .runs(drawn))
-        #expect(WalkedOverlay.visible(runs, in: region) == .overCap)
-        #expect(WalkedRunIndex(runs: runs).visible(in: region) == .overCap)
-        let farAway = runs.map { WalkedRun(id: $0.id, coordinates: $0.coordinates.map { Coordinate(latitude: $0.latitude + 1, longitude: $0.longitude) }) }
-        #expect(WalkedOverlay.visible(farAway + Array(runs.prefix(5)), in: region) == .runs(Array(runs.prefix(5))))
-        #expect(WalkedRunIndex(runs: farAway + Array(runs.prefix(5))).visible(in: region) == .runs(Array(runs.prefix(5))))
-    }
-
-    /// protects=#154 eng D8: while breadcrumbs draw (two polylines a run)
-    /// the layer hides past 500 visible runs, a line keeps 1,000, and the
-    /// settled display applies the cap of the width it settled at, through
-    /// the spatial index and the full scan alike;
-    /// fails_when=breadcrumbs keep the 1,000 cap (2,000 polylines), a line
-    /// loses runs it drew before #154, or the cap ignores the settled width;
-    /// no_claim=the frame rate at 500 breadcrumb runs (owner's device A/B,
-    /// AC 13).
-    @Test func breadcrumbsHalveTheCap() {
-        #expect(WalkedOverlay.maxVisibleRuns(for: .breadcrumbs(dot: 8, spacing: 16, track: 16)) == 500)
-        #expect(WalkedOverlay.maxVisibleRuns(for: .line(width: 3)) == 1_000)
+    /// protects=#154 eng D8, kept by #119 for the dots: past 500 visible
+    /// runs the dot pass has no answer (the layer hides), never a partial
+    /// subset; exactly 500 draws; the full scan and the spatial index agree;
+    /// fails_when=the run cap draws a subset, hides at 500, or the index and
+    /// the scan disagree;
+    /// no_claim=the frame rate at 500 dot runs (the PR's device re-run).
+    @Test func dotRunsHideTheLayerPastFiveHundred() {
+        #expect(WalkedOverlay.maxDotRuns == 500)
         let region = WalkedRegion(centerLatitude: F.originLatitude, centerLongitude: F.originLongitude, latitudeDelta: 0.1, longitudeDelta: 0.1)
         let runs = (0 ..< 501).map {
             WalkedRun(id: UInt32($0), coordinates: [F.coordinate(x: Double($0), y: 0), F.coordinate(x: Double($0), y: 10)])
         }
-        #expect(WalkedOverlay.visible(runs, in: region, cap: 500) == .overCap)
-        #expect(WalkedRunIndex(runs: runs).visible(in: region, cap: 500) == .overCap)
-        #expect(WalkedRunIndex(runs: Array(runs.prefix(500))).visible(in: region, cap: 500) != .overCap)
+        let drawn = WalkedOverlay.visibleRuns(Array(runs.prefix(500)), in: region, cap: 500)
+        #expect(drawn?.count == 500)
+        #expect(WalkedRunIndex(runs: Array(runs.prefix(500))).visible(in: region) == drawn)
+        #expect(WalkedOverlay.visibleRuns(runs, in: region, cap: 500) == nil)
+        #expect(WalkedRunIndex(runs: runs).visible(in: region) == nil)
+        let farAway = runs.map { WalkedRun(id: $0.id, coordinates: $0.coordinates.map { Coordinate(latitude: $0.latitude + 1, longitude: $0.longitude) }) }
+        #expect(WalkedRunIndex(runs: farAway + Array(runs.prefix(5))).visible(in: region) == Array(runs.prefix(5)))
+    }
 
-        let index = WalkedRunIndex(runs: runs)
+    /// protects=the dots' run cap applies only while breadcrumbs draw: a
+    /// settle at 8pt over 501 dot runs hides the layer; the same data at
+    /// 3pt (a line on the pieces, no dots) draws, with no dot runs;
+    /// fails_when=the run cap hides a line band, or breadcrumbs draw more
+    /// than 500 dot runs;
+    /// no_claim=the pieces' own cap (WalkedPieceCapTests).
+    @Test func dotRunCapOnlyAtTheBreadcrumbBands() {
+        let segments = (0 ..< 501).map { F.segment(UInt32($0 + 1), [(Double($0) * 20, 0), (Double($0) * 20, 10)]) }
+        let layer = Self.layer(segments)
+        let region = WalkedRegion(centerLatitude: F.originLatitude, centerLongitude: F.originLongitude, latitudeDelta: 0.2, longitudeDelta: 0.2)
         var display = WalkedOverlayDisplay()
-        // 350 m settles at 8pt, breadcrumbs: 501 runs is over.
-        display.refresh(index: index, showsOverlay: true, region: region, visibleHeightMeters: 350, isCameraMoving: false)
+        display.refresh(index: layer, showsOverlay: true, region: region, visibleHeightMeters: 350, isCameraMoving: false)
         #expect(display.lineWidth == 8)
         #expect(display.visible == .overCap)
-        // 5 km settles at 3pt, a line: the same 501 runs draw.
-        display.refresh(index: index, showsOverlay: true, region: region, visibleHeightMeters: 5_000, isCameraMoving: false)
+        // The dots' cap is not the pieces' cap: DS2's stricter bar to come
+        // back does not apply to the next line view.
+        #expect(display.isHiddenByPieceCap == false)
+        display.refresh(index: layer, showsOverlay: true, region: region, visibleHeightMeters: 5_000, isCameraMoving: false)
         #expect(display.lineWidth == 3)
-        guard case .runs(let drawn) = display.visible else {
-            Issue.record("501 runs should draw as a line")
+        guard case .pieces(let pieces, let dotRuns) = display.visible else {
+            Issue.record("501 isolated blocks should draw as a line")
             return
         }
-        #expect(drawn.count == 501)
+        #expect(pieces.count == 501)
+        #expect(dotRuns.isEmpty)
     }
 
     /// Runs on a 50 m lattice around `(x, y)` metres: `count` short runs,
@@ -182,6 +170,26 @@ struct WalkedOverlayTests {
             let py = y + Double(index / side) * 50
             return WalkedRun(id: firstID + UInt32(index), coordinates: [F.coordinate(x: px, y: py), F.coordinate(x: px + 40, y: py)])
         }
+    }
+
+    /// Segments on the same 50 m lattice, as real blocks for pieces.
+    private static func latticeSegments(count: Int, firstID: UInt32, x: Double, y: Double) -> [StreetGrid.Segment] {
+        let side = Int(Double(count).squareRoot().rounded(.up))
+        return (0 ..< count).map { index in
+            let px = x + Double(index % side) * 50
+            let py = y + Double(index / side) * 50
+            return F.segment(firstID + UInt32(index), [(px, py), (px + 40, py)])
+        }
+    }
+
+    /// The walked layer (pieces and runs) with every segment walked.
+    static func layer(_ segments: [StreetGrid.Segment]) -> WalkedLayerIndex {
+        let grid = StreetGrid(segments: segments)
+        let ids = Set(segments.map(\.physicalID))
+        return WalkedLayerIndex(
+            pieces: WalkedPieceIndex(tiles: WalkedTiles.build(walkedIDs: ids, grid: grid).tiles),
+            runs: WalkedRunIndex(runs: WalkedOverlay.runs(walkedIDs: ids, grid: grid))
+        )
     }
 
     /// A phone-shaped region `height` metres tall centred `(x, y)` metres
@@ -198,7 +206,7 @@ struct WalkedOverlayTests {
 
     /// protects: the spatial index culls exactly as the full scan does, at
     /// every zoom from a block to the whole fixture, including views that
-    /// straddle cells and views off the data.
+    /// straddle cells and views off the data, with and without the cap.
     /// fails_when: a run on a cell edge is missed, counted twice, reordered,
     /// or the cap is applied differently.
     /// no_claim: cost (the next test).
@@ -210,7 +218,8 @@ struct WalkedOverlayTests {
             for x in stride(from: -1_500.0, through: 2_500, by: 377) {
                 for y in stride(from: -1_500.0, through: 2_500, by: 411) {
                     let region = Self.region(x: x, y: y, height: height)
-                    #expect(index.visible(in: region) == WalkedOverlay.visible(runs, in: region), "\(height) m at \(x), \(y)")
+                    #expect(index.visible(in: region) == WalkedOverlay.visibleRuns(runs, in: region, cap: 500), "\(height) m at \(x), \(y)")
+                    #expect(index.visible(in: region, cap: .max) == WalkedOverlay.visibleRuns(runs, in: region, cap: .max))
                 }
             }
         }
@@ -240,20 +249,20 @@ struct WalkedOverlayTests {
         let iterations = 200
         let smallTime = clock.measure { for _ in 0 ..< iterations { _ = small.visible(in: view) } }
         let largeTime = clock.measure { for _ in 0 ..< iterations { _ = large.visible(in: view) } }
-        let scanTime = clock.measure { for _ in 0 ..< iterations { _ = WalkedOverlay.visible(nearby + elsewhere, in: view) } }
+        let scanTime = clock.measure { for _ in 0 ..< iterations { _ = WalkedOverlay.visibleRuns(nearby + elsewhere, in: view, cap: 500) } }
         print("block-zoom settle culling per call: 100 runs \(smallTime / iterations), 5,000 runs \(largeTime / iterations), full scan of 5,000 \(scanTime / iterations)")
     }
 
     /// protects: nothing the map draws changes while the camera moves, and a
     /// settle with unchanged data and an unchanged view changes nothing and
-    /// keeps every run's `MKPolyline` object (no overlay removed and
-    /// re-added); a settle over a different view swaps only the runs it must.
+    /// keeps every piece's and dot run's `MKPolyline` object (no overlay
+    /// removed and re-added).
     /// fails_when: a mid-gesture data change rewrites the display, or a
-    /// repeated settle replaces equal runs or reports a change.
+    /// repeated settle replaces equal pieces or runs or reports a change.
     /// no_claim: that MapKit diffs by object identity (on-device check).
     @Test func displayChangesOnlyAtRestAndKeepsPolylineObjects() {
-        let runs = Self.lattice(count: 40, firstID: 1, x: -150, y: -150)
-        let index = WalkedRunIndex(runs: runs)
+        let segments = Self.latticeSegments(count: 40, firstID: 1, x: -150, y: -150)
+        let index = Self.layer(segments)
         let view = Self.region(x: 0, y: 0, height: 400)
         var display = WalkedOverlayDisplay()
 
@@ -263,23 +272,25 @@ struct WalkedOverlayTests {
 
         let changed2 = display.refresh(index: index, showsOverlay: true, region: view, visibleHeightMeters: 350, isCameraMoving: false)
         #expect(changed2)
-        guard case .runs(let first) = display.visible else {
-            Issue.record("expected runs")
+        guard case .pieces(let first, let firstDots) = display.visible else {
+            Issue.record("expected pieces")
             return
         }
         #expect(display.lineWidth == 8)
+        #expect(!first.isEmpty && !firstDots.isEmpty)
 
-        let grown = WalkedRunIndex(runs: runs + Self.lattice(count: 10, firstID: 500, x: 0, y: 300))
+        let grown = Self.layer(segments + Self.latticeSegments(count: 10, firstID: 500, x: 0, y: 300))
         let changed3 = display.refresh(index: grown, showsOverlay: true, region: view, visibleHeightMeters: 350, isCameraMoving: true)
         #expect(changed3 == false)
-        guard case .runs(let during) = display.visible else { return }
+        guard case .pieces(let during, _) = display.visible else { return }
         #expect(zip(first, during).allSatisfy { $0.polyline === $1.polyline })
 
         let changed4 = display.refresh(index: index, showsOverlay: true, region: view, visibleHeightMeters: 350, isCameraMoving: false)
         #expect(changed4 == false)
-        guard case .runs(let again) = display.visible else { return }
+        guard case .pieces(let again, let againDots) = display.visible else { return }
         #expect(again.count == first.count)
         #expect(zip(first, again).allSatisfy { $0.polyline === $1.polyline })
+        #expect(zip(firstDots, againDots).allSatisfy { $0.polyline === $1.polyline })
     }
 
     /// protects: stroke width by visible height (design D2): 8pt to 400 m,

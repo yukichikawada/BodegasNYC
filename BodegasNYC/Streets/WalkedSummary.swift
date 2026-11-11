@@ -1,6 +1,4 @@
 import Foundation
-import MapKit
-import os
 
 /// Walked blocks out of a borough's total (#108 spec Implementation 5).
 nonisolated struct BoroughProgress: Sendable, Equatable, Identifiable {
@@ -29,59 +27,51 @@ nonisolated struct BoroughProgress: Sendable, Equatable, Identifiable {
 }
 
 /// What a saved match pass hands the view model: the walked blocks, their
-/// per-borough counts and the overlay's runs (with their spatial index), all
-/// from the same masks. `runsVersion` changes exactly when the runs do
-/// (`BlockMatchingActor` reconciles them off the main actor), so the view
-/// model compares an integer, never the run arrays.
+/// per-borough counts and the walked layer's pieces and runs (with their
+/// spatial indexes), all from the same masks. `piecesVersion` changes
+/// exactly when the drawn geometry does (`BlockMatchingActor` reconciles
+/// off the main actor), so the view model compares an integer, never the
+/// arrays.
 nonisolated struct WalkedSummary: Sendable, Equatable {
     var walkedIDs: Set<UInt32>
     /// In `Borough.displayOrder`.
     var progress: [BoroughProgress]
-    var runIndex: WalkedRunIndex
-    var runsVersion: Int
-    /// #119 Phase 0 probe: the per-tile pieces (kept per tile across passes,
-    /// eng D6) and their index. Built beside the runs, which the probe's
-    /// `runs` and `piecesDotsOnRuns` modes still draw.
-    var tiles: [Int64: WalkedTiles.Tile] = [:]
-    var pieceIndex = WalkedPieceIndex.empty
+    /// The pieces (#119) and the runs that carry the breadcrumb dots.
+    var layer: WalkedLayerIndex
+    /// The pieces by tile, kept per tile across passes (#119 eng D6).
+    var tiles: [Int64: WalkedTiles.Tile]
+    var piecesVersion: Int
 
-    var runs: [WalkedRun] { runIndex.runs }
+    var runs: [WalkedRun] { layer.runs.runs }
+    var pieces: [WalkedPiece] { layer.pieces.pieces }
 
-    static let empty = WalkedSummary(walkedIDs: [], progress: [], runs: [])
+    static let empty = WalkedSummary(walkedIDs: [], progress: [], runs: [], tiles: [:])
 
     /// Citywide: every borough summed.
     var citywide: (walked: Int, total: Int) {
         progress.reduce((0, 0)) { ($0.0 + $1.walked, $0.1 + $1.total) }
     }
 
-    init(walkedIDs: Set<UInt32>, progress: [BoroughProgress], runs: [WalkedRun], runsVersion: Int = 0) {
+    init(
+        walkedIDs: Set<UInt32>,
+        progress: [BoroughProgress],
+        runs: [WalkedRun],
+        tiles: [Int64: WalkedTiles.Tile],
+        piecesVersion: Int = 0
+    ) {
         self.walkedIDs = walkedIDs
         self.progress = progress
-        runIndex = WalkedRunIndex(runs: runs)
-        self.runsVersion = runsVersion
-    }
-
-    /// The summary of `masks`, with the tiles built incrementally against
-    /// `previous` (#119 eng D6): a tile whose walked ids did not change keeps
-    /// its pieces, so only changed tiles are walked again.
-    init(masks: [UInt32: UInt16], grid: StreetGrid, previous: WalkedSummary) {
-        self.init(masks: masks, grid: grid)
-        let start = ContinuousClock.now
-        let built = WalkedTiles.build(walkedIDs: walkedIDs, grid: grid, previous: previous.tiles)
-        tiles = built.tiles
-        pieceIndex = WalkedPieceIndex(tiles: built.tiles)
-        let elapsed = ContinuousClock.now - start
-        let milliseconds = Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1_000
-        let line = "blocks=\(walkedIDs.count) tiles=\(built.tiles.count) rebuiltTiles=\(built.rebuilt) "
-            + "pieces=\(pieceIndex.pieces.count) vertices=\(pieceIndex.vertexCount) runs=\(runs.count) "
-            + "runVertices=\(runs.reduce(0) { $0 + $1.polyline.pointCount }) "
-            + "ms=\(String(format: "%.1f", milliseconds))"
-        WalkedProbe.logger.notice("WALKED_BUILD \(line, privacy: .public)")
+        self.tiles = tiles
+        layer = WalkedLayerIndex(pieces: WalkedPieceIndex(tiles: tiles), runs: WalkedRunIndex(runs: runs))
+        self.piecesVersion = piecesVersion
     }
 
     /// The summary of `masks` against `grid`: a block counts once
     /// `BlockMatcher.isWalked`, and totals are the grid's header counts.
-    init(masks: [UInt32: UInt16], grid: StreetGrid) {
+    /// The tiles are built against `previous` (#119 eng D6): a tile whose
+    /// walked ids did not change keeps its pieces (same `MKPolyline`
+    /// objects), so only changed tiles are walked again.
+    init(masks: [UInt32: UInt16], grid: StreetGrid, previous: WalkedSummary = .empty) {
         var walked: Set<UInt32> = []
         var perBorough: [Borough: Int] = [:]
         for (physicalID, mask) in masks where BlockMatcher.isWalked(mask: mask) {
@@ -89,35 +79,42 @@ nonisolated struct WalkedSummary: Sendable, Equatable {
             walked.insert(physicalID)
             perBorough[grid.borough(for: index), default: 0] += 1
         }
+        let start = ContinuousClock.now
+        let built = WalkedTiles.build(walkedIDs: walked, grid: grid, previous: previous.tiles)
+        let elapsed = ContinuousClock.now - start
         self.init(
             walkedIDs: walked,
             progress: Borough.displayOrder.map {
                 BoroughProgress(borough: $0, walked: perBorough[$0] ?? 0, total: grid.blockCounts[$0] ?? 0)
             },
-            runs: WalkedOverlay.runs(walkedIDs: walked, grid: grid)
+            runs: WalkedOverlay.runs(walkedIDs: walked, grid: grid),
+            tiles: built.tiles
+        )
+        WalkedTrace.build(
+            blocks: walked.count, tiles: built.tiles.count, rebuiltTiles: built.rebuilt,
+            pieces: layer.pieces, elapsed: elapsed
         )
     }
 
     /// This summary with runs that equal one in `previous` replaced by that
-    /// run (same `MKPolyline` object, so MapKit keeps its overlay), and
-    /// `runsVersion` advanced only if the runs changed.
+    /// run (same `MKPolyline` object, so MapKit keeps its overlay), the
+    /// previous indexes kept when nothing changed, and `piecesVersion`
+    /// advanced only if the walked set changed. A changed walked set always
+    /// changes both pieces and runs (each covers exactly the walked blocks).
     func reconciled(with previous: WalkedSummary) -> WalkedSummary {
         var result = self
-        // A changed walked set always changes the runs (their union is the
-        // walked blocks), so the pieces need no version of their own.
-        if runs == previous.runs {
-            result.runIndex = previous.runIndex
-            result.runsVersion = previous.runsVersion
+        if walkedIDs == previous.walkedIDs, runs == previous.runs {
+            result.layer = previous.layer
             result.tiles = previous.tiles
-            result.pieceIndex = previous.pieceIndex
+            result.piecesVersion = previous.piecesVersion
             return result
         }
         let old = Dictionary(previous.runs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        result.runIndex = WalkedRunIndex(runs: runs.map { run in
+        result.layer.runs = WalkedRunIndex(runs: runs.map { run in
             if let kept = old[run.id], kept == run { return kept }
             return run
         })
-        result.runsVersion = previous.runsVersion &+ 1
+        result.piecesVersion = previous.piecesVersion &+ 1
         return result
     }
 }

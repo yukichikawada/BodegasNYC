@@ -35,17 +35,16 @@ final class StreetsWalkedViewModel {
     private(set) var walkedBlockIDs: Set<UInt32> = []
     /// Walked and total blocks per borough, in `Borough.displayOrder`.
     private(set) var boroughProgress: [BoroughProgress] = []
-    /// The walked blocks chained for drawing (eng R3), with their spatial
-    /// index, built off the main actor.
-    private(set) var walkedRunIndex = WalkedRunIndex.empty
-    var walkedRuns: [WalkedRun] { walkedRunIndex.runs }
-    /// #119 Phase 0 probe: the per-tile pieces, replaced with the runs.
-    private(set) var walkedPieceIndex = WalkedPieceIndex.empty
-    /// Bumped whenever the runs are replaced: a cheap change signal for the
-    /// map, which redraws only at camera rest (design D10).
-    private(set) var walkedRunsVersion = 0
-    /// The matcher's `runsVersion` last applied; `nil` after a clear.
-    private var appliedRunsVersion: Int?
+    /// The walked layer's pieces (#119) and the runs that carry the
+    /// breadcrumb dots, with their spatial indexes, built off the main actor.
+    private(set) var walkedLayer = WalkedLayerIndex.empty
+    var walkedRuns: [WalkedRun] { walkedLayer.runs.runs }
+    var walkedPieces: [WalkedPiece] { walkedLayer.pieces.pieces }
+    /// Bumped whenever the layer's geometry is replaced: a cheap change
+    /// signal for the map, which redraws only at camera rest (design D10).
+    private(set) var walkedPiecesVersion = 0
+    /// The matcher's `piecesVersion` last applied; `nil` after a clear.
+    private var appliedPiecesVersion: Int?
     /// Whether any raw fix is stored.
     private(set) var hasHistory = false
     private(set) var countState: CountState = .idle
@@ -217,10 +216,9 @@ final class StreetsWalkedViewModel {
         matcher.invalidate()
         let outcome = await matcher.clearCache()
         walkedBlockIDs = []
-        walkedRunIndex = .empty
-        walkedPieceIndex = .empty
-        walkedRunsVersion += 1
-        appliedRunsVersion = nil
+        walkedLayer = .empty
+        walkedPiecesVersion += 1
+        appliedPiecesVersion = nil
         boroughProgress = boroughProgress.map { BoroughProgress(borough: $0.borough, walked: 0, total: $0.total) }
         if case .updated(let summary, _) = outcome {
             apply(summary)
@@ -309,18 +307,17 @@ final class StreetsWalkedViewModel {
         }
     }
 
-    /// Publishes a summary only when its runs changed: the matcher's
-    /// `runsVersion` (an integer compare on the main actor, never the arrays)
+    /// Publishes a summary only when its geometry changed: the matcher's
+    /// `piecesVersion` (an integer compare on the main actor, never the arrays)
     /// moves exactly when they do, and the walked set and counts move with
     /// them. A catch-up that found nothing new writes no state, so the map's
     /// content is not touched (R3 device check).
     private func apply(_ summary: WalkedSummary) {
-        guard summary.runsVersion != appliedRunsVersion else { return }
-        appliedRunsVersion = summary.runsVersion
+        guard summary.piecesVersion != appliedPiecesVersion else { return }
+        appliedPiecesVersion = summary.piecesVersion
         walkedBlockIDs = summary.walkedIDs
-        walkedRunIndex = summary.runIndex
-        walkedPieceIndex = summary.pieceIndex
-        walkedRunsVersion += 1
+        walkedLayer = summary.layer
+        walkedPiecesVersion += 1
         boroughProgress = summary.progress
     }
 

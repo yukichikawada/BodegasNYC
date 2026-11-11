@@ -203,14 +203,14 @@ nonisolated final class WalkedBlockStore {
         return .merged(changed)
     }
 
-    /// The saved masks as walked blocks, counts and runs. Built once per
-    /// mask change and reconciled with the last one here, off the main
-    /// actor: unchanged runs keep their `MKPolyline` objects and the same
-    /// `runsVersion`, so a catch-up that found nothing new costs the view
-    /// model an integer compare and the map nothing.
+    /// The saved masks as walked blocks, counts, pieces and runs. Built once
+    /// per mask change against the last one here, off the main actor:
+    /// unchanged tiles and runs keep their `MKPolyline` objects and an
+    /// unchanged walked set keeps `piecesVersion`, so a catch-up that found
+    /// nothing new costs the view model an integer compare and the map
+    /// nothing.
     func summary() throws -> WalkedSummary {
         if let cachedSummary { return cachedSummary }
-        // #119 probe: tiles built against the last summary's (eng D6).
         let fresh = WalkedSummary(masks: try loadMasks(), grid: grid, previous: lastSummary)
             .reconciled(with: lastSummary)
         cachedSummary = fresh

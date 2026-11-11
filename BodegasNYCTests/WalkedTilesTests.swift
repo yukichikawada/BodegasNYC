@@ -179,6 +179,15 @@ struct WalkedTilesTests {
         }
         #expect(second.tiles[droppedTile]?.physicalIDs.contains(dropped) == false)
 
+        // Walking the block again rebuilds only its tile.
+        let readded = WalkedTiles.build(walkedIDs: nearIDs.union(farIDs), grid: grid, previous: second.tiles)
+        #expect(readded.rebuilt == 1)
+        #expect(readded.tiles[droppedTile]?.physicalIDs.contains(dropped) == true)
+        for key in second.tiles.keys where key != droppedTile {
+            let before = second.tiles[key]?.pieces ?? [], after = readded.tiles[key]?.pieces ?? []
+            #expect(zip(before, after).allSatisfy { $0.polyline === $1.polyline })
+        }
+
         let cleared = WalkedTiles.build(walkedIDs: nearIDs, grid: grid, previous: second.tiles)
         #expect(cleared.tiles.keys.allSatisfy { !farTiles.contains($0) })
         let empty = WalkedTiles.build(walkedIDs: [], grid: grid, previous: cleared.tiles)
@@ -195,10 +204,10 @@ struct WalkedTilesTests {
         let grid = StreetGrid(segments: lattice)
         let masks = Dictionary(uniqueKeysWithValues: lattice.map { ($0.physicalID, UInt16(0x3FF)) })
         let first = WalkedSummary(masks: masks, grid: grid, previous: .empty).reconciled(with: .empty)
-        #expect(!first.pieceIndex.pieces.isEmpty)
+        #expect(!first.pieces.isEmpty)
         let again = WalkedSummary(masks: masks, grid: grid, previous: first).reconciled(with: first)
-        #expect(again.runsVersion == first.runsVersion)
-        #expect(zip(first.pieceIndex.pieces, again.pieceIndex.pieces).allSatisfy { $0.polyline === $1.polyline })
+        #expect(again.piecesVersion == first.piecesVersion)
+        #expect(zip(first.pieces, again.pieces).allSatisfy { $0.polyline === $1.polyline })
     }
 
     /// protects=culling over pieces' own bounds (eng D5): the pieces meeting
@@ -228,34 +237,25 @@ struct WalkedTilesTests {
 
     /// How far the 0.5 m greedy simplifier lets a drawn line drift from an
     /// interior vertex on a gentle curve: it compares each vertex with the
-    /// segment from the last kept one, so drops accumulate. Measured on this
-    /// seed with today's runs at 1.87 m (block 67889) and with pieces at
-    /// 2.17 m (block 24862), so this is the simplifier's own error, not a
-    /// coverage gap; DS4's per-block simplification is the after-Go fix.
-    static let simplifierDriftMeters = 2.5
+    /// segment from the last kept one, so drops accumulate. On the device
+    /// seed the runs' worst drift is 2.51 m (block 145807, vertex 26), and
+    /// the pieces' is the same vertex at the same 2.51 m (each block is
+    /// simplified once, design DS4). A limit on the simplifier's own error,
+    /// not on coverage; 3 m leaves room for the pieces' second 0.5 m pass.
+    static let simplifierDriftMeters = 3.0
 
-    /// protects=the probe's numbers on real geometry: the first 5,006
-    /// Manhattan blocks of the bundle (the order the #108 seed walk takes)
-    /// as pieces against runs, logged; every walked block's vertices lie
-    /// within the simplifier's drift of a piece of its tile;
-    /// fails_when=a real block (curved, odd endpoints) is not drawn, a
-    /// block is drawn in another tile, or the build throws;
-    /// no_claim=the device seed's exact counts (it is matched from fixes),
-    /// any timing, a cap (Phase 0 measures it on device), or the look
-    /// within 2.5 m (DS4, AC7 after Go).
-    @Test func seedSanityOnTheBundledGrid() throws {
+    /// protects=AC3 on real geometry: on the device seed every walked
+    /// block's vertices lie within the simplifier's drift of a piece of its
+    /// own tile, and every block is in exactly one tile;
+    /// fails_when=a real block (curved, odd endpoints, a merged node) is not
+    /// drawn, a block is drawn in another tile, or the build throws;
+    /// no_claim=device cost, the cap (WalkedPieceCapTests), or the look
+    /// within 2.5 m (AC7, the simulator pixel comparison).
+    @Test func seedBlocksAreAllDrawnInTheirTile() throws {
         let grid = try StreetGrid.loadBundled()
-        let walked = Set((0 ..< grid.segmentCount).lazy.filter { grid.borough(for: $0) == .manhattan }
-            .prefix(5_006).map { grid.physicalIDs[$0] })
+        let walked = Set(WalkedSeedFixture.physicalIDs)
         let tiles = WalkedTiles.build(walkedIDs: walked, grid: grid).tiles
-        let index = WalkedPieceIndex(tiles: tiles)
-        let runs = WalkedOverlay.runs(walkedIDs: walked, grid: grid)
-        let runVertices = runs.reduce(0) { $0 + $1.polyline.pointCount }
-        let report = "seed \(walked.count) blocks: \(tiles.count) tiles, \(index.pieces.count) pieces, "
-            + "\(index.vertexCount) piece vertices; \(runs.count) runs, \(runVertices) run vertices"
-        print(report)
         #expect(tiles.values.reduce(0) { $0 + $1.physicalIDs.count } == walked.count)
-        #expect(index.pieces.count <= runs.count)
         var missing: [String] = []
         for tile in tiles.values {
             for physicalID in tile.physicalIDs {
@@ -269,7 +269,7 @@ struct WalkedTilesTests {
                 }
             }
         }
-        #expect(missing.isEmpty, "\(report); off the pieces: \(missing.prefix(20))")
+        #expect(missing.isEmpty, "off the pieces: \(missing.prefix(20))")
     }
 
     // MARK: Helpers

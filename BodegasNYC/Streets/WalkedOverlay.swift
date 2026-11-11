@@ -1,112 +1,71 @@
 import Foundation
 import MapKit
 
-/// A chain of walked blocks drawn as one `MapPolyline` (#108 eng R3): blocks
-/// that share an endpoint (within 1 m) join, and the run is keyed by its
-/// first block's `physicalid`, so its identity does not depend on position
-/// in a list.
-///
-/// The run builds its `MKPolyline` once, from its coordinates with collinear
-/// interior vertices dropped (`simplified`), and the map draws
-/// `MapPolyline(run.polyline)`. The map's content list then holds one
-/// reference per run instead of a coordinate array that SwiftUI copied and
-/// diffed on every graph update during a gesture (the R3 device trace: 41
-/// hitches up to 1.7 s, mostly memmove and value-witness copies in
-/// `updateGraph`). A run whose geometry did not change keeps its polyline
-/// object, so MapKit keeps its overlay across settles.
-///
-/// `@unchecked Sendable`: `MKPolyline` is never mutated after `init`.
-nonisolated struct WalkedRun: Identifiable, @unchecked Sendable, Equatable {
-    let id: UInt32
-    let coordinates: [Coordinate]
-    let minLatitude: Double
-    let maxLatitude: Double
-    let minLongitude: Double
-    let maxLongitude: Double
-    let polyline: MKPolyline
-
-    init(id: UInt32, coordinates: [Coordinate]) {
-        self.id = id
-        self.coordinates = coordinates
-        minLatitude = coordinates.map(\.latitude).min() ?? 0
-        maxLatitude = coordinates.map(\.latitude).max() ?? 0
-        minLongitude = coordinates.map(\.longitude).min() ?? 0
-        maxLongitude = coordinates.map(\.longitude).max() ?? 0
-        let drawn = WalkedOverlay.simplified(coordinates).map {
-            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-        }
-        polyline = MKPolyline(coordinates: drawn, count: drawn.count)
-    }
-
-    static func == (lhs: WalkedRun, rhs: WalkedRun) -> Bool {
-        lhs.polyline === rhs.polyline || (lhs.id == rhs.id && lhs.coordinates == rhs.coordinates)
-    }
-}
-
-/// What the walked layer draws: the visible runs (or over the cap) and the
+/// What the walked layer draws: the visible pieces (#119) with, at the
+/// breadcrumb bands, the runs that carry the dots, or over the cap; and the
 /// stroke width. It changes only when the camera is at rest (design D10), so
 /// nothing the Map's content reads changes during a pan or pinch (the R3
 /// device trace showed a graph update on every mid-gesture region change).
 nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
-    var visible = WalkedOverlay.Visible.runs([])
+    var visible = WalkedOverlay.Visible.empty
     var lineWidth = WalkedOverlay.widestBeyond
+    /// Whether the piece/vertex cap hid the layer at the last settle: the
+    /// state DS2's hysteresis reads. Kept apart from the dots' run cap, so a
+    /// breadcrumb view hidden by 500+ dot runs does not make the next line
+    /// view clear the stricter 10%-under bar.
+    var isHiddenByPieceCap = false
 
     /// Recomputes for the current data and settled camera. While the camera
     /// moves it does nothing; the settle that ends the gesture calls it
-    /// again. Culling reads the spatial index, so the cost follows the cells
-    /// in view. Returns whether anything the map draws changed; when nothing
-    /// did, the caller writes no state and the Map's content is not touched.
+    /// again. Culling reads the spatial indexes, so the cost follows the
+    /// cells in view. Returns whether anything the map draws changed; when
+    /// nothing did, the caller writes no state and the Map's content is not
+    /// touched.
+    ///
+    /// The cap (#119 eng D9, design DS2): over `maxDrawnPieces` pieces or
+    /// `maxDrawnVertices` vertices the whole layer hides, never a subset.
+    /// A drawing layer hides only once a count is 10% over its cap; a
+    /// hidden one draws again only once both are 10% under. At the
+    /// breadcrumb bands the dots' runs keep #154's 500-run cap.
     @discardableResult
     mutating func refresh(
-        index: WalkedRunIndex,
+        index: WalkedLayerIndex,
         showsOverlay: Bool,
         region: WalkedRegion?,
         visibleHeightMeters: Double?,
-        isCameraMoving: Bool,
-        pieceIndex: WalkedPieceIndex? = nil,
-        probeMode: WalkedProbe.Mode = .pieces
+        isCameraMoving: Bool
     ) -> Bool {
         guard !isCameraMoving else { return false }
         let before = self
         if let visibleHeightMeters {
             lineWidth = WalkedOverlay.lineWidth(visibleHeightMeters: visibleHeightMeters, current: lineWidth)
         }
-        if showsOverlay, let region, let pieceIndex {
-            visible = Self.probeVisible(
-                runs: index, pieces: pieceIndex, region: region, lineWidth: lineWidth, mode: probeMode
+        if showsOverlay, let region {
+            let next = WalkedOverlay.visibleAndCap(
+                index: index, in: region, style: WalkedOverlay.trailStyle(width: lineWidth),
+                wasHidden: isHiddenByPieceCap
             )
-        } else if showsOverlay, let region {
-            // The cap follows the settled width's style (#154 eng D8).
-            let cap = WalkedOverlay.maxVisibleRuns(for: WalkedOverlay.trailStyle(width: lineWidth))
-            visible = index.visible(in: region, cap: cap)
+            visible = next.visible
+            isHiddenByPieceCap = next.piecesOverCap
         } else {
-            visible = .runs([])
+            // Nothing to draw resets the cap state (design DS6: Show on Map
+            // off and on redraws with no card flash).
+            visible = .empty
+            isHiddenByPieceCap = false
         }
         return self != before
     }
+}
 
-    /// #119 Phase 0: what the probe draws, with no cap (spec Phase 0 step 4).
-    /// `piecesDotsOnRuns` adds the runs for the dots only at the breadcrumb
-    /// bands, so a line-band settle compares equal to the `pieces` mode.
-    static func probeVisible(
-        runs: WalkedRunIndex,
-        pieces: WalkedPieceIndex,
-        region: WalkedRegion,
-        lineWidth: Double,
-        mode: WalkedProbe.Mode
-    ) -> WalkedOverlay.Visible {
-        switch mode {
-        case .runs:
-            return runs.visible(in: region, cap: .max)
-        case .pieces:
-            return .pieces(pieces.visible(in: region), dotRuns: nil)
-        case .piecesDotsOnRuns:
-            guard case .breadcrumbs = WalkedOverlay.trailStyle(width: lineWidth),
-                  case .runs(let dotRuns) = runs.visible(in: region, cap: .max)
-            else { return .pieces(pieces.visible(in: region), dotRuns: nil) }
-            return .pieces(pieces.visible(in: region), dotRuns: dotRuns)
-        }
-    }
+/// The two spatial indexes the walked layer culls (#119): the pieces, which
+/// carry every line and the breadcrumb track, and the runs, which carry the
+/// breadcrumb dots (owner decision 2026-11-10). Built together off the main
+/// actor from the same walked set.
+nonisolated struct WalkedLayerIndex: Sendable, Equatable {
+    var pieces: WalkedPieceIndex
+    var runs: WalkedRunIndex
+
+    static let empty = WalkedLayerIndex(pieces: .empty, runs: .empty)
 }
 
 /// A settled camera's visible region as plain numbers, so the overlay's
@@ -118,34 +77,77 @@ nonisolated struct WalkedRegion: Sendable, Equatable {
     var longitudeDelta: Double
 }
 
-/// The overlay's pure rules (#108 spec Implementation 6, eng R3, design D2/D3).
+/// The overlay's pure rules (#108 spec Implementation 6, eng R3, design
+/// D2/D3; #119).
 nonisolated enum WalkedOverlay {
-    /// More visible runs than this and the whole layer hides (design D3).
-    ///
-    /// 1,000, lowered from the spec's 2,000 after the R3 device check (eng R3
-    /// allows lowering on a measurement): views holding 1,087 to 2,000 runs
-    /// hitched up to 1.7 s on an iPhone 17 Pro Max. With runs now chained
-    /// straight through junctions, the 5,000-block QA seed is 581 runs in
-    /// all and at most 381 in a 4 km view, and all of Manhattan walked holds
-    /// at most 675 in an 8 km view, so 1,000 draws every Manhattan view and
-    /// hides only near-citywide views of far larger histories (D3's card).
-    static let maxVisibleRuns = 1_000
-
-    /// The cap for a trail style (#154 eng D8): breadcrumbs draw two
-    /// polylines a run (track and dots), so they hide past 500 runs and the
-    /// polylines drawn never exceed the measured 1,000; a line keeps 1,000.
-    static func maxVisibleRuns(for style: TrailStyle) -> Int {
-        switch style {
-        case .breadcrumbs: maxVisibleRuns / 2
-        case .line: maxVisibleRuns
-        }
-    }
     /// The region is expanded by this fraction of its span on each side.
     static let regionMargin = 0.25
     static let joinToleranceMeters = 1.0
     /// An interior vertex within this of the line through its neighbours is
     /// dropped from the drawn polyline: well under a point at the 8pt zoom.
     static let simplifyToleranceMeters = 0.5
+
+    /// What the map draws at a settled camera.
+    nonisolated enum Visible: Sendable, Equatable {
+        /// The pieces in view, in id order; `dotRuns` are the runs in view
+        /// at the breadcrumb bands (empty at the line bands).
+        case pieces([WalkedPiece], dotRuns: [WalkedRun])
+        /// Over the cap: draw nothing and say "Zoom in to see your blocks."
+        case overCap
+
+        static let empty = Visible.pieces([], dotRuns: [])
+    }
+
+    // MARK: Cap (#119 eng D9, design DS1/DS2)
+
+    /// More drawn piece vertices than this and the layer hides. Phase 0 on
+    /// the owner's iPhone 17 Pro Max (2026-11-10): all of Manhattan in view
+    /// on the 5,006-block seed drew 93 pieces, 9,616 vertices, in 22 to 23 ms
+    /// of overlay work against 68 to 70 ms for main's 593 runs; rounded down
+    /// to a multiple of 1,000. No higher count was measured.
+    static let maxDrawnVertices = 9_000
+    /// More drawn pieces than this and the layer hides. Phase 0 drew at most
+    /// 93; 1,000 is the overlay count #108's R3 device check measured as
+    /// smooth, and the floor design DS1 sets (1,000 isolated pieces draw).
+    static let maxDrawnPieces = 1_000
+    /// Design DS2: hide only 10% over a cap, show again only 10% under both.
+    static let capHysteresis = 0.10
+    /// #154 eng D8, kept for the dots: a breadcrumb run is one dot polyline
+    /// over a track on the pieces, and the layer hides past 500 dot runs, as
+    /// it did before #119.
+    static let maxDotRuns = 500
+
+    /// Whether `pieces` and `vertices` are over the cap, given whether the
+    /// layer is hidden now (design DS2).
+    static func isOverCap(pieces: Int, vertices: Int, wasHidden: Bool) -> Bool {
+        let factor = wasHidden ? 1 - capHysteresis : 1 + capHysteresis
+        return Double(pieces) > Double(maxDrawnPieces) * factor
+            || Double(vertices) > Double(maxDrawnVertices) * factor
+    }
+
+    /// The pieces (and at the breadcrumb bands the dot runs) for `region`, or
+    /// `overCap`. Never a subset; an empty index is nothing to draw, never
+    /// over the cap (design DS6).
+    static func visible(index: WalkedLayerIndex, in region: WalkedRegion, style: TrailStyle, wasHidden: Bool) -> Visible {
+        visibleAndCap(index: index, in: region, style: style, wasHidden: wasHidden).visible
+    }
+
+    /// `visible(...)` and whether the piece/vertex cap is what hid it.
+    static func visibleAndCap(
+        index: WalkedLayerIndex,
+        in region: WalkedRegion,
+        style: TrailStyle,
+        wasHidden: Bool
+    ) -> (visible: Visible, piecesOverCap: Bool) {
+        let pieces = index.pieces.visible(in: region)
+        let vertices = pieces.reduce(0) { $0 + $1.vertexCount }
+        guard !isOverCap(pieces: pieces.count, vertices: vertices, wasHidden: wasHidden) else { return (.overCap, true) }
+        guard case .breadcrumbs = style else { return (.pieces(pieces, dotRuns: []), false) }
+        guard let dotRuns = index.runs.visible(in: region, cap: maxDotRuns) else { return (.overCap, false) }
+        return (.pieces(pieces, dotRuns: dotRuns), false)
+    }
+
+    // MARK: Simplification
 
     /// `coordinates` without collinear interior vertices: a vertex is kept
     /// only if it sits more than `simplifyToleranceMeters` off the segment
@@ -179,59 +181,19 @@ nonisolated enum WalkedOverlay {
         return (nearestX * nearestX + nearestY * nearestY).squareRoot()
     }
 
-    /// What the map draws at a settled camera.
-    nonisolated enum Visible: Sendable, Equatable {
-        case runs([WalkedRun])
-        /// #119 Phase 0 probe: per-tile pieces, uncapped. `dotRuns` is set
-        /// only in the probe's `piecesDotsOnRuns` mode at the breadcrumb
-        /// bands, where the dots stay on runs (see `WalkedProbe`).
-        case pieces([WalkedPiece], dotRuns: [WalkedRun]?)
-        /// Over the cap: draw nothing and say "Zoom in to see your blocks."
-        case overCap
-    }
-
-    // MARK: Runs
-
-    /// Chains the walked blocks into runs. Two blocks continue each other
-    /// at a shared endpoint when they are the only two walked blocks there,
-    /// or, at a junction, when each is the other's straightest continuation
-    /// within `straightThroughDegrees` (an avenue walked across its cross
-    /// streets is one run, not one per block). Deterministic: runs start at
-    /// ends with no continuation, visiting blocks in `physicalid` order, then
-    /// closed loops from their lowest id.
-    static func runs(walkedIDs: Set<UInt32>, grid: StreetGrid) -> [WalkedRun] {
-        let indices = walkedIDs.sorted().compactMap { grid.index(ofPhysicalID: $0) }
-        guard !indices.isEmpty else { return [] }
-        let chainer = RunChainer(polylines: indices.map { grid.polyline(for: $0) }, tolerance: joinToleranceMeters)
-        return chainer.chains().map { chain in
-            WalkedRun(id: grid.physicalIDs[indices[chain.first]], coordinates: chain.coordinates)
-        }
-    }
-
-    /// The largest turn a run takes straight through a junction.
-    static let straightThroughDegrees = 30.0
-
     // MARK: Culling
-
-    /// The runs whose bounding box meets the region expanded by 25% of its
-    /// span on each side, or `overCap` past `maxVisibleRuns` (never a partial
-    /// subset). Scans every run: the reference for `WalkedRunIndex`, which
-    /// the map uses.
-    static func visible(_ runs: [WalkedRun], in region: WalkedRegion, cap: Int = maxVisibleRuns) -> Visible {
-        let bounds = expandedBounds(region)
-        var kept: [WalkedRun] = []
-        for run in runs where meets(run, bounds) {
-            kept.append(run)
-            if kept.count > cap { return .overCap }
-        }
-        return .runs(kept)
-    }
 
     struct Bounds {
         var minLatitude: Double
         var maxLatitude: Double
         var minLongitude: Double
         var maxLongitude: Double
+
+        /// Whether a box meets these bounds (edges touching count).
+        func meets(minLatitude: Double, maxLatitude: Double, minLongitude: Double, maxLongitude: Double) -> Bool {
+            maxLatitude >= self.minLatitude && minLatitude <= self.maxLatitude
+                && maxLongitude >= self.minLongitude && minLongitude <= self.maxLongitude
+        }
     }
 
     /// The region expanded by `regionMargin` of its span on each side.
@@ -247,8 +209,17 @@ nonisolated enum WalkedOverlay {
     }
 
     static func meets(_ run: WalkedRun, _ bounds: Bounds) -> Bool {
-        run.maxLatitude >= bounds.minLatitude && run.minLatitude <= bounds.maxLatitude
-            && run.maxLongitude >= bounds.minLongitude && run.minLongitude <= bounds.maxLongitude
+        bounds.meets(
+            minLatitude: run.minLatitude, maxLatitude: run.maxLatitude,
+            minLongitude: run.minLongitude, maxLongitude: run.maxLongitude
+        )
+    }
+
+    static func meets(_ piece: WalkedPiece, _ bounds: Bounds) -> Bool {
+        bounds.meets(
+            minLatitude: piece.minLatitude, maxLatitude: piece.maxLatitude,
+            minLongitude: piece.minLongitude, maxLongitude: piece.maxLongitude
+        )
     }
 
     // MARK: Stroke width (design D2)
@@ -257,9 +228,16 @@ nonisolated enum WalkedOverlay {
     /// above that 2pt. Leaving a band takes 10% more height than entering it.
     /// Visible height is `MapScreenView.visibleHeightMeters`, not the full
     /// screen (#113).
-    static let widthBands: [(maxHeight: Double, width: Double)] = [(400, 8), (2_000, 5), (8_000, 3)]
+    static let widthBands: [WidthBand] = [
+        WidthBand(maxHeight: 400, width: 8), WidthBand(maxHeight: 2_000, width: 5), WidthBand(maxHeight: 8_000, width: 3)
+    ]
     static let widestBeyond = 2.0
     static let hysteresis = 0.10
+
+    struct WidthBand {
+        let maxHeight: Double
+        let width: Double
+    }
 
     static func lineWidth(visibleHeightMeters height: Double, current: Double?) -> Double {
         let entered = widthBands.first { height <= $0.maxHeight }?.width ?? widestBeyond
@@ -291,165 +269,5 @@ nonisolated enum WalkedOverlay {
             spacing: min(width * 2.6, 16),
             track: min(width * 2.8, 16)
         )
-    }
-}
-
-/// Block endpoints as shared nodes: endpoints within the tolerance are one
-/// node. `nodeOf[block]` is the block's start and end node, `incident[node]`
-/// the blocks that end there.
-///
-/// `sortedInsertion` (#119 eng D8, `WalkedTiles`): endpoints are inserted in
-/// (latitude, longitude, block) order rather than block order, and an
-/// endpoint within the tolerance of several nodes joins the lowest-index
-/// one, so the merge does not depend on scan order. `incident[node]` is then
-/// in ascending block order. The runs keep the original insertion.
-nonisolated struct EndpointGraph {
-    private(set) var nodeOf: [[Int]] = []
-    private(set) var incident: [[Int]] = []
-    private var nodePoints: [Coordinate] = []
-    private var buckets: [Int64: [Int]] = [:]
-    private let tolerance: Double
-    private let lowestWins: Bool
-
-    var nodeCount: Int { nodePoints.count }
-
-    init(_ polylines: [[Coordinate]], tolerance: Double, sortedInsertion: Bool = false) {
-        self.tolerance = tolerance
-        lowestWins = sortedInsertion
-        guard sortedInsertion else {
-            for (block, line) in polylines.enumerated() {
-                let ends = [node(for: line[0]), node(for: line[line.count - 1])]
-                nodeOf.append(ends)
-                for end in ends {
-                    while incident.count <= end { incident.append([]) }
-                    incident[end].append(block)
-                }
-            }
-            return
-        }
-        var endpoints: [(point: Coordinate, block: Int, end: Int)] = []
-        endpoints.reserveCapacity(polylines.count * 2)
-        for (block, line) in polylines.enumerated() {
-            endpoints.append((line[0], block, 0))
-            endpoints.append((line[line.count - 1], block, 1))
-        }
-        endpoints.sort {
-            ($0.point.latitude, $0.point.longitude, $0.block, $0.end)
-                < ($1.point.latitude, $1.point.longitude, $1.block, $1.end)
-        }
-        nodeOf = [[Int]](repeating: [0, 0], count: polylines.count)
-        for endpoint in endpoints {
-            nodeOf[endpoint.block][endpoint.end] = node(for: endpoint.point)
-        }
-        incident = [[Int]](repeating: [], count: nodePoints.count)
-        for block in polylines.indices {
-            for end in nodeOf[block] { incident[end].append(block) }
-        }
-    }
-
-    private mutating func node(for point: Coordinate) -> Int {
-        // Cells as wide as the tolerance, so a match is in the 3x3 around.
-        let row = Int((point.latitude * StreetGrid.metersPerDegreeLatitude / tolerance).rounded(.down))
-        let column = Int((point.longitude * 84_400 / tolerance).rounded(.down))
-        var lowest: Int?
-        for rowOffset in -1 ... 1 {
-            for columnOffset in -1 ... 1 {
-                for candidate in buckets[Self.key(row + rowOffset, column + columnOffset)] ?? []
-                where BlockMatcher.distance(nodePoints[candidate], point) <= tolerance {
-                    guard lowestWins else { return candidate }
-                    lowest = min(lowest ?? candidate, candidate)
-                }
-            }
-        }
-        if let lowest { return lowest }
-        nodePoints.append(point)
-        buckets[Self.key(row, column), default: []].append(nodePoints.count - 1)
-        return nodePoints.count - 1
-    }
-
-    private static func key(_ row: Int, _ column: Int) -> Int64 {
-        Int64(row) << 32 | Int64(UInt32(bitPattern: Int32(truncatingIfNeeded: column)))
-    }
-}
-
-/// Pairs walked blocks at shared endpoints and walks the pairs into chains
-/// (`WalkedOverlay.runs`).
-nonisolated private struct RunChainer {
-    let polylines: [[Coordinate]]
-    let graph: EndpointGraph
-
-    init(polylines: [[Coordinate]], tolerance: Double) {
-        self.polylines = polylines
-        graph = EndpointGraph(polylines, tolerance: tolerance)
-    }
-
-    func chains() -> [(first: Int, coordinates: [Coordinate])] {
-        var visited = [Bool](repeating: false, count: polylines.count)
-        var result: [(first: Int, coordinates: [Coordinate])] = []
-        func walk(from first: Int, startNode: Int) {
-            var coordinates: [Coordinate] = []
-            var block = first
-            var entry = startNode
-            while true {
-                visited[block] = true
-                let forward = graph.nodeOf[block][0] == entry
-                let line = forward ? polylines[block] : polylines[block].reversed()
-                coordinates.append(contentsOf: coordinates.isEmpty ? line[...] : line.dropFirst())
-                let exit = forward ? graph.nodeOf[block][1] : graph.nodeOf[block][0]
-                guard let next = partner(of: block, at: exit), !visited[next] else { break }
-                block = next
-                entry = exit
-            }
-            result.append((first, coordinates))
-        }
-        for block in polylines.indices where !visited[block] {
-            for end in 0 ... 1 where !visited[block] && partner(of: block, at: graph.nodeOf[block][end]) == nil {
-                walk(from: block, startNode: graph.nodeOf[block][end])
-            }
-        }
-        for block in polylines.indices where !visited[block] {
-            walk(from: block, startNode: graph.nodeOf[block][0])
-        }
-        return result
-    }
-
-    /// The block that continues `block` through `node`, if any: the other one
-    /// when exactly two meet there, else the mutual straightest continuation.
-    func partner(of block: Int, at node: Int) -> Int? {
-        let others = graph.incident[node].filter { $0 != block }
-        if graph.incident[node].count == 2 { return others.first }
-        guard let best = straightest(from: block, at: node, among: others) else { return nil }
-        let back = straightest(from: best, at: node, among: graph.incident[node].filter { $0 != best })
-        return back == block ? best : nil
-    }
-
-    private func straightest(from block: Int, at node: Int, among candidates: [Int]) -> Int? {
-        let arriving = direction(of: block, at: node, leaving: false)
-        var best: (block: Int, cosine: Double)?
-        let threshold = cos(WalkedOverlay.straightThroughDegrees * .pi / 180)
-        for candidate in candidates {
-            let leaving = direction(of: candidate, at: node, leaving: true)
-            let cosine = arriving.0 * leaving.0 + arriving.1 * leaving.1
-            if cosine >= threshold, cosine > (best?.cosine ?? -2) { best = (candidate, cosine) }
-        }
-        return best?.block
-    }
-
-    /// A unit vector along `block` at `node`: pointing into the node when
-    /// arriving, away from it when leaving.
-    private func direction(of block: Int, at node: Int, leaving: Bool) -> (Double, Double) {
-        let line = polylines[block]
-        let atStart = graph.nodeOf[block][0] == node
-        let end = atStart ? line[0] : line[line.count - 1]
-        let inner = atStart ? line[min(1, line.count - 1)] : line[max(0, line.count - 2)]
-        let scaleX = cos(end.latitude * .pi / 180)
-        var deltaX = (inner.longitude - end.longitude) * scaleX
-        var deltaY = inner.latitude - end.latitude
-        if !leaving {
-            deltaX = -deltaX
-            deltaY = -deltaY
-        }
-        let length = (deltaX * deltaX + deltaY * deltaY).squareRoot()
-        return length > 0 ? (deltaX / length, deltaY / length) : (0, 0)
     }
 }

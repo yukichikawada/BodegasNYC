@@ -39,43 +39,37 @@ nonisolated struct WalkedRunIndex: Sendable, Equatable {
         columnRange = runs.isEmpty ? 0 ... 0 : minColumn ... maxColumn
     }
 
-    /// What the map draws for `region`: the runs whose bounding box meets
-    /// the region expanded by 25% on each side, in run order, or `overCap`
-    /// past `cap` (`WalkedOverlay.maxVisibleRuns` unless the trail style
-    /// lowers it, #154 D8). Same answer as `WalkedOverlay.visible(_:in:cap:)`,
-    /// which scans every run.
-    func visible(in region: WalkedRegion, cap: Int = WalkedOverlay.maxVisibleRuns) -> WalkedOverlay.Visible {
+    /// The runs whose bounding box meets the region expanded by 25% on each
+    /// side, in run order, or nil past `cap` (never a partial subset). Same
+    /// answer as `WalkedOverlay.visibleRuns(_:in:cap:)`, which scans every
+    /// run. Since #119 the map reads it only for the breadcrumb dots.
+    func visible(in region: WalkedRegion, cap: Int = WalkedOverlay.maxDotRuns) -> [WalkedRun]? {
         query(region, cap: cap).visible
     }
 
     /// `visible(in:)` plus how many index entries it examined (tests: the
     /// cost follows the cells in view, not the total).
-    func query(
-        _ region: WalkedRegion,
-        cap: Int = WalkedOverlay.maxVisibleRuns
-    ) -> (visible: WalkedOverlay.Visible, examined: Int) {
-        guard !runs.isEmpty else { return (.runs([]), 0) }
+    func query(_ region: WalkedRegion, cap: Int = WalkedOverlay.maxDotRuns) -> (visible: [WalkedRun]?, examined: Int) {
+        guard !runs.isEmpty else { return ([], 0) }
         let bounds = WalkedOverlay.expandedBounds(region)
         let firstRow = max(rowRange.lowerBound, Self.row(bounds.minLatitude))
         let lastRow = min(rowRange.upperBound, Self.row(bounds.maxLatitude))
         let firstColumn = max(columnRange.lowerBound, Self.column(bounds.minLongitude))
         let lastColumn = min(columnRange.upperBound, Self.column(bounds.maxLongitude))
-        guard firstRow <= lastRow, firstColumn <= lastColumn else { return (.runs([]), 0) }
-        let rows = firstRow ... lastRow
-        let columns = firstColumn ... lastColumn
+        guard firstRow <= lastRow, firstColumn <= lastColumn else { return ([], 0) }
         var kept = Set<Int32>()
         var examined = 0
-        for row in rows {
-            for column in columns {
+        for row in firstRow ... lastRow {
+            for column in firstColumn ... lastColumn {
                 for index in cells[Self.key(row, column)] ?? [] {
                     examined += 1
                     guard !kept.contains(index), WalkedOverlay.meets(runs[Int(index)], bounds) else { continue }
                     kept.insert(index)
-                    if kept.count > cap { return (.overCap, examined) }
+                    if kept.count > cap { return (nil, examined) }
                 }
             }
         }
-        return (.runs(kept.sorted().map { runs[Int($0)] }), examined)
+        return (kept.sorted().map { runs[Int($0)] }, examined)
     }
 
     static func == (lhs: WalkedRunIndex, rhs: WalkedRunIndex) -> Bool {
