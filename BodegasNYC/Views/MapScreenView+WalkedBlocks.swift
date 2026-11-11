@@ -68,8 +68,10 @@ extension MapScreenView {
         // (#126 eng).
         streetsWalkedIntro(
             content
-                .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
-                .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
+                .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) {
+                    refreshWalkedOverlay(proxy, reason: "data")
+                }
+                .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy, reason: "toggle") }
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active, scene: streetsSceneToken)
                 }
@@ -88,7 +90,7 @@ extension MapScreenView {
     /// settle costs what is in view, not the whole history. The write is
     /// plain, never in an animated transaction: MapKit applies `MapPolyline`
     /// changes within a frame either way (design D10, #113).
-    func refreshWalkedOverlay(_ proxy: MapProxy) {
+    func refreshWalkedOverlay(_ proxy: MapProxy, reason: String = "settle") {
         guard let streetsWalkedViewModel else { return }
         // The bands read the level-equivalent height (#156 spec D3); the
         // culling keeps MapKit's region, so a pitched view draws every run up
@@ -103,6 +105,18 @@ extension MapScreenView {
             visibleHeightMeters: height,
             isCameraMoving: isCameraMoving
         )
+        // #119 device A/B trace: read-only, never changes what is drawn.
+        if !isCameraMoving {
+            WalkedTrace.record(WalkedTrace.Settle(
+                reason: reason,
+                mode: "cull",
+                changed: changed,
+                counts: WalkedTrace.counts(next, drawsTrack: colorSchemeContrast != .increased),
+                lineWidth: next.lineWidth,
+                heightMeters: height,
+                center: lastVisibleRegion.map { Coordinate($0.center) }
+            ))
+        }
         guard changed else { return }
         walkedDisplay = next
     }
