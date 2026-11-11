@@ -3,6 +3,7 @@ import Foundation
 import MapKit
 import os
 import QuartzCore
+import SwiftUI
 
 /// Signposts and log lines for measuring the walked layer on a device
 /// (#119 eng D2-D4, the device A/B; not for merge). Read-only: it counts
@@ -89,6 +90,21 @@ nonisolated enum WalkedTrace {
                 "WALKED_SETTLE \(line, privacy: .public) applyMs=\(milliseconds, format: .fixed(precision: 1))"
             )
         }
+    }
+
+    /// DEBUG only, simulator checks: `-WalkedLaunchCamera "<lat>,<lon>,<m>"`
+    /// starts the map on a level camera there. Release builds ignore it.
+    static var launchCamera: MapCameraPosition? {
+        #if DEBUG
+        guard let value = UserDefaults.standard.string(forKey: "WalkedLaunchCamera") else { return nil }
+        let parts = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        guard parts.count == 3 else { return nil }
+        return .camera(MapCamera(
+            centerCoordinate: CLLocationCoordinate2D(latitude: parts[0], longitude: parts[1]), distance: parts[2]
+        ))
+        #else
+        return nil
+        #endif
     }
 
     /// Calls `done` with the milliseconds since `start`, from a main run

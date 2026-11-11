@@ -47,6 +47,9 @@ nonisolated extension UITestFixtures {
     /// "Manhattan, 1 of 9,300 blocks, less than 1 percent."
     /// (`YourBlocksTests` checks that against the bundle).
     static func walkedBlockFixture(grid: StreetGrid, now: Date) -> [WalkedPointSnapshot] {
+        if let count = UserDefaults.standard.string(forKey: "UITestWalkedBlockCount").flatMap(Int.init) {
+            return manyWalkedBlocks(count, grid: grid, now: now)
+        }
         guard let index = (0 ..< grid.segmentCount).first(where: {
             grid.borough(for: $0) == .manhattan && (80 ... 200).contains(grid.length(of: $0))
         }) else { return [] }
@@ -71,6 +74,50 @@ nonisolated extension UITestFixtures {
         }
         let start = now.addingTimeInterval(-3_600 - elapsed)
         return timed.map { WalkedPointSnapshot(coordinate: $0.0, recordedAt: start.addingTimeInterval($0.1)) }
+    }
+
+    /// #119 probe, simulator checks: `-UITestWalkedBlockCount N` walks the
+    /// N Manhattan blocks nearest the `-WalkedLaunchCamera` centre (else
+    /// Washington Square), each end to end at 1.4 m/s, fixes at most 10 m
+    /// apart, with a 0.1 s hop between blocks (too fast to credit).
+    static func manyWalkedBlocks(_ count: Int, grid: StreetGrid, now: Date) -> [WalkedPointSnapshot] {
+        let parts = (UserDefaults.standard.string(forKey: "WalkedLaunchCamera") ?? "")
+            .split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
+        let center = parts.count >= 2
+            ? Coordinate(latitude: parts[0], longitude: parts[1])
+            : Coordinate(latitude: 40.7308, longitude: -73.9973)
+        func middle(_ line: [Coordinate]) -> Coordinate {
+            Coordinate(
+                latitude: (line[0].latitude + line[line.count - 1].latitude) / 2,
+                longitude: (line[0].longitude + line[line.count - 1].longitude) / 2
+            )
+        }
+        let nearest = (0 ..< grid.segmentCount)
+            .filter { grid.borough(for: $0) == .manhattan }
+            .map { ($0, BlockMatcher.distance(middle(grid.polyline(for: $0)), center)) }
+            .sorted { $0.1 < $1.1 }
+            .prefix(count)
+        var fixes: [(Coordinate, TimeInterval)] = []
+        var elapsed: TimeInterval = 0
+        for (index, _) in nearest {
+            let vertices = grid.polyline(for: index)
+            if !fixes.isEmpty { elapsed += 0.1 }
+            fixes.append((vertices[0], elapsed))
+            for (start, end) in zip(vertices, vertices.dropFirst()) {
+                let meters = BlockMatcher.distance(start, end)
+                let steps = max(1, Int((meters / 10).rounded(.up)))
+                for step in 1 ... steps {
+                    let fraction = Double(step) / Double(steps)
+                    elapsed += meters / Double(steps) / 1.4
+                    fixes.append((Coordinate(
+                        latitude: start.latitude + (end.latitude - start.latitude) * fraction,
+                        longitude: start.longitude + (end.longitude - start.longitude) * fraction
+                    ), elapsed))
+                }
+            }
+        }
+        let start = now.addingTimeInterval(-3_600 - elapsed)
+        return fixes.map { WalkedPointSnapshot(coordinate: $0.0, recordedAt: start.addingTimeInterval($0.1)) }
     }
 }
 #endif
