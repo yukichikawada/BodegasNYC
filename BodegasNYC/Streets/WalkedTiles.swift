@@ -117,7 +117,8 @@ nonisolated enum WalkedTiles {
     static func build(
         walkedIDs: Set<UInt32>,
         grid: StreetGrid,
-        previous: [Int64: Tile] = [:]
+        previous: [Int64: Tile] = [:],
+        variant: String = WalkedExperiment.variant
     ) -> (tiles: [Int64: Tile], rebuilt: Int) {
         var byTile: [Int64: [UInt32]] = [:]
         for physicalID in walkedIDs {
@@ -131,7 +132,7 @@ nonisolated enum WalkedTiles {
             if let kept = previous[key], kept.physicalIDs == ids {
                 tiles[key] = kept
             } else {
-                tiles[key] = Tile(physicalIDs: ids, pieces: pieces(tile: key, physicalIDs: ids, grid: grid))
+                tiles[key] = Tile(physicalIDs: ids, pieces: pieces(tile: key, physicalIDs: ids, grid: grid, variant: variant))
                 rebuilt += 1
             }
         }
@@ -145,26 +146,23 @@ nonisolated enum WalkedTiles {
     /// joined walk is simplified once more (it can only drop vertices within
     /// 0.5 m of the line kept) and cut into parts of at most
     /// `maxPieceVertices` (eng D10).
-    static func pieces(tile: Int64, physicalIDs: [UInt32], grid: StreetGrid) -> [WalkedPiece] {
+    static func pieces(
+        tile: Int64, physicalIDs: [UInt32], grid: StreetGrid, variant: String = WalkedExperiment.variant
+    ) -> [WalkedPiece] {
         let polylines = physicalIDs.compactMap { grid.index(ofPhysicalID: $0).map(grid.polyline(for:)) }
         guard polylines.count == physicalIDs.count else { return [] }
         let simplified = polylines.map(WalkedOverlay.simplified)
-        return walks(polylines: polylines).flatMap { steps in
-            let lowest = steps.map { physicalIDs[$0.block] }.min() ?? 0
-            // A second 0.5 m pass over the joined walk drops the vertices
-            // left where the walk runs straight through a junction (11,801
-            // vertices on the device seed after the per-block pass, 9,624
-            // after this one; the whole walk simplified once gave 9,616).
-            let walk = WalkedOverlay.simplified(coordinates(of: steps, polylines: simplified))
-            let parts = split(walk)
-            return parts.enumerated().map { part, coordinates in
-                WalkedPiece(
-                    id: WalkedPieceID(tile: tile, lowestPhysicalID: lowest, part: UInt16(clamping: part)),
-                    coordinates: coordinates
-                )
+        // Experiment: parts per patch by variant; ids by patch index then part.
+        return WalkedExperiment.parts(polylines: polylines, simplified: simplified, variant: variant)
+            .enumerated().flatMap { patch, parts in
+                parts.enumerated().map { part, coordinates in
+                    WalkedPiece(
+                        id: WalkedPieceID(tile: tile, lowestPhysicalID: UInt32(patch), part: UInt16(clamping: part)),
+                        coordinates: coordinates
+                    )
+                }
             }
-        }
-        .sorted { $0.id < $1.id }
+            .sorted { $0.id < $1.id }
     }
 
     /// The most vertices one piece holds (eng D10, design DS10): a longer

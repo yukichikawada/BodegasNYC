@@ -23,9 +23,18 @@ extension MapScreenView {
                     // The piece's cached `MKPolyline`: a reference in the
                     // content list, not a coordinate array copied on every
                     // graph update.
-                    MapPolyline(piece.polyline)
-                        .stroke(Color.walked, style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
+                    let join: CGLineJoin = WalkedExperiment.miterJoin ? .miter : .round
+                    if WalkedExperiment.fromCoordinates {
+                        MapPolyline(coordinates: piece.coordinates.map {
+                            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+                        })
+                        .stroke(Color.walked, style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: join))
                         .mapOverlayLevel(level: .aboveRoads)
+                    } else {
+                        MapPolyline(piece.polyline)
+                            .stroke(Color.walked, style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: join))
+                            .mapOverlayLevel(level: .aboveRoads)
+                    }
                 }
             case .breadcrumbs(let dot, let spacing, let track):
                 // Two passes (#154 eng D3): every track first, then every
