@@ -117,7 +117,7 @@ components:
       menu: "centre, below 400pt, or from .xLarge below 540pt"
       toggle: "trailing, 540pt and up: destination glyph + text, one tap"
     switchColor: label           # the glass default; no tint
-    scrollEdgeEffect: "List tab only; the map's top edge is clear at every width"   # met on iOS 26; the iOS 27.2 nav-bar band is #166
+    scrollEdgeEffect: "List tab only; the map's top edge is clear at every width"   # met on iOS 26; on iOS 27 the band at the top of the map is MapKit's own edge effect, no public API removes it, re-check each 27.x seed (#166)
   map-controls:                  # #156 DS7; MapKit's own glass controls, nothing joins the toolbar
     controls: "MapCompass + MapPitchToggle (.mapControls)"
     placement: "MapKit's top-trailing corner inside the map, under the glass toolbar"
@@ -154,9 +154,11 @@ a New Yorker." Every decision below serves that: the data and the words carry th
   the other tab in the trailing group from 540pt. The navigation bar's scroll-edge fade belongs
   to the List tab only; the map's top edge is clear at every width
   (`{components.browse-toolbar.scrollEdgeEffect}`). On iOS 26, the shipping OS, no scroll-edge band
-  is drawn over the map; on the iOS 27.2 runtime the navigation bar draws a 3 to 5% band that
-  neither `toolbarBackgroundVisibility` nor `scrollEdgeEffectHidden` reaches, tracked in #166 with
-  the iOS 27 map-style check.
+  is drawn over the map. On iOS 27 the band at the top of the map (about 116 pt tall, roughly
+  3 to 6% lighter than the map, ending in a hairline) is MapKit's own top-edge effect drawn inside the map, not the
+  toolbar's scroll edge effect; no public API removes it (the only thing that hid it in the probe was
+  hiding private subviews, which is not shippable and comes back after a camera move), so the app does
+  not try to remove it. Re-check it on each iOS 27.x seed (#166).
 - Read: bodega detail, reviews, photos. Opaque page, system sections, display register on the name.
 - Experience: the first add. The only authored choreography in the app.
 
@@ -758,8 +760,8 @@ on the card and in the popover it is `.primary` (#95 D11).
     Motion or Prefer Cross-Fade Transitions. The list is a page, not a sheet: it leaves by the
     Map/List control, no drag to dismiss. Locate Me and Streets Walked leave the toolbar on the
     List tab without animation. The scroll-edge fade belongs to the List
-    (`{components.browse-toolbar.scrollEdgeEffect}`): none over the map on iOS 26; the iOS 27.2
-    navigation-bar band over the map is tracked in #166.
+    (`{components.browse-toolbar.scrollEdgeEffect}`): none over the map on iOS 26; the iOS 27
+    band over the map is MapKit's own edge effect, not removed by the app (#166).
   - Browse toolbar (#160 DS3, `{components.browse-toolbar}`): the toolbar never animates on its
     own. The switch's move between the centre and the trailing group follows the system rotation;
     an open menu or popover dismisses on that swap without changing the tab; a list slide in
@@ -842,3 +844,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-03 | #154 map look: muted standard tiles on both maps following the system appearance; `POIFilter` (commercial exclusions above block zoom, a wayfinding include list at block zoom and on the preview, DS8 amending D2); the `pin` asset becomes Deli Green (= `AccentColor`), so red is text only; pins glow from `pinGlow` / `catPinGlow` blurred circles behind the circle (7/20, selected 10/28), none under Increase Contrast (DS2, DS3, DS5, DS7); the glyph takes the fill's on-colour (DS1, closing D9); cluster badges green with no glow (DS4); the placement crosshair is the resting pin (DS10); the walked trail becomes cyan breadcrumbs at 8 and 5pt over a 35% track, drawn tracks-then-dots, and a solid line at 3 and 2pt (D1, D3, DS9), with a 500-run cap while breadcrumbs draw (D8); device A/B against main after merge (D4, D7); no wordmark (DS11) | `/plan-eng-review` D1 to D10 and `/plan-design-review` DS1 to DS11 with outside voices; owner accepted all. Four simulator probe rounds (`probe/map-look`): the muted ground makes the pins the subject; red read as stop; indigo vanished at night; the pattern was too busy zoomed out |
 | 2026-11-06 | #160 wide layouts: the map's top edge is clear and the List tab keeps the scroll-edge fade (D1): iOS 26, the shipping OS, draws no band over the map, and the 3 to 5% band the iOS 27.2 navigation bar draws, which neither `toolbarBackgroundVisibility` nor `scrollEdgeEffectHidden` reaches, is tracked in #166 with the iOS 27 map-style check; at a measured browse width of 540pt or more (inside the safe areas, eng D1) the Map/List switch leaves the centre for the trailing group as a one-tap toggle naming the other tab, glyph and text, label colour (D2, D3, DS1), between Streets Walked and Account so it keeps its screen position on both tabs (DS2); below 540pt the segmented control and compact menu stay in the centre (#44, #143); no bespoke toolbar motion (DS3); item 3 (onboarding edges) closed as system sheet behaviour (D4); haze measured by a same-band main-vs-branch luminance comparison (eng D2, `scripts/band-luminance.py`); an AX5 landscape UI case (eng D3); dark landscape and Duo captures (DS4); `components.browse-toolbar` tokens (DS5); the List tab's width on wide layouts is a TODO (DS6) | Spec D1 to D4, `/plan-eng-review` D1 to D3 and `/plan-design-review` DS1 to DS6 with outside voices; owner accepted all. The haze was a white band over a map that does not scroll; an icon-only menu took two taps and named the tab you were already on |
 | 2026-11-07 | #156 phase two, the tilt: Locate Me and Show on Map land on one block-zoom camera, 420 m, heading kept, pitched 55° with the pitch on the same flight (spec D2, D5); `.realistic` elevation on the browse map, `.flat` on the preview, `.flat` the one-constant fallback (spec D4, AC 12, AC 13); block zoom, the trail bands, the clustering grid and the label candidates read a pitch-blind settled frame (level-equivalent height = distance × the level ratio per map height; the near-field data region), the walked culling keeps MapKit's region (spec D3, eng D2, D3, Shape B, DS2); Show on Map's centre is 74 m screen-down at any heading and its no-op is 30 m / 10% / 5° (eng D5, D6); a cluster tap keeps pitch and heading and never zooms out (`minimumZoomSpan` retired); the pitched `.nearby` radius is MapKit's north edge clamped 200 m to 1 km (DS4); landings level under Reduce Motion, in compact height and while the user's own level holds for the session (DS5, DS6, DS8); the coarse-fix fallback is level (DS9); MapKit's compass and pitch toggle, the toggle only at 840 m or closer and not while placing (DS7); Liquid Glass pins not adopted (spec D1) | Spec D1 to D5, `/plan-eng-review` D1 to D7 and `/plan-design-review` DS1 to DS10 with outside voices; owner accepted all. The probe's tilt frame was the one look decision left from #154; every wide view stays level |
+| 2026-11-08 | #166 probe: the band at the top of the map on iOS 27 (about 116 pt tall, roughly 3 to 6% lighter than the map, with a hairline) is MapKit's own top-edge effect drawn inside the map, not the toolbar's scroll edge effect; no public API removes it, so the app does not try to remove it and `{components.browse-toolbar.scrollEdgeEffect}` stays met on iOS 26 only; re-check on each iOS 27.x seed | Simulator probe on iOS 27.2 (#166). Every public toolbar and scroll-edge modifier tried left the hairline unchanged; only hiding private subviews removed it, which is not shippable and comes back after a camera move |
