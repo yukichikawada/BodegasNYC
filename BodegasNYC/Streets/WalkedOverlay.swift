@@ -62,14 +62,20 @@ nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
         showsOverlay: Bool,
         region: WalkedRegion?,
         visibleHeightMeters: Double?,
-        isCameraMoving: Bool
+        isCameraMoving: Bool,
+        pieceIndex: WalkedPieceIndex? = nil,
+        probeMode: WalkedProbe.Mode = .pieces
     ) -> Bool {
         guard !isCameraMoving else { return false }
         let before = self
         if let visibleHeightMeters {
             lineWidth = WalkedOverlay.lineWidth(visibleHeightMeters: visibleHeightMeters, current: lineWidth)
         }
-        if showsOverlay, let region {
+        if showsOverlay, let region, let pieceIndex {
+            visible = Self.probeVisible(
+                runs: index, pieces: pieceIndex, region: region, lineWidth: lineWidth, mode: probeMode
+            )
+        } else if showsOverlay, let region {
             // The cap follows the settled width's style (#154 eng D8).
             let cap = WalkedOverlay.maxVisibleRuns(for: WalkedOverlay.trailStyle(width: lineWidth))
             visible = index.visible(in: region, cap: cap)
@@ -77,6 +83,29 @@ nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
             visible = .runs([])
         }
         return self != before
+    }
+
+    /// #119 Phase 0: what the probe draws, with no cap (spec Phase 0 step 4).
+    /// `piecesDotsOnRuns` adds the runs for the dots only at the breadcrumb
+    /// bands, so a line-band settle compares equal to the `pieces` mode.
+    static func probeVisible(
+        runs: WalkedRunIndex,
+        pieces: WalkedPieceIndex,
+        region: WalkedRegion,
+        lineWidth: Double,
+        mode: WalkedProbe.Mode
+    ) -> WalkedOverlay.Visible {
+        switch mode {
+        case .runs:
+            return runs.visible(in: region, cap: .max)
+        case .pieces:
+            return .pieces(pieces.visible(in: region), dotRuns: nil)
+        case .piecesDotsOnRuns:
+            guard case .breadcrumbs = WalkedOverlay.trailStyle(width: lineWidth),
+                  case .runs(let dotRuns) = runs.visible(in: region, cap: .max)
+            else { return .pieces(pieces.visible(in: region), dotRuns: nil) }
+            return .pieces(pieces.visible(in: region), dotRuns: dotRuns)
+        }
     }
 }
 
@@ -153,6 +182,10 @@ nonisolated enum WalkedOverlay {
     /// What the map draws at a settled camera.
     nonisolated enum Visible: Sendable, Equatable {
         case runs([WalkedRun])
+        /// #119 Phase 0 probe: per-tile pieces, uncapped. `dotRuns` is set
+        /// only in the probe's `piecesDotsOnRuns` mode at the breadcrumb
+        /// bands, where the dots stay on runs (see `WalkedProbe`).
+        case pieces([WalkedPiece], dotRuns: [WalkedRun]?)
         /// Over the cap: draw nothing and say "Zoom in to see your blocks."
         case overCap
     }
@@ -264,22 +297,53 @@ nonisolated enum WalkedOverlay {
 /// Block endpoints as shared nodes: endpoints within the tolerance are one
 /// node. `nodeOf[block]` is the block's start and end node, `incident[node]`
 /// the blocks that end there.
-nonisolated private struct EndpointGraph {
+///
+/// `sortedInsertion` (#119 eng D8, `WalkedTiles`): endpoints are inserted in
+/// (latitude, longitude, block) order rather than block order, and an
+/// endpoint within the tolerance of several nodes joins the lowest-index
+/// one, so the merge does not depend on scan order. `incident[node]` is then
+/// in ascending block order. The runs keep the original insertion.
+nonisolated struct EndpointGraph {
     private(set) var nodeOf: [[Int]] = []
     private(set) var incident: [[Int]] = []
     private var nodePoints: [Coordinate] = []
     private var buckets: [Int64: [Int]] = [:]
     private let tolerance: Double
+    private let lowestWins: Bool
 
-    init(_ polylines: [[Coordinate]], tolerance: Double) {
+    var nodeCount: Int { nodePoints.count }
+
+    init(_ polylines: [[Coordinate]], tolerance: Double, sortedInsertion: Bool = false) {
         self.tolerance = tolerance
-        for (block, line) in polylines.enumerated() {
-            let ends = [node(for: line[0]), node(for: line[line.count - 1])]
-            nodeOf.append(ends)
-            for end in ends {
-                while incident.count <= end { incident.append([]) }
-                incident[end].append(block)
+        lowestWins = sortedInsertion
+        guard sortedInsertion else {
+            for (block, line) in polylines.enumerated() {
+                let ends = [node(for: line[0]), node(for: line[line.count - 1])]
+                nodeOf.append(ends)
+                for end in ends {
+                    while incident.count <= end { incident.append([]) }
+                    incident[end].append(block)
+                }
             }
+            return
+        }
+        var endpoints: [(point: Coordinate, block: Int, end: Int)] = []
+        endpoints.reserveCapacity(polylines.count * 2)
+        for (block, line) in polylines.enumerated() {
+            endpoints.append((line[0], block, 0))
+            endpoints.append((line[line.count - 1], block, 1))
+        }
+        endpoints.sort {
+            ($0.point.latitude, $0.point.longitude, $0.block, $0.end)
+                < ($1.point.latitude, $1.point.longitude, $1.block, $1.end)
+        }
+        nodeOf = [[Int]](repeating: [0, 0], count: polylines.count)
+        for endpoint in endpoints {
+            nodeOf[endpoint.block][endpoint.end] = node(for: endpoint.point)
+        }
+        incident = [[Int]](repeating: [], count: nodePoints.count)
+        for block in polylines.indices {
+            for end in nodeOf[block] { incident[end].append(block) }
         }
     }
 
@@ -287,14 +351,17 @@ nonisolated private struct EndpointGraph {
         // Cells as wide as the tolerance, so a match is in the 3x3 around.
         let row = Int((point.latitude * StreetGrid.metersPerDegreeLatitude / tolerance).rounded(.down))
         let column = Int((point.longitude * 84_400 / tolerance).rounded(.down))
+        var lowest: Int?
         for rowOffset in -1 ... 1 {
             for columnOffset in -1 ... 1 {
                 for candidate in buckets[Self.key(row + rowOffset, column + columnOffset)] ?? []
                 where BlockMatcher.distance(nodePoints[candidate], point) <= tolerance {
-                    return candidate
+                    guard lowestWins else { return candidate }
+                    lowest = min(lowest ?? candidate, candidate)
                 }
             }
         }
+        if let lowest { return lowest }
         nodePoints.append(point)
         buckets[Self.key(row, column), default: []].append(nodePoints.count - 1)
         return nodePoints.count - 1

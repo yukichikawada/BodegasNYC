@@ -39,6 +39,8 @@ final class StreetsWalkedViewModel {
     /// index, built off the main actor.
     private(set) var walkedRunIndex = WalkedRunIndex.empty
     var walkedRuns: [WalkedRun] { walkedRunIndex.runs }
+    /// #119 Phase 0 probe: the per-tile pieces, replaced with the runs.
+    private(set) var walkedPieceIndex = WalkedPieceIndex.empty
     /// Bumped whenever the runs are replaced: a cheap change signal for the
     /// map, which redraws only at camera rest (design D10).
     private(set) var walkedRunsVersion = 0
@@ -216,6 +218,7 @@ final class StreetsWalkedViewModel {
         let outcome = await matcher.clearCache()
         walkedBlockIDs = []
         walkedRunIndex = .empty
+        walkedPieceIndex = .empty
         walkedRunsVersion += 1
         appliedRunsVersion = nil
         boroughProgress = boroughProgress.map { BoroughProgress(borough: $0.borough, walked: 0, total: $0.total) }
@@ -316,6 +319,7 @@ final class StreetsWalkedViewModel {
         appliedRunsVersion = summary.runsVersion
         walkedBlockIDs = summary.walkedIDs
         walkedRunIndex = summary.runIndex
+        walkedPieceIndex = summary.pieceIndex
         walkedRunsVersion += 1
         boroughProgress = summary.progress
     }

@@ -15,40 +15,55 @@ extension MapScreenView {
     @MapContentBuilder
     var walkedBlockOverlay: some MapContent {
         if case .runs(let runs) = walkedDisplay.visible {
-            switch WalkedOverlay.trailStyle(width: walkedDisplay.lineWidth) {
-            case .line(let width):
-                ForEach(runs) { run in
-                    // The run's cached `MKPolyline`: a reference in the content
-                    // list, not a coordinate array copied on every graph update.
-                    MapPolyline(run.polyline)
-                        .stroke(Color.walked, style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
-                        .mapOverlayLevel(level: .aboveRoads)
-                }
-            case .breadcrumbs(let dot, let spacing, let track):
-                // Two passes (#154 eng D3): every run's track first, then every
-                // run's dots, so no track covers another run's dots where runs
-                // cross. Increase Contrast draws no track (DS7); `walked`
-                // resolves to its contrast slot there.
-                if colorSchemeContrast != .increased {
-                    ForEach(runs) { run in
-                        MapPolyline(run.polyline)
-                            .stroke(
-                                Color.walked.opacity(0.35),
-                                style: StrokeStyle(lineWidth: track, lineCap: .round, lineJoin: .round)
-                            )
-                            .mapOverlayLevel(level: .aboveRoads)
-                    }
-                }
-                ForEach(runs) { run in
-                    // Zero-length dashes with round caps draw as dots; the
-                    // 0.01pt dash is accepted, not compensated.
+            walkedLines(runs, dots: runs)
+        } else if case .pieces(let pieces, let dotRuns) = walkedDisplay.visible {
+            // #119 Phase 0 probe: pieces in place of runs, the same stroke.
+            if let dotRuns {
+                walkedLines(pieces, dots: dotRuns)
+            } else {
+                walkedLines(pieces, dots: pieces)
+            }
+        }
+    }
+
+    /// The walked layer for `lines` (runs or #119 pieces); at the breadcrumb
+    /// bands the dots are drawn on `dots`, which is `lines` except in the
+    /// probe's `piecesDotsOnRuns` mode.
+    @MapContentBuilder
+    func walkedLines<Line: WalkedDrawable, Dot: WalkedDrawable>(_ lines: [Line], dots: [Dot]) -> some MapContent {
+        switch WalkedOverlay.trailStyle(width: walkedDisplay.lineWidth) {
+        case .line(let width):
+            ForEach(lines) { run in
+                // The run's cached `MKPolyline`: a reference in the content
+                // list, not a coordinate array copied on every graph update.
+                MapPolyline(run.polyline)
+                    .stroke(Color.walked, style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
+                    .mapOverlayLevel(level: .aboveRoads)
+            }
+        case .breadcrumbs(let dot, let spacing, let track):
+            // Two passes (#154 eng D3): every run's track first, then every
+            // run's dots, so no track covers another run's dots where runs
+            // cross. Increase Contrast draws no track (DS7); `walked`
+            // resolves to its contrast slot there.
+            if colorSchemeContrast != .increased {
+                ForEach(lines) { run in
                     MapPolyline(run.polyline)
                         .stroke(
-                            Color.walked,
-                            style: StrokeStyle(lineWidth: dot, lineCap: .round, lineJoin: .round, dash: [0.01, spacing])
+                            Color.walked.opacity(0.35),
+                            style: StrokeStyle(lineWidth: track, lineCap: .round, lineJoin: .round)
                         )
                         .mapOverlayLevel(level: .aboveRoads)
                 }
+            }
+            ForEach(dots) { run in
+                // Zero-length dashes with round caps draw as dots; the
+                // 0.01pt dash is accepted, not compensated.
+                MapPolyline(run.polyline)
+                    .stroke(
+                        Color.walked,
+                        style: StrokeStyle(lineWidth: dot, lineCap: .round, lineJoin: .round, dash: [0.01, spacing])
+                    )
+                    .mapOverlayLevel(level: .aboveRoads)
             }
         }
     }
@@ -68,8 +83,10 @@ extension MapScreenView {
         // (#126 eng).
         streetsWalkedIntro(
             content
-                .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
-                .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
+                .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy, reason: "data") }
+                .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) {
+                    refreshWalkedOverlay(proxy, reason: "toggle")
+                }
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active, scene: streetsSceneToken)
                 }
@@ -88,7 +105,7 @@ extension MapScreenView {
     /// settle costs what is in view, not the whole history. The write is
     /// plain, never in an animated transaction: MapKit applies `MapPolyline`
     /// changes within a frame either way (design D10, #113).
-    func refreshWalkedOverlay(_ proxy: MapProxy) {
+    func refreshWalkedOverlay(_ proxy: MapProxy, reason: String = "settle") {
         guard let streetsWalkedViewModel else { return }
         // The bands read the level-equivalent height (#156 spec D3); the
         // culling keeps MapKit's region, so a pitched view draws every run up
@@ -96,13 +113,26 @@ extension MapScreenView {
         let measured = measuredHeightMeters(proxy)
         let height = settledFrame(measuredHeight: measured).map(\.heightMeters) ?? measured
         var next = walkedDisplay
+        // #119 Phase 0 probe: pieces (or the mode's mix), uncapped.
         let changed = next.refresh(
             index: streetsWalkedViewModel.walkedRunIndex,
             showsOverlay: streetsWalkedViewModel.showsWalkedOverlay,
             region: lastVisibleRegion.map(WalkedRegion.init),
             visibleHeightMeters: height,
-            isCameraMoving: isCameraMoving
+            isCameraMoving: isCameraMoving,
+            pieceIndex: streetsWalkedViewModel.walkedPieceIndex,
+            probeMode: WalkedProbe.mode
         )
+        if !isCameraMoving {
+            WalkedProbe.record(
+                reason: reason,
+                changed: changed,
+                counts: WalkedProbe.counts(next, drawsTrack: colorSchemeContrast != .increased),
+                lineWidth: next.lineWidth,
+                heightMeters: height,
+                center: lastVisibleRegion.map { ($0.center.latitude, $0.center.longitude) }
+            )
+        }
         guard changed else { return }
         walkedDisplay = next
     }
@@ -218,6 +248,15 @@ extension MapScreenView {
         UIApplication.shared.open(url)
     }
 }
+
+/// What the walked layer strokes: a run or a #119 piece, by its cached
+/// `MKPolyline`.
+nonisolated protocol WalkedDrawable: Identifiable {
+    var polyline: MKPolyline { get }
+}
+
+extension WalkedRun: WalkedDrawable {}
+extension WalkedPiece: WalkedDrawable {}
 
 extension WalkedRegion {
     init(_ region: MKCoordinateRegion) {

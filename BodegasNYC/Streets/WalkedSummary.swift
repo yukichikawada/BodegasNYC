@@ -1,4 +1,6 @@
 import Foundation
+import MapKit
+import os
 
 /// Walked blocks out of a borough's total (#108 spec Implementation 5).
 nonisolated struct BoroughProgress: Sendable, Equatable, Identifiable {
@@ -37,6 +39,11 @@ nonisolated struct WalkedSummary: Sendable, Equatable {
     var progress: [BoroughProgress]
     var runIndex: WalkedRunIndex
     var runsVersion: Int
+    /// #119 Phase 0 probe: the per-tile pieces (kept per tile across passes,
+    /// eng D6) and their index. Built beside the runs, which the probe's
+    /// `runs` and `piecesDotsOnRuns` modes still draw.
+    var tiles: [Int64: WalkedTiles.Tile] = [:]
+    var pieceIndex = WalkedPieceIndex.empty
 
     var runs: [WalkedRun] { runIndex.runs }
 
@@ -52,6 +59,24 @@ nonisolated struct WalkedSummary: Sendable, Equatable {
         self.progress = progress
         runIndex = WalkedRunIndex(runs: runs)
         self.runsVersion = runsVersion
+    }
+
+    /// The summary of `masks`, with the tiles built incrementally against
+    /// `previous` (#119 eng D6): a tile whose walked ids did not change keeps
+    /// its pieces, so only changed tiles are walked again.
+    init(masks: [UInt32: UInt16], grid: StreetGrid, previous: WalkedSummary) {
+        self.init(masks: masks, grid: grid)
+        let start = ContinuousClock.now
+        let built = WalkedTiles.build(walkedIDs: walkedIDs, grid: grid, previous: previous.tiles)
+        tiles = built.tiles
+        pieceIndex = WalkedPieceIndex(tiles: built.tiles)
+        let elapsed = ContinuousClock.now - start
+        let milliseconds = Double(elapsed.components.attoseconds) / 1e15 + Double(elapsed.components.seconds) * 1_000
+        let line = "blocks=\(walkedIDs.count) tiles=\(built.tiles.count) rebuiltTiles=\(built.rebuilt) "
+            + "pieces=\(pieceIndex.pieces.count) vertices=\(pieceIndex.vertexCount) runs=\(runs.count) "
+            + "runVertices=\(runs.reduce(0) { $0 + $1.polyline.pointCount }) "
+            + "ms=\(String(format: "%.1f", milliseconds))"
+        WalkedProbe.logger.notice("WALKED_BUILD \(line, privacy: .public)")
     }
 
     /// The summary of `masks` against `grid`: a block counts once
@@ -78,9 +103,13 @@ nonisolated struct WalkedSummary: Sendable, Equatable {
     /// `runsVersion` advanced only if the runs changed.
     func reconciled(with previous: WalkedSummary) -> WalkedSummary {
         var result = self
+        // A changed walked set always changes the runs (their union is the
+        // walked blocks), so the pieces need no version of their own.
         if runs == previous.runs {
             result.runIndex = previous.runIndex
             result.runsVersion = previous.runsVersion
+            result.tiles = previous.tiles
+            result.pieceIndex = previous.pieceIndex
             return result
         }
         let old = Dictionary(previous.runs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })

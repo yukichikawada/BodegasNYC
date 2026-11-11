@@ -210,7 +210,9 @@ nonisolated final class WalkedBlockStore {
     /// model an integer compare and the map nothing.
     func summary() throws -> WalkedSummary {
         if let cachedSummary { return cachedSummary }
-        let fresh = WalkedSummary(masks: try loadMasks(), grid: grid).reconciled(with: lastSummary)
+        // #119 probe: tiles built against the last summary's (eng D6).
+        let fresh = WalkedSummary(masks: try loadMasks(), grid: grid, previous: lastSummary)
+            .reconciled(with: lastSummary)
         cachedSummary = fresh
         lastSummary = fresh
         return fresh
