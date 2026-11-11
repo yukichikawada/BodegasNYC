@@ -270,6 +270,25 @@ struct WalkedTilesTests {
             }
         }
         #expect(missing.isEmpty, "off the pieces: \(missing.prefix(20))")
+        // And the other way: every drawn segment runs along a walked block
+        // of its tile (its midpoint and quarter points within the drift).
+        var stray: [String] = []
+        for (key, tile) in tiles {
+            let lines = tile.physicalIDs.compactMap { grid.index(ofPhysicalID: $0).map(grid.polyline(for:)) }
+            for piece in tile.pieces {
+                for (start, end) in zip(piece.coordinates, piece.coordinates.dropFirst()) {
+                    for fraction in [0.25, 0.5, 0.75] {
+                        let point = Coordinate(
+                            latitude: start.latitude + (end.latitude - start.latitude) * fraction,
+                            longitude: start.longitude + (end.longitude - start.longitude) * fraction
+                        )
+                        let nearest = lines.map { Self.distance(point, toLine: $0) }.min() ?? .infinity
+                        if nearest > Self.simplifierDriftMeters { stray.append("tile \(key) \(String(format: "%.1f", nearest)) m") }
+                    }
+                }
+            }
+        }
+        #expect(stray.isEmpty, "drawn off the walked blocks: \(stray.count) \(stray.prefix(10))")
     }
 
     // MARK: Helpers
