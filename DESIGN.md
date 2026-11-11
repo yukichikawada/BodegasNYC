@@ -226,9 +226,9 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   contrast slots with no track (#154 DS7). Full opacity with round caps and joins. The look is
   unchanged by #119; only the geometry behind it changed. Each walked block is a line on its
   street's centerline. The line and the track are drawn as one polyline per connected patch of
-  walked blocks per ~1 km tile, retracing where it turns back (a retrace is invisible under an
-  opaque round-capped stroke, and one translucent track stroke does not darken where it
-  overlaps itself); the dots stay on runs of blocks chained straight through junctions, so
+  walked blocks per ~1 km tile, retracing where it turns back (open: on the iOS 27.2 simulator
+  MapKit draws stray curves across blocks where a piece turns back, at the 3 and 2pt lines and
+  the 5pt track; see #119 before shipping); the dots stay on runs of blocks chained straight through junctions, so
   their spacing reads as before (#119, owner decision 2026-11-10). Drawn above
   the roads and under the labels, pins and location dot (`.mapOverlayLevel(level: .aboveRoads)`),
   8pt up to 400 m of visible height, 5pt to 2 km, 3pt to 8 km, 2pt above, with 10% hysteresis on
