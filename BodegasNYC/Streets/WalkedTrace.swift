@@ -107,6 +107,44 @@ nonisolated enum WalkedTrace {
         #endif
     }
 
+    /// DEBUG only, the simulator check without touch injection:
+    /// `-WalkedCameraScript YES` moves the camera itself, 60 s after launch,
+    /// through level settles 4 s apart: four pans at 6 km of camera
+    /// distance (the 3pt line band), a zoom to 3 km (the 5pt breadcrumb
+    /// band), two pans, a zoom back out and one pan. Each line is logged.
+    @MainActor
+    static func runCameraScript(_ move: (MapCameraPosition) -> Void) async {
+        #if DEBUG
+        guard UserDefaults.standard.bool(forKey: "WalkedCameraScript") else { return }
+        struct Step {
+            let name: String
+            let north: Double
+            let east: Double
+            let distance: Double
+        }
+        let steps = [
+            Step(name: "pan-line", north: 0.004, east: 0, distance: 6_000),
+            Step(name: "pan-line", north: 0, east: 0.004, distance: 6_000),
+            Step(name: "pan-line", north: -0.004, east: 0, distance: 6_000),
+            Step(name: "pan-line", north: 0, east: -0.004, distance: 6_000),
+            Step(name: "zoom-in", north: 0, east: 0, distance: 3_000),
+            Step(name: "pan-crumbs", north: 0.003, east: 0, distance: 3_000),
+            Step(name: "pan-crumbs", north: 0, east: 0, distance: 3_000),
+            Step(name: "zoom-out", north: 0, east: 0, distance: 6_000),
+            Step(name: "pan-line", north: 0.004, east: 0.004, distance: 6_000)
+        ]
+        try? await Task.sleep(for: .seconds(60))
+        for step in steps {
+            logger.notice("WALKED_SCRIPT \(step.name, privacy: .public) distance=\(Int(step.distance))")
+            move(.camera(MapCamera(
+                centerCoordinate: CLLocationCoordinate2D(latitude: 40.7308 + step.north, longitude: -73.9973 + step.east),
+                distance: step.distance
+            )))
+            try? await Task.sleep(for: .seconds(4))
+        }
+        #endif
+    }
+
     /// Calls `done` with the milliseconds since `start`, from a main run
     /// loop observer that runs last before the loop sleeps, after Core
     /// Animation's commit (which carries SwiftUI's graph update and the

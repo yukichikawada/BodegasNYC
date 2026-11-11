@@ -223,6 +223,7 @@ struct BrowseView: View {
                 }
                 .onChange(of: firstRunState.hasAddedFirstBodega) { syncTipParameters() }
                 .task { await addTipState.observe() }
+                .task { await WalkedTrace.runCameraScript { cameraPosition = $0 } } // #119 probe, DEBUG only
                 .modifier(userLocationRefresh)
                 .modifier(listOrderSync)
                 // Popover tips (the placement tip) inherit this; the inline
