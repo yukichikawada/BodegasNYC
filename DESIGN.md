@@ -222,10 +222,14 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   6.5pt dots every 13pt on a 14pt track. At the 3 and 2pt bands it is a plain solid line with no
   track. The trail cools as you leave your block: the switch from breadcrumbs to the solid line
   is one settle at the 2 km edge (2,200 m on the way out). Every track is drawn before any dots,
-  so a track never covers another run's dots at a crossing. While breadcrumbs draw, the layer
-  hides past 500 visible runs (two polylines a run), and past 1,000 for the line. Increase
-  Contrast draws dots or line in the contrast slots with no track (#154 DS7). Full opacity
-  with round caps and joins. Each walked block is a line on its street's centerline, chained into runs, drawn above
+  so a track never covers dots at a crossing. Increase Contrast draws dots or line in the
+  contrast slots with no track (#154 DS7). Full opacity with round caps and joins. The look is
+  unchanged by #119; only the geometry behind it changed. Each walked block is a line on its
+  street's centerline. The line and the track are drawn as one polyline per connected patch of
+  walked blocks per ~1 km tile, retracing where it turns back (a retrace is invisible under an
+  opaque round-capped stroke, and one translucent track stroke does not darken where it
+  overlaps itself); the dots stay on runs of blocks chained straight through junctions, so
+  their spacing reads as before (#119, owner decision 2026-11-10). Drawn above
   the roads and under the labels, pins and location dot (`.mapOverlayLevel(level: .aboveRoads)`),
   8pt up to 400 m of visible height, 5pt to 2 km, 3pt to 8 km, 2pt above, with 10% hysteresis on
   the way out. Visible height is the app's measure, not the screen's: the ground distance from
@@ -236,11 +240,20 @@ corner at night; the map tiles already switch, so the chrome follows the system 
   530 m / 2.6 km / 10.5 km of full-screen height on that device. Pitched, the bands read the level
   equivalent (#156 spec D3, as for the pin labels), so a tilt at block zoom keeps the 8pt
   breadcrumbs; the culling keeps MapKit's own region, so every run in view draws up to the far
-  field and the run caps below stay the one valve (#156 eng D3; a far-field clamp is TODOS). Past 1,000 visible runs (2,000 in the spec, lowered after the R3 device check) the layer hides and the bottom card says "Zoom in to see
-  your blocks."; it never draws a subset. Changes land at camera rest and swap in place, with no
+  field and the cap below stays the one valve (#156 eng D3; a far-field clamp is TODOS). The cap
+  (#119): past 9,000 drawn vertices or 1,000 drawn patches the layer hides and the bottom card
+  says "Zoom in to see your blocks."; it never draws a subset. Once drawing, it keeps drawing
+  until a count is 10% over (9,900 vertices, 1,100 patches); once hidden, it stays hidden until
+  both are 10% under (8,100, 900). While breadcrumbs draw, the dots also hide the layer past
+  500 runs in view, as before #119. In user terms: on the 5,000-block QA seed the card never
+  appears at any height, and with every Manhattan block walked it first appears at about 7 km
+  of visible height zooming out over Manhattan (portrait phone, unit-test geometry). At 440 m
+  or closer it never appears: a patch's line is cut into parts of at most 500 vertices, so a
+  close view draws only the parts near it. Changes land at camera rest and swap in place, with no
   fade: MapKit does not animate `MapPolyline` changes (#113 dropped D10's 0.2s fade), so Reduce
   Motion needs nothing special. Nothing is written mid-gesture, and a settle that changes nothing
-  drawn writes nothing. A run is drawn while its box meets the view plus 25% on each side. A wider
+  drawn writes nothing. A patch (or run) is drawn while its own box meets the view plus 25% on
+  each side. A wider
   retain margin (#115) was reverted: on device it did not cut settle hitches, because MapKit's
   add/remove cost grows with the lines drawn, not only the lines changed (#113).
 - Cat and non-cat pins are distinguished by glyph (`cat` vs `figure.wave`) as well as color, so
@@ -845,3 +858,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-06 | #160 wide layouts: the map's top edge is clear and the List tab keeps the scroll-edge fade (D1): iOS 26, the shipping OS, draws no band over the map, and the 3 to 5% band the iOS 27.2 navigation bar draws, which neither `toolbarBackgroundVisibility` nor `scrollEdgeEffectHidden` reaches, is tracked in #166 with the iOS 27 map-style check; at a measured browse width of 540pt or more (inside the safe areas, eng D1) the Map/List switch leaves the centre for the trailing group as a one-tap toggle naming the other tab, glyph and text, label colour (D2, D3, DS1), between Streets Walked and Account so it keeps its screen position on both tabs (DS2); below 540pt the segmented control and compact menu stay in the centre (#44, #143); no bespoke toolbar motion (DS3); item 3 (onboarding edges) closed as system sheet behaviour (D4); haze measured by a same-band main-vs-branch luminance comparison (eng D2, `scripts/band-luminance.py`); an AX5 landscape UI case (eng D3); dark landscape and Duo captures (DS4); `components.browse-toolbar` tokens (DS5); the List tab's width on wide layouts is a TODO (DS6) | Spec D1 to D4, `/plan-eng-review` D1 to D3 and `/plan-design-review` DS1 to DS6 with outside voices; owner accepted all. The haze was a white band over a map that does not scroll; an icon-only menu took two taps and named the tab you were already on |
 | 2026-11-07 | #156 phase two, the tilt: Locate Me and Show on Map land on one block-zoom camera, 420 m, heading kept, pitched 55° with the pitch on the same flight (spec D2, D5); `.realistic` elevation on the browse map, `.flat` on the preview, `.flat` the one-constant fallback (spec D4, AC 12, AC 13); block zoom, the trail bands, the clustering grid and the label candidates read a pitch-blind settled frame (level-equivalent height = distance × the level ratio per map height; the near-field data region), the walked culling keeps MapKit's region (spec D3, eng D2, D3, Shape B, DS2); Show on Map's centre is 74 m screen-down at any heading and its no-op is 30 m / 10% / 5° (eng D5, D6); a cluster tap keeps pitch and heading and never zooms out (`minimumZoomSpan` retired); the pitched `.nearby` radius is MapKit's north edge clamped 200 m to 1 km (DS4); landings level under Reduce Motion, in compact height and while the user's own level holds for the session (DS5, DS6, DS8); the coarse-fix fallback is level (DS9); MapKit's compass and pitch toggle, the toggle only at 840 m or closer and not while placing (DS7); Liquid Glass pins not adopted (spec D1) | Spec D1 to D5, `/plan-eng-review` D1 to D7 and `/plan-design-review` DS1 to DS10 with outside voices; owner accepted all. The probe's tilt frame was the one look decision left from #154; every wide view stays level |
 | 2026-11-08 | #166 probe: the band at the top of the map on iOS 27 (about 116 pt tall, roughly 3 to 6% lighter than the map, with a hairline) is MapKit's own top-edge effect drawn inside the map, not the toolbar's scroll edge effect; no public API removes it, so the app does not try to remove it and `{components.browse-toolbar.scrollEdgeEffect}` stays met on iOS 26 only; re-check on each iOS 27.x seed | Simulator probe on iOS 27.2 (#166). Every public toolbar and scroll-edge modifier tried left the hairline unchanged; only hiding private subviews removed it, which is not shippable and comes back after a camera move |
+| 2026-11-10 | #119 walked layer per tile: the trail's line and breadcrumb track are drawn as one polyline per connected walked patch per ~1 km tile (a DFS out-and-back walk over the patch, each block simplified once, long walks cut at 500 vertices), the breadcrumb dots stay on runs (owner decision: a dash pattern along a retraced walk doubles the dots out of phase), and the run caps give way to a cap of 9,000 drawn vertices or 1,000 drawn patches with 10% hysteresis; the look is unchanged | Phase 0 device probe on the owner's iPhone 17 Pro Max (Release, 5,006-block seed, same driver): pans at about 5.2 km took 15 and 16 ms of overlay add and remove per changed settle with no hitch of 50 ms or more (longest 16.7 ms), against 55 and 57 ms and 9 and 12 such hitches (longest 133 ms) on main; all of Manhattan in view drew 93 patches, 9,616 vertices in 22 to 23 ms against 68 to 70 ms for 593 runs, so the vertex cap is 9,616 rounded down; no higher count was measured, because the seed has no more. AC1's overlay target was amended from 10 ms to 20 ms per changed settle (median), its hitch target unchanged. Spec, `/plan-eng-review` D1 to D11 and `/plan-design-review` DS1 to DS10; owner accepted all, then Go on the numbers. The PR build is re-measured on the phone before merge, including 2 km and closer, which Phase 0 did not reach |

@@ -118,11 +118,11 @@ nonisolated enum WalkedTrace {
     }
 
     /// DEBUG only, for the simulator look checks and the close-zoom UI
-    /// test: `-WalkedProbeCamera "<lat>,<lon>,<distance m>"` starts the map
+    /// test: `-WalkedLaunchCamera "<lat>,<lon>,<distance m>"` starts the map
     /// on a level camera there. Release builds ignore it.
     static var launchCamera: MapCameraPosition? {
         #if DEBUG
-        guard let value = UserDefaults.standard.string(forKey: "WalkedProbeCamera") else { return nil }
+        guard let value = UserDefaults.standard.string(forKey: "WalkedLaunchCamera") else { return nil }
         let parts = value.split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
         guard parts.count == 3 else { return nil }
         return .camera(MapCamera(

@@ -128,7 +128,12 @@ nonisolated enum WalkedOverlay {
     /// The pieces (and at the breadcrumb bands the dot runs) for `region`, or
     /// `overCap`. Never a subset; an empty index is nothing to draw, never
     /// over the cap (design DS6).
-    static func visible(index: WalkedLayerIndex, in region: WalkedRegion, style: TrailStyle, wasHidden: Bool) -> Visible {
+    static func visible(
+        index: WalkedLayerIndex,
+        in region: WalkedRegion,
+        style: TrailStyle,
+        wasHidden: Bool
+    ) -> Visible {
         visibleAndCap(index: index, in: region, style: style, wasHidden: wasHidden).visible
     }
 
@@ -141,7 +146,9 @@ nonisolated enum WalkedOverlay {
     ) -> (visible: Visible, piecesOverCap: Bool) {
         let pieces = index.pieces.visible(in: region)
         let vertices = pieces.reduce(0) { $0 + $1.vertexCount }
-        guard !isOverCap(pieces: pieces.count, vertices: vertices, wasHidden: wasHidden) else { return (.overCap, true) }
+        guard !isOverCap(pieces: pieces.count, vertices: vertices, wasHidden: wasHidden) else {
+            return (.overCap, true)
+        }
         guard case .breadcrumbs = style else { return (.pieces(pieces, dotRuns: []), false) }
         guard let dotRuns = index.runs.visible(in: region, cap: maxDotRuns) else { return (.overCap, false) }
         return (.pieces(pieces, dotRuns: dotRuns), false)
@@ -229,7 +236,9 @@ nonisolated enum WalkedOverlay {
     /// Visible height is `MapScreenView.visibleHeightMeters`, not the full
     /// screen (#113).
     static let widthBands: [WidthBand] = [
-        WidthBand(maxHeight: 400, width: 8), WidthBand(maxHeight: 2_000, width: 5), WidthBand(maxHeight: 8_000, width: 3)
+        WidthBand(maxHeight: 400, width: 8),
+        WidthBand(maxHeight: 2_000, width: 5),
+        WidthBand(maxHeight: 8_000, width: 3)
     ]
     static let widestBeyond = 2.0
     static let hysteresis = 0.10

@@ -118,7 +118,7 @@ extension MapScreenView {
                 counts: WalkedTrace.counts(next, drawsTrack: colorSchemeContrast != .increased),
                 lineWidth: next.lineWidth,
                 heightMeters: height,
-                center: lastVisibleRegion.map { Coordinate(latitude: $0.center.latitude, longitude: $0.center.longitude) }
+                center: lastVisibleRegion.map { Coordinate($0.center) }
             ))
         }
         guard changed else { return }

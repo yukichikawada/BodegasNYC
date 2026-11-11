@@ -47,7 +47,7 @@ nonisolated extension UITestFixtures {
     /// "Manhattan, 1 of 9,300 blocks, less than 1 percent."
     /// (`YourBlocksTests` checks that against the bundle).
     static func walkedBlockFixture(grid: StreetGrid, now: Date) -> [WalkedPointSnapshot] {
-        if let count = UserDefaults.standard.object(forKey: "UITestWalkedBlockCount") as? String, let count = Int(count) {
+        if let count = UserDefaults.standard.string(forKey: "UITestWalkedBlockCount").flatMap(Int.init) {
             return manyWalkedBlocks(count, grid: grid, now: now)
         }
         guard let index = (0 ..< grid.segmentCount).first(where: {
@@ -77,11 +77,11 @@ nonisolated extension UITestFixtures {
     }
 
     /// #119 probe, simulator look checks: `-UITestWalkedBlockCount N` walks
-    /// the N Manhattan blocks nearest the `-WalkedProbeCamera` centre (else
+    /// the N Manhattan blocks nearest the `-WalkedLaunchCamera` centre (else
     /// Washington Square), each end to end at 1.4 m/s, fixes at most 10 m
     /// apart, with a 0.1 s hop between blocks (too fast to credit).
     static func manyWalkedBlocks(_ count: Int, grid: StreetGrid, now: Date) -> [WalkedPointSnapshot] {
-        let parts = (UserDefaults.standard.string(forKey: "WalkedProbeCamera") ?? "")
+        let parts = (UserDefaults.standard.string(forKey: "WalkedLaunchCamera") ?? "")
             .split(separator: ",").compactMap { Double($0.trimmingCharacters(in: .whitespaces)) }
         let center = parts.count >= 2
             ? Coordinate(latitude: parts[0], longitude: parts[1])
