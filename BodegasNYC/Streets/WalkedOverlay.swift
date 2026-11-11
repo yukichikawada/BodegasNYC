@@ -72,7 +72,9 @@ nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
         if showsOverlay, let region {
             // The cap follows the settled width's style (#154 eng D8).
             let cap = WalkedOverlay.maxVisibleRuns(for: WalkedOverlay.trailStyle(width: lineWidth))
-            visible = index.visible(in: region, cap: cap)
+            // #119 no-cull probe: a history under the band's cap draws every
+            // run, so a pan settle changes nothing and writes nothing.
+            visible = index.runs.count <= cap ? .runs(index.runs) : index.visible(in: region, cap: cap)
         } else {
             visible = .runs([])
         }
@@ -111,6 +113,12 @@ nonisolated enum WalkedOverlay {
         case .line: maxVisibleRuns
         }
     }
+    /// #119 no-cull probe: whether the whole history draws, regardless of
+    /// the region, at this width's band (the band's run cap holds it all).
+    static func drawsWholeHistory(runCount: Int, lineWidth: Double) -> Bool {
+        runCount <= maxVisibleRuns(for: trailStyle(width: lineWidth))
+    }
+
     /// The region is expanded by this fraction of its span on each side.
     static let regionMargin = 0.25
     static let joinToleranceMeters = 1.0

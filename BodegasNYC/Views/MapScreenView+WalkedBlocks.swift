@@ -109,7 +109,9 @@ extension MapScreenView {
         if !isCameraMoving {
             WalkedTrace.record(WalkedTrace.Settle(
                 reason: reason,
-                mode: "cull",
+                mode: WalkedOverlay.drawsWholeHistory(
+                    runCount: streetsWalkedViewModel.walkedRunIndex.runs.count, lineWidth: next.lineWidth
+                ) ? "all" : "cull",
                 changed: changed,
                 counts: WalkedTrace.counts(next, drawsTrack: colorSchemeContrast != .increased),
                 lineWidth: next.lineWidth,
