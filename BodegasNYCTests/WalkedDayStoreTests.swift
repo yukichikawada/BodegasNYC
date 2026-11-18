@@ -71,10 +71,22 @@ struct WalkedDayStoreTests {
         try context.save()
     }
 
-    /// A2: every block's total mask is the OR of its day masks.
-    private func expectTotalsAreTheOROfTheDays(_ container: ModelContainer, _ note: Comment) throws {
+    /// Every block's day masks ORed together.
+    private func dayUnion(_ container: ModelContainer) throws -> [UInt32: UInt16] {
         var union: [UInt32: UInt16] = [:]
         for row in try dayRows(container) { union[row.id, default: 0] |= row.mask }
+        return union
+    }
+
+    /// A2: every block's total mask is the OR of its day masks. Holds only
+    /// when each saved mask is a subset of what re-matching history gives
+    /// (always true for masks this matcher wrote); a saved bit no re-match
+    /// produces has no day to go to (`aSavedBitNoRematchGivesStaysInTheTotalsOnly`).
+    private func expectTotalsAreTheOROfTheDaysWhenSavedIsASubsetOfARematch(
+        _ container: ModelContainer,
+        _ note: Comment
+    ) throws {
+        let union = try dayUnion(container)
         let saved = try savedMasks(container)
         #expect(union == saved, "\(note): days \(union), totals \(saved)")
     }
@@ -131,13 +143,13 @@ struct WalkedDayStoreTests {
             #expect(abs((batchedMeters[day] ?? -1) - meters) < 0.001, "day \(day)")
         }
         #expect(Set(wholeMeters.keys) == [20270118, 20270119, 20270121])
-        try expectTotalsAreTheOROfTheDays(batched, "incremental")
-        try expectTotalsAreTheOROfTheDays(whole, "rebuild")
+        try expectTotalsAreTheOROfTheDaysWhenSavedIsASubsetOfARematch(batched, "incremental")
+        try expectTotalsAreTheOROfTheDaysWhenSavedIsASubsetOfARematch(whole, "rebuild")
 
         // A data refresh rebuilds the batched store: same rows again.
         _ = try pass(WalkedBlockStore(container: batched, grid: F.cornerGrid(stamp: 2)))
         #expect(try dayRows(batched) == dayRows(whole))
-        try expectTotalsAreTheOROfTheDays(batched, "rebuild after batches")
+        try expectTotalsAreTheOROfTheDaysWhenSavedIsASubsetOfARematch(batched, "rebuild after batches")
         #expect(try state(batched)?.dayIndexVersion == WalkedBlockStore.dayIndexVersion)
     }
 
@@ -161,19 +173,56 @@ struct WalkedDayStoreTests {
         try setMask(0b111_1110, of: 100, in: container)
         let before = try savedMasks(container)
 
-        let store = WalkedBlockStore(container: container, grid: F.cornerGrid())
+        // A day after the last walk: under 7 days, but the backfill asks no
+        // CoreMotion, so its newest unknown day is still an estimate.
+        let dayAfter = Self.thursday.addingTimeInterval(86_400)
+        let store = WalkedBlockStore(container: container, grid: F.cornerGrid(), now: { dayAfter })
         #expect(try pass(store) == .backfill)
         #expect(store.rebuildCount == 0 && store.backfillCount == 1)
+        #expect(try state(container)?.estimatedThroughDay == 20270121)
         #expect(try savedMasks(container) == before)
         for row in try dayRows(container) {
             #expect(row.mask & ~(before[row.id] ?? 0) == 0, "day \(row.day) block \(row.id)")
         }
         let blockRows = try dayRows(container).filter { $0.id == 100 }.sorted { $0.day < $1.day }
         #expect(blockRows.map(\.mask) == [0b111_1110, 0b111_1110], "\(blockRows)")
-        try expectTotalsAreTheOROfTheDays(container, "backfill")
+        try expectTotalsAreTheOROfTheDaysWhenSavedIsASubsetOfARematch(container, "backfill")
         #expect(try state(container)?.dayIndexVersion == WalkedBlockStore.dayIndexVersion)
         #expect(try store.plan() == nil)
         #expect(try WalkedBlockStore(container: container, grid: F.cornerGrid()).plan() == nil)
+    }
+
+    /// protects: the backfill's honest outcome when a saved mask holds a
+    /// tenth no re-match of history produces (an older matcher's bit): the
+    /// totals stay exactly as saved, the day rows never invent a day for the
+    /// leftover bit, so their OR is a strict subset of the total, and
+    /// history still loads.
+    /// fails_when: the backfill drops the bit from the totals, attributes it
+    /// to some day, or fails on it.
+    /// no_claim: where the bit came from; that Your Walks' cumulative count
+    /// matches Your Blocks in this case (it can fall below; PR 2 reads the
+    /// headline count from the totals).
+    @Test func aSavedBitNoRematchGivesStaysInTheTotalsOnly() throws {
+        let container = try makeInMemoryModelContainer()
+        try F.seed(Self.history, in: container.mainContext)
+        _ = try pass(WalkedBlockStore(container: container, grid: F.cornerGrid()))
+        // Block 100's tenth 0 always snaps to cross street 200, so no
+        // re-match gives it; a saved mask with it set is a leftover.
+        let rematch = try #require(try savedMasks(container)[100])
+        #expect(rematch & 1 == 0 && BlockMatcher.isWalked(mask: rematch))
+        try rewindToBeforeDays(container)
+        try setMask(rematch | 1, of: 100, in: container)
+        let before = try savedMasks(container)
+
+        let store = WalkedBlockStore(container: container, grid: F.cornerGrid())
+        #expect(try pass(store) == .backfill)
+        #expect(try savedMasks(container) == before)
+        let union = try dayUnion(container)
+        #expect(union[100] == rematch)
+        #expect(union.keys.sorted() == before.keys.sorted())
+        #expect(union.allSatisfy { id, mask in mask & ~(before[id] ?? 0) == 0 })
+        #expect(union != before)
+        #expect(try store.history()?.walkedDays.isEmpty == false)
     }
 
     /// protects: A1's scope: the backfill matches only matched fixes; the
@@ -207,7 +256,7 @@ struct WalkedDayStoreTests {
         #expect(await actor.rebuildCount == 0)
         #expect(summary.walkedIDs == [100, 201, 300, 400])
         #expect(try ModelContext(container).fetchCount(FetchDescriptor<WalkedPoint>(predicate: #Predicate { $0.isMatched == false })) == 0)
-        try expectTotalsAreTheOROfTheDays(container, "backfill then incremental")
+        try expectTotalsAreTheOROfTheDaysWhenSavedIsASubsetOfARematch(container, "backfill then incremental")
 
         // Both stale: one rebuild, no backfill.
         try rewindToBeforeDays(container)
@@ -291,7 +340,7 @@ struct WalkedDayStoreTests {
         #expect(try pass(store) == nil)
         #expect(store.rebuildCount == 0 && store.backfillCount == 1)
         #expect(try savedMasks(container) == before)
-        try expectTotalsAreTheOROfTheDays(container, "1.0.0 backfill")
+        try expectTotalsAreTheOROfTheDaysWhenSavedIsASubsetOfARematch(container, "1.0.0 backfill")
         let points = try ModelContext(container).fetch(FetchDescriptor<WalkedPoint>(sortBy: [SortDescriptor(\.recordedAt)]))
         let newest = try #require(points.last)
         #expect(try state(container)?.dayIndexVersion == WalkedBlockStore.dayIndexVersion)

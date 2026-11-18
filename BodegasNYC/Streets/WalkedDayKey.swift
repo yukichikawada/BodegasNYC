@@ -75,11 +75,24 @@ nonisolated enum WalkedEstimate {
     /// asked about, so its day is an estimate.
     static let window = CoreMotionActivityProvider.historyWindow
 
+    /// How far back a pass of `kind` could ask CoreMotion: a backfill never
+    /// asks (eng A1), so every unknown leg it matched is an estimate, of any
+    /// age; a rebuild or incremental pass asks for the last `window`.
+    static func askableWindow(for kind: WalkedPassKind) -> TimeInterval {
+        kind == .backfill ? 0 : window
+    }
+
     /// The day of the newest fix whose leg has no ride evidence (saved, or
     /// found by this pass in `found`) and which is older than `window` at
-    /// `now`; `nil` when there is none. `points` is in history order and its
-    /// first fix ends no leg, so it is skipped.
-    static func throughDay(_ points: [WalkedPointSnapshot], found: [UUID: RideEvidence], now: Date) -> WalkedDayKey? {
+    /// `now` (any fix before `now` when `window` is 0); `nil` when there is
+    /// none. `points` is in history order and its first fix ends no leg, so
+    /// it is skipped.
+    static func throughDay(
+        _ points: [WalkedPointSnapshot],
+        found: [UUID: RideEvidence],
+        now: Date,
+        window: TimeInterval = window
+    ) -> WalkedDayKey? {
         let cutoff = now.addingTimeInterval(-window)
         for point in points.dropFirst().reversed() where point.recordedAt < cutoff {
             if point.ride == .unknown, found[point.id] == nil {

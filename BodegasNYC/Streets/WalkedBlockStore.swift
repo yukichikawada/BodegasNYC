@@ -153,7 +153,12 @@ nonisolated final class WalkedBlockStore {
         // incremental pass leaves the saved value alone.
         let estimated = plan.kind == .incremental
             ? nil
-            : WalkedEstimate.throughDay(plan.snapshots, found: evidence, now: now())
+            : WalkedEstimate.throughDay(
+                plan.snapshots,
+                found: evidence,
+                now: now(),
+                window: WalkedEstimate.askableWindow(for: plan.kind)
+            )
         let context = plan.context
         let written: MaskWrite
         let dayWrite: DayWrite

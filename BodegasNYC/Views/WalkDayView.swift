@@ -20,6 +20,8 @@ struct WalkDayView: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var display = WalkedOverlayDisplay(visible: .runs([]), lineWidth: WalkedOverlay.widthBands[0].width)
     @State private var barHeight: CGFloat = 0
+    /// The last settled camera region, for a reload's redraw.
+    @State private var settledRegion: MKCoordinateRegion?
     @Environment(\.colorSchemeContrast) private var colorSchemeContrast
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
@@ -48,11 +50,25 @@ struct WalkDayView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle(AppCopy.walkDayTitle(day).text)
         .navigationBarTitleDisplayMode(.inline)
-        .task(id: day) {
+        // Keyed on the history's version too, so a pass that adds to this
+        // day while it is open redraws the trail with the counts. Only the
+        // first load fits the camera; a reload keeps where the person panned.
+        .task(id: RunsKey(day: day, version: viewModel.walksHistory?.version)) {
             let runs = await viewModel.walkDayRuns(day)
-            position = .region(Self.fittedRegion(runs))
-            index = WalkedRunIndex(runs: runs)
+            let reloaded = WalkedRunIndex(runs: runs)
+            if index == nil {
+                position = .region(Self.fittedRegion(runs))
+            } else if let settledRegion {
+                settle(index: reloaded, region: settledRegion)
+            }
+            index = reloaded
         }
+    }
+
+    /// What the runs depend on: the day and the history they came from.
+    private struct RunsKey: Hashable {
+        let day: WalkedDayKey
+        let version: Int?
     }
 
     private func map(_ summary: WalkedDaySummary?) -> some View {
@@ -70,6 +86,7 @@ struct WalkDayView: View {
                 }
                 .mapStyle(POIFilter.wayfindingOnly.mapStyle(elevation: .flat))
                 .onMapCameraChange(frequency: .onEnd) { context in
+                    settledRegion = context.region
                     settle(index: index, region: context.region)
                 }
             }

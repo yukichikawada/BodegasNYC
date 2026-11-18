@@ -32,6 +32,8 @@ struct WalkMonth: Equatable, Identifiable {
 
     var id: Int { first.value }
     var title: String { AppCopy.walkMonthTitle(first).text }
+    /// Grid rows: 4 to 6, depending on the length and the first weekday.
+    var rowCount: Int { (leadingBlanks + days.count + 6) / 7 }
     var walkedDays: [WalkCalendarDay] { days.filter(\.isWalked) }
     var walkedDayCount: Int { walkedDays.count }
     var newBlockCount: Int { walkedDays.reduce(0) { $0 + ($1.summary?.newCount ?? 0) } }

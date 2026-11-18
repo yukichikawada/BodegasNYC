@@ -169,4 +169,30 @@ struct WalkedDayKeyTests {
         #expect(WalkedEstimate.throughDay([first], found: [:], now: Self.now) == nil)
         #expect(WalkedEstimate.throughDay([], found: [:], now: Self.now) == nil)
     }
+
+    /// protects: E2's intent for the backfill, which never asks CoreMotion
+    /// (eng A1): with a zero window every unknown leg counts, however recent,
+    /// so a recent unknown day is an estimate; known and found legs still do
+    /// not, and rebuild and incremental passes keep the 7-day window.
+    /// fails_when: a backfill leaves recent speed-only days unlabelled, or a
+    /// rebuild labels days CoreMotion could still answer for.
+    /// no_claim: the store passing the window (WalkedDayStoreTests).
+    @Test func aBackfillCountsUnknownLegsOfAnyAge() {
+        let first = Self.fix(daysBefore: 30, .unknown)
+        let oldUnknown = Self.fix(daysBefore: 20, .unknown)
+        let recentUnknown = Self.fix(daysBefore: 2, .unknown)
+        let recentKnown = Self.fix(daysBefore: 1, .walking)
+        let history = [first, oldUnknown, recentUnknown, recentKnown]
+
+        #expect(WalkedEstimate.throughDay(history, found: [:], now: Self.now, window: 0) == WalkedDayKey(date: recentUnknown.recordedAt))
+        #expect(
+            WalkedEstimate.throughDay(history, found: [recentUnknown.id: .walking], now: Self.now, window: 0)
+                == WalkedDayKey(date: oldUnknown.recordedAt)
+        )
+        #expect(WalkedEstimate.throughDay(history, found: [:], now: Self.now) == WalkedDayKey(date: oldUnknown.recordedAt))
+        #expect(WalkedEstimate.askableWindow(for: .backfill) == 0)
+        #expect(WalkedEstimate.askableWindow(for: .rebuild) == WalkedEstimate.window)
+        #expect(WalkedEstimate.askableWindow(for: .incremental) == WalkedEstimate.window)
+        #expect(WalkedEstimate.window == 7 * 86_400)
+    }
 }

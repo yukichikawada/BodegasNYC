@@ -27,6 +27,11 @@ nonisolated extension AppCopy {
         case todayPending
         /// The day map's one VoiceOver element (DS7).
         case dayMapLabel
+        /// A walked day's distance when it rounds to "0" miles: a walked day
+        /// always went somewhere, so it never reads "0 miles".
+        case underATenthOfAMile
+        /// The title's VoiceOver action: what a tap on it does (DS2).
+        case showThisMonth
 
         var copy: CopyString {
             switch self {
@@ -41,6 +46,8 @@ nonisolated extension AppCopy {
                 CopyString(kind: .body, text: "A block counts once a day. Miles include repeats. Days start at 4 a.m.")
             case .todayPending: CopyString(kind: .body, text: "Today shows up once it's counted.")
             case .dayMapLabel: CopyString(kind: .body, text: "Map of this day's walk.")
+            case .underATenthOfAMile: CopyString(kind: .value, text: "Less than 0.1 miles")
+            case .showThisMonth: CopyString(kind: .label, text: "Show This Month")
             }
         }
 
@@ -83,9 +90,13 @@ nonisolated extension AppCopy {
         CopyString(kind: .value, text: "\(groupedCount(count)) new")
     }
 
-    /// A day's distance in spelled-out miles (DS4): "1.4 miles", "1 mile".
+    /// A day's distance in spelled-out miles (DS4): "1.4 miles", "1 mile",
+    /// and "Less than 0.1 miles" for a positive distance that would round to
+    /// "0 miles" (under 0.05 miles, about 80 m). Decided on the rendered
+    /// text, so the boundary is exactly `distanceValue`'s rounding.
     static func walkDayDistance(meters: Double) -> CopyString {
-        distanceValue(.miles(max(0, meters) / BlockDistance.metersPerMile))
+        let distance = distanceValue(.miles(max(0, meters) / BlockDistance.metersPerMile))
+        return meters > 0 && distance.text == "0 miles" ? YourWalks.underATenthOfAMile.copy : distance
     }
 
     /// The day detail's title (DS8.4): "Nov 3, 2025".

@@ -153,8 +153,8 @@ private struct WalkMonthGrid: View {
     }
 }
 
-/// A day: its number (`.body`, monospaced; `.primary` when walked,
-/// `textMuted` otherwise; bold today, never green, DS1) over a 6 pt `walked`
+/// A day: its number (`.body`, monospaced; `.primary` when walked or today,
+/// `textMuted` otherwise; today bold, never green, DS1) over a 6 pt `walked`
 /// dot when a block was walked (E3). A walked day is one button into its
 /// map; any other day reads its date only and is not a button (DS8.5).
 private struct WalkDayCell: View {
@@ -180,7 +180,7 @@ private struct WalkDayCell: View {
                 .font(.body)
                 .fontWeight(day.isToday ? .bold : .regular)
                 .monospacedDigit()
-                .foregroundStyle(day.isWalked ? Color.primary : Color.textMuted)
+                .foregroundStyle(day.isWalked || day.isToday ? Color.primary : Color.textMuted)
             Circle()
                 .fill(Color.walked)
                 .frame(width: 6, height: 6)

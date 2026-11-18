@@ -139,7 +139,8 @@ struct AppCopyVoiceTests {
         let days = [WalkedDayKey(value: 20261103), WalkedDayKey(value: 20251231), WalkedDayKey(value: 20270101)]
         let summaries = [
             WalkedDaySummary(day: days[0], walkedIDs: Set(1 ... 14), newCount: 9, meters: 2_253),
-            WalkedDaySummary(day: days[1], walkedIDs: [1], newCount: 0, meters: 80),
+            WalkedDaySummary(day: days[1], walkedIDs: [1], newCount: 0, meters: 60),
+            WalkedDaySummary(day: days[1], walkedIDs: [1, 2], newCount: 1, meters: 200),
             WalkedDaySummary(day: days[2], walkedIDs: Set(1 ... 1_204), newCount: 1_204, meters: 160_934)
         ]
         let counts = [0, 1, 8, 1_204]

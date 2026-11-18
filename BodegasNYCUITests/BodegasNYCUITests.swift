@@ -406,7 +406,7 @@ final class BodegasNYCUITests: XCTestCase {
     }
 
     /// protects: #170 AC 6: Streets Walked → Your Walks (under Your Blocks) opens the sheet; with
-    /// `-UITestWalkedDays` (walks at noon 35, 9, 3 and 1 days back, in an in-memory store) yesterday is one
+    /// `-UITestWalkedDays` (walks at noon 100, 35, 9, 3 and 1 days back, in an in-memory store) yesterday is one
     /// button whose label carries its counts, a day without walks is not a button, and the walked day opens
     /// its map, one element whose value is the day's counts; back returns to the calendar and Done closes it.
     /// fails_when: the menu has no Your Walks, the walked day never becomes a button, a day without walks is

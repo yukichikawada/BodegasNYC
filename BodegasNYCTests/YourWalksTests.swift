@@ -158,6 +158,30 @@ struct YourWalksTests {
         #expect(Self.content(history: history, layout: mondayFirst).months.map(\.leadingBlanks) == [1, 3, 6])
     }
 
+    /// protects: a six-row month (DS8.8's SE check): August 2026 starts on a
+    /// Saturday and has 31 days, so it takes six rows Sunday-first (6
+    /// blanks) and Monday-first (5 blanks), every day keyed in order; a
+    /// four-row February and a five-row month for contrast.
+    /// fails_when: the offset ignores the first weekday, a day is dropped
+    /// past row five, or the row count is off.
+    /// no_claim: how six rows fit an SE screen (the simulator capture).
+    @Test func aSixRowMonth() {
+        let august = WalkedDayKey(value: 20260801)
+        var mondayFirst = Self.sundayFirst
+        mondayFirst.firstWeekday = 2
+        for (layout, blanks) in [(Self.sundayFirst, 6), (mondayFirst, 5)] {
+            let month = WalkMonth.month(august, history: nil, today: Self.day1, layout: layout)
+            #expect(month.leadingBlanks == blanks)
+            #expect(month.days.count == 31)
+            #expect(month.days.map(\.number) == Array(1 ... 31))
+            #expect(month.days.last?.key == WalkedDayKey(value: 20260831))
+            #expect(month.rowCount == 6)
+        }
+        // February 2026 starts on a Sunday: exactly four rows Sunday-first.
+        #expect(WalkMonth.month(WalkedDayKey(value: 20260201), history: nil, today: Self.day1, layout: Self.sundayFirst).rowCount == 4)
+        #expect(WalkMonth.month(WalkedDayKey(value: 20261101), history: nil, today: Self.day1, layout: Self.sundayFirst).rowCount == 5)
+    }
+
     /// protects: DS8.2's precedence, failure > loading > empty: the street
     /// data failing, then the day rows failing with nothing to show, then no
     /// history, then a first read, then history with no walked day; a
@@ -211,6 +235,18 @@ struct YourWalksTests {
         )
         let one = WalkedDaySummary(day: Self.day2, walkedIDs: [1], newCount: 0, meters: BlockDistance.metersPerMile)
         #expect(AppCopy.walkDaySummary(one).text == "1 block, 1 mile.")
+        // A walked day under 80 m never reads "0 miles", in the bar, the
+        // VoiceOver label or the list row (all through `walkDayDistance`).
+        let short = WalkedDaySummary(day: Self.day2, walkedIDs: [1], newCount: 1, meters: 62)
+        #expect(AppCopy.walkDayDistance(meters: 62).text == "Less than 0.1 miles")
+        #expect(AppCopy.walkDaySummary(short).text == "1 block, 1 new, Less than 0.1 miles.")
+        #expect(
+            AppCopy.walkDayLabel(short, isToday: false, isEstimate: false).text
+                == "Tuesday, November 3, 1 block, 1 new, Less than 0.1 miles."
+        )
+        #expect(AppCopy.walkDayDistance(meters: 81).text == "0.1 miles")
+        #expect(AppCopy.walkDayDistance(meters: 0).text == "0 miles")
+        #expect(AppCopy.distanceValue(.miles(0.02)).text == "0 miles", "other callers keep their rounding")
         #expect(AppCopy.walkPlainDayLabel(Self.day1, isToday: false).text == "Monday, November 2")
         #expect(AppCopy.walkPlainDayLabel(Self.day1, isToday: true).text == "Monday, November 2, today")
         #expect(AppCopy.walkDayTitle(WalkedDayKey(value: 20251103)).text == "Nov 3, 2025")
@@ -271,13 +307,13 @@ struct YourWalksTests {
     // MARK: UI fixture (eng A10)
 
     /// protects: the `-UITestWalkedDays` fixture, matched against the real
-    /// bundle, walks one block on each of four noon-anchored days, the
+    /// bundle, walks one block on each of five noon-anchored days, the
     /// 3-days-back day repeating the 9-days-back block before a new one, so
-    /// the calendar shows four dots and that day reads "2 blocks, 1 new".
+    /// the calendar shows five dots and that day reads "2 blocks, 1 new".
     /// fails_when: a walk lands on the wrong day, misses its block, or the
     /// repeat counts as new.
     /// no_claim: the app's launch-time seeding (the UI test covers it).
-    @Test func uiFixtureWalksFourDays() throws {
+    @Test func uiFixtureWalksFiveDays() throws {
         let grid = try StreetGrid.loadBundled()
         let now = WalkedDayKeyTests.newYork(2026, 11, 18, 2)
         let fixes = UITestFixtures.walkedDaysFixture(grid: grid, now: now)
@@ -292,7 +328,7 @@ struct YourWalksTests {
             version: 1
         )
         #expect(history.walkedDays.map(\.day) == UITestFixtures.walkedDayOffsets.map { today.advanced(by: -$0) })
-        #expect(history.walkedDays.map(\.walkedIDs.count) == [1, 1, 2, 1])
-        #expect(history.walkedDays.map(\.newCount) == [1, 1, 1, 1])
+        #expect(history.walkedDays.map(\.walkedIDs.count) == [1, 1, 1, 2, 1])
+        #expect(history.walkedDays.map(\.newCount) == [1, 1, 1, 1, 1])
     }
 }

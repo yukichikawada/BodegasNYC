@@ -33,6 +33,11 @@ nonisolated struct WalkedHistory: Sendable, Equatable {
     /// Ascending by day; every day that has a block row or a distance.
     var days: [WalkedDaySummary]
     /// One point per entry of `days`: walked blocks citywide after the day.
+    /// Its last value equals Your Blocks' citywide count only when every
+    /// saved total is the OR of its days. A backfilled saved bit that no
+    /// re-match of history produces stays in the totals with no day, so the
+    /// last value can fall below the Your Blocks total; a headline count
+    /// (PR 2) comes from the totals (`WalkedSummary`), not from here.
     var cumulative: [CumulativePoint]
     /// Days up to this one were rebuilt without saved ride evidence (E2).
     var estimatedThroughDay: WalkedDayKey?

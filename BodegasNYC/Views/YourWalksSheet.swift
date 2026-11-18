@@ -9,7 +9,8 @@ import UIKit
 /// `systemGroupedBackground`, bare ground with no card around the grid
 /// (DS8.4). PR 1 ships the Calendar alone; PR 2 adds the Calendar/Progress
 /// switch under the title (`calendarOrProgress` is the one slot it
-/// replaces). A tap on the title scrolls to the current month (DS2).
+/// replaces). A tap on the title scrolls to the current month (DS2), and
+/// VoiceOver gets the same as a "Show This Month" action on the heading.
 ///
 /// States (DS8.2), failure > loading > empty: the street data failing, or
 /// the day rows failing (eng A6), shows one `.primary` line and no grid; a
@@ -40,6 +41,10 @@ struct YourWalksSheet: View {
                             .lineLimit(1)
                             .onTapGesture { scrollToCurrentMonth += 1 }
                             .accessibilityAddTraits(.isHeader)
+                            // The tap's VoiceOver equivalent (DS2).
+                            .accessibilityAction(named: AppCopy.YourWalks.showThisMonth.copy.text) {
+                                scrollToCurrentMonth += 1
+                            }
                     }
                     ToolbarItem(placement: .confirmationAction) {
                         Button(AppCopy.doneAction.copy.text) { dismiss() }

@@ -643,7 +643,7 @@ then "8 days · 24 new blocks" in `.subheadline` `textMuted` (none for a month w
 weekday initials (`.caption` `textMuted`, hidden from VoiceOver) and the grid, edge to edge (the Layout
 exception), cells at least 44pt, numbers `.body` monospaced and capped at `.xxxLarge`: a walked day's
 number is `.primary` over a 6pt `walked` dot 4pt below (scaled), any other day's is `textMuted`; today
-is bold in its colour, never green. A day gets a dot only when a block was walked on it (eng E3). At
+is bold in the normal text colour (`.primary`), walked or not, never green. A day gets a dot only when a block was walked on it (eng E3). At
 accessibility sizes each month lists its walked days instead, date (`.body`) over "14 blocks, 9 new ·
 1.4 miles" (`.subheadline` `textMuted`), fully scaling; the swap is the 0.25s opacity change. Under a
 month with estimated days: "Older days are estimates. Some rides may be counted." (`.footnote`

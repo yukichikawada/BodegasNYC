@@ -12,7 +12,7 @@ nonisolated extension UITestFixtures {
     /// without touching the simulator's real history.
     static let walkedBlocksLaunchArgument = "-UITestWalkedBlocks"
     /// With `-UITestFixtures`, the in-memory store holds `walkedDaysFixture`
-    /// instead (#170): walks on four days, so Your Walks has dots. A separate
+    /// instead (#170): walks on five days, so Your Walks has dots. A separate
     /// argument, so `-UITestWalkedBlocks` keeps its one block.
     static let walkedDaysLaunchArgument = "-UITestWalkedDays"
 
@@ -64,20 +64,22 @@ nonisolated extension UITestFixtures {
     }
 
     /// The walk-day offsets of `walkedDaysFixture`, before today's walk day.
-    static let walkedDayOffsets = [35, 9, 3, 1]
+    static let walkedDayOffsets = [100, 35, 9, 3, 1]
 
     /// Walks at noon New York time on fixed day offsets from `now`'s walk
     /// day (#170 eng A10, never "an hour before now"), one Manhattan block
-    /// each from the first four `fixtureBlocks`, except 3 days back, which
+    /// each from the first five `fixtureBlocks`, except 3 days back, which
     /// walks the 9-days-back block again before its own: a repeat and a new
-    /// block. Offsets 35 and 9 are past CoreMotion's 7 days, so they read
-    /// as estimates (eng E2).
+    /// block. Offsets 100, 35 and 9 are past CoreMotion's 7 days, so they
+    /// read as estimates (eng E2); 100 days back puts the scroll's top three
+    /// months or more above the current one (a six-row August in a
+    /// mid-November run).
     static func walkedDaysFixture(grid: StreetGrid, now: Date) -> [WalkedPointSnapshot] {
-        let blocks = fixtureBlocks(grid: grid, count: 4)
-        guard blocks.count == 4 else { return [] }
+        let blocks = fixtureBlocks(grid: grid, count: 5)
+        guard blocks.count == 5 else { return [] }
         let today = WalkedDayKey(date: now)
         let plan: [(offset: Int, blocks: [Int])] = [
-            (35, [blocks[0]]), (9, [blocks[1]]), (3, [blocks[1], blocks[2]]), (1, [blocks[3]])
+            (100, [blocks[4]]), (35, [blocks[0]]), (9, [blocks[1]]), (3, [blocks[1], blocks[2]]), (1, [blocks[3]])
         ]
         var fixes: [WalkedPointSnapshot] = []
         for day in plan {
