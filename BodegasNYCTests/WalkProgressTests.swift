@@ -9,7 +9,9 @@
 //  the line. No views.
 //
 
+import CoreLocation
 import Foundation
+import SwiftData
 import Testing
 
 @testable import BodegasNYC
@@ -159,8 +161,11 @@ struct WalkProgressTests {
         #expect(progress.slice(.week).yDomain == 3 ... 5)
         #expect(progress.slice(.month).yDomain == 2 ... 5)
         #expect(progress.slice(.all).yDomain == 0 ... 5)
-        #expect(progress.slice(.all).yTicks == [0, 2, 4])
         #expect(progress.slice(.week).yTicks == [3, 4, 5])
+        #expect(progress.slice(.threeMonths).yDomain == 1 ... 5)
+        #expect(progress.slice(.threeMonths).yTicks == [1, 2, 3, 4, 5])
+        #expect(progress.slice(.year).yTicks == [0, 1, 2, 3, 4, 5])
+        #expect(progress.slice(.all).yTicks == [0, 1, 2, 3, 4, 5])
 
         let old = Self.progress(Self.history([Self.day(200): [100: 0x3FF, 200: 0x3FF]]), citywide: 2)
         #expect(old.slice(.week).counts.allSatisfy { $0 == 2 })
@@ -174,6 +179,32 @@ struct WalkProgressTests {
         #expect(none.slice(.all).start == Self.day(4), "All starts on the first day with a row")
         #expect(none.headline == 0)
 
+        #expect(old.slice(.week).yTicks == [1, 2, 3])
+        #expect(none.slice(.month).yTicks == [0, 1])
+    }
+
+    /// protects: the top of the y-domain (the range's maximum, usually the
+    /// headline) is always a labelled tick; spans of 5 or less tick every
+    /// block; large spans keep whole, uncrowded ticks with no duplicates.
+    /// fails_when: the maximum has no gridline, a tick repeats, or one
+    /// lands less than a step below the top.
+    /// no_claim: Swift Charts' label layout.
+    @Test func yTicksAlwaysLabelTheTop() {
+        typealias S = WalkProgressSlice
+        #expect(S.yTicks(for: 4 ... 4) == [4], "a span of 0")
+        #expect(S.yTicks(for: 0 ... 1) == [0, 1])
+        #expect(S.yTicks(for: 1 ... 5) == [1, 2, 3, 4, 5])
+        #expect(S.yTicks(for: 0 ... 5) == [0, 1, 2, 3, 4, 5])
+        #expect(S.yTicks(for: 272 ... 312) == [280, 290, 300, 312], "310 is too close under the top")
+        #expect(S.yTicks(for: 0 ... 1_204) == [0, 500, 1_204], "1,000 is too close under the top")
+        #expect(S.yTicks(for: 0 ... 7) == [0, 2, 4, 7])
+        #expect(S.yTicks(for: 990 ... 1_310) == [1_000, 1_100, 1_200, 1_310])
+        for domain in [3 ... 9, 272 ... 312, 0 ... 1_204, 12 ... 13, 990 ... 1_310] {
+            let ticks = S.yTicks(for: domain)
+            #expect(ticks.last == domain.upperBound)
+            #expect(Set(ticks).count == ticks.count)
+            #expect(ticks.allSatisfy { domain.contains($0) })
+        }
         #expect(WalkProgressSlice.niceStep(400) == 500)
         #expect(WalkProgressSlice.niceStep(0.3) == 1)
         #expect(WalkProgressSlice.niceStep(20) == 20)
@@ -252,29 +283,116 @@ struct WalkProgressTests {
 
     // MARK: Axis (DS6)
 
-    /// protects: the x-axis labels: every day of a week, every seventh day
-    /// back from today in a month, each month's first in 3 months, each
-    /// quarter's first in a year with January as its year; labels in New
-    /// York walk days.
-    /// fails_when: ticks crowd, miss today in a month, or fall on the
-    /// device's midnight.
-    /// no_claim: label collisions on screen (captures).
-    @Test func axisTicks() {
+    /// protects: the x-axis tick days for every range (QA on an SE found
+    /// "Nov 11" and "Nov 18" touching): today is always labelled, as a
+    /// weekday in a week and "Nov 17" otherwise; the candidate before today
+    /// is dropped when both labels would not fit in its gap on a 300 pt
+    /// plot; a week's other days, a month's seventh days back, a quarter's
+    /// month firsts and a year's quarter firsts (January as its year) stay.
+    /// fails_when: a range drops today, keeps a tick that would touch its
+    /// neighbour, or the days fall on the wrong dates.
+    /// no_claim: Swift Charts' exact label metrics (the SE and branch
+    /// device captures check them).
+    @Test func axisTicksPerRange() {
         let progress = Self.progress()
+        let expected: [(WalkProgressRange, [Int], [WalkProgressSlice.TickStyle])] = [
+            (.week, [20261111, 20261112, 20261113, 20261114, 20261115, 20261117], Array(repeating: .weekday, count: 6)),
+            (.month, [20261020, 20261027, 20261103, 20261117], Array(repeating: .monthDay, count: 4)),
+            (.threeMonths, [20260901, 20261001, 20261117], [.month, .month, .monthDay]),
+            (.year, [20260101, 20260401, 20260701, 20261117], [.year, .month, .month, .monthDay]),
+            (.all, [20260901, 20261001, 20261117], [.month, .month, .monthDay])
+        ]
+        for (range, days, styles) in expected {
+            let ticks = progress.slice(range).xTicks
+            #expect(ticks.map(\.day.value) == days, "\(range)")
+            #expect(ticks.map(\.style) == styles, "\(range)")
+            #expect(ticks.last?.index == progress.slice(range).lastIndex, "\(range): today is labelled")
+        }
         let week = progress.slice(.week).xTicks
-        #expect(week.map(\.index) == Array(0 ... 6))
-        #expect(week.allSatisfy { $0.style == .weekday })
-        #expect(AppCopy.walkChartAxisLabel(week[6].day, style: .weekday).text == "Tue")
-        let month = progress.slice(.month).xTicks
-        #expect(month.map(\.index) == [1, 8, 15, 22, 29])
-        #expect(AppCopy.walkChartAxisLabel(month[4].day, style: .monthDay).text == "Nov 17")
-        let quarter = progress.slice(.threeMonths).xTicks
-        #expect(quarter.map(\.day.value) == [20260901, 20261001, 20261101])
-        #expect(AppCopy.walkChartAxisLabel(quarter[0].day, style: .month).text == "Sep")
-        let year = progress.slice(.year).xTicks
-        #expect(year.map(\.day.value) == [20260101, 20260401, 20260701, 20261001])
-        #expect(year.map(\.style) == [.year, .month, .month, .month])
-        #expect(AppCopy.walkChartAxisLabel(year[0].day, style: .year).text == "2026")
+        #expect(AppCopy.walkChartAxisLabel(week[5].day, style: .weekday).text == "Tue")
+        #expect(AppCopy.walkChartAxisLabel(progress.slice(.month).xTicks[3].day, style: .monthDay).text == "Nov 17")
+        #expect(AppCopy.walkChartAxisLabel(progress.slice(.threeMonths).xTicks[0].day, style: .month).text == "Sep")
+        #expect(AppCopy.walkChartAxisLabel(progress.slice(.year).xTicks[0].day, style: .year).text == "2026")
+    }
+
+    /// protects: no two neighbouring x labels touch in any range, for
+    /// histories from one day to three years, on the narrowest plot the
+    /// ticks are spaced for (an SE's); today is always the last tick.
+    /// fails_when: a pair of labels needs more room than its gap leaves.
+    /// no_claim: the label width allowances themselves (measured on the
+    /// simulator; the captures check them).
+    @Test func neighbouringLabelsNeverTouch() {
+        for back in [0, 3, 20, 60, 100, 200, 400, 1_100] {
+            let progress = Self.progress(Self.history([Self.day(back): [100: 0x3FF], Self.day(1): [200: 0x3FF]]), citywide: 2)
+            for range in WalkProgressRange.allCases {
+                let slice = progress.slice(range)
+                let ticks = slice.xTicks
+                #expect(ticks.last?.index == slice.lastIndex, "\(range) over \(back) days")
+                guard slice.lastIndex > 0 else { continue }
+                let perDay = WalkProgressSlice.minimumPlotWidth / Double(slice.lastIndex)
+                for (left, right) in zip(ticks, ticks.dropFirst()) {
+                    var needed = WalkProgressSlice.labelWidth(left.style) + WalkProgressSlice.labelGap
+                    if right.index == slice.lastIndex { needed += WalkProgressSlice.labelWidth(right.style) }
+                    #expect(Double(right.index - left.index) * perDay >= needed, "\(range) over \(back) days")
+                }
+            }
+        }
+    }
+
+    // MARK: Today at the 4 am boundary (eng A7)
+
+    /// protects: the view model's `walkProgress(now:)` takes today from the
+    /// New York walk day: at 3:59 am New York time today is still the
+    /// previous date, so the chart ends, and its last point sits, on that
+    /// date's key; at 4:00 am it moves on. Each `now` is written as a Tokyo
+    /// wall-clock time (17:59 and 18:00, the next calendar date there), so a
+    /// result that read the device's or Tokyo's zone would land a day late.
+    /// fails_when: the chart's today follows midnight, or any zone but New
+    /// York's.
+    /// no_claim: the process's default time zone is not changed (tests run
+    /// in parallel); the instant is fixed whatever zone it was written in.
+    @Test func walkProgressTodayFollowsTheFourAMNewYorkDay() throws {
+        let container = try makeInMemoryModelContainer()
+        let defaults = try #require(UserDefaults(suiteName: "WalkProgressTests.\(UUID().uuidString)"))
+        let motion = FakeMotionProvider()
+        let matcher = BlockMatchingActor(container: container, activityProvider: motion, loadGrid: { F.cornerGrid() }, onGridLoadFailure: { _ in })
+        let recorder = WalkRecorder(
+            modelContainer: container,
+            userDefaults: defaults,
+            access: { AuthorizationBox(.authorizedAlways).access },
+            backend: FakeWalkBackend(),
+            now: { Date() }
+        )
+        let viewModel = StreetsWalkedViewModel(
+            locationPermissionClient: LocationPermissionClient(),
+            modelContainer: container,
+            recorder: recorder,
+            userDefaults: defaults,
+            motion: motion,
+            matcher: matcher,
+            firstCountRetryDelay: .zero
+        )
+        #expect(viewModel.walkProgress() == nil, "nothing before the first history read")
+        let november17 = WalkedDayKey(value: 20261117)
+        viewModel.walksHistory = Self.history([november17: [100: 0x3FF], november17.advanced(by: -3): [200: 0x3FF]])
+
+        var tokyo = Calendar(identifier: .gregorian)
+        tokyo.timeZone = try #require(TimeZone(identifier: "Asia/Tokyo"))
+        let beforeFour = try #require(tokyo.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 17, minute: 59)))
+        let atFour = try #require(tokyo.date(from: DateComponents(year: 2026, month: 11, day: 18, hour: 18)))
+        #expect(beforeFour == WalkedDayKeyTests.newYork(2026, 11, 18, 3, 59))
+
+        let late = try #require(viewModel.walkProgress(now: beforeFour))
+        #expect(late.today == november17)
+        let week = late.slice(.week)
+        #expect(week.day(at: week.lastIndex) == november17)
+        #expect(week.counts.last == 2)
+        #expect(week.xTicks.last?.day == november17)
+
+        let next = try #require(viewModel.walkProgress(now: atFour))
+        #expect(next.today == WalkedDayKey(value: 20261118))
+        #expect(next.slice(.week).day(at: next.slice(.week).lastIndex) == WalkedDayKey(value: 20261118))
+        #expect(next.slice(.week).counts.suffix(2) == [2, 2], "the new day carries the count flat")
     }
 
     // MARK: Copy (DS8.5, DS8.7)

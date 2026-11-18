@@ -186,14 +186,23 @@ nonisolated struct WalkProgressSlice: Equatable, Sendable {
         return low ... high
     }
 
-    /// Whole-block gridlines in steps of 1, 2 or 5 times a power of ten,
-    /// about three across the domain.
-    var yTicks: [Int] {
-        let domain = yDomain
+    var yTicks: [Int] { Self.yTicks(for: yDomain) }
+
+    /// Whole-block gridlines whose top is always the domain's top (the
+    /// range's maximum, usually the headline): every block for a span of 5
+    /// or less; otherwise multiples of a 1, 2 or 5 times a power of ten step
+    /// (about four across the domain) from the bottom up, then the top,
+    /// leaving out a multiple less than a step below the top so no two
+    /// labels crowd.
+    static func yTicks(for domain: ClosedRange<Int>) -> [Int] {
         let span = domain.upperBound - domain.lowerBound
-        let step = Self.niceStep(Double(span) / 3)
+        guard span > 5 else { return Array(domain) }
+        let step = niceStep(Double(span) / 4)
         let first = Int((Double(domain.lowerBound) / Double(step)).rounded(.up)) * step
-        return Array(stride(from: first, through: domain.upperBound, by: step))
+        let below = stride(from: first, to: domain.upperBound, by: step).filter {
+            domain.upperBound - $0 >= step
+        }
+        return below + [domain.upperBound]
     }
 
     static func niceStep(_ raw: Double) -> Int {
@@ -203,13 +212,52 @@ nonisolated struct WalkProgressSlice: Equatable, Sendable {
         return Int(multiple * magnitude)
     }
 
-    /// The x-axis labels: every day of a week, every seventh day back from
-    /// today up to a month, each month's first up to four months, each
-    /// quarter's first (January as its year) up to two years, then each
-    /// year's first.
+    /// The narrowest plot the ticks are spaced for, in points: an iPhone SE
+    /// (375 pt) less the 16 pt insets and the trailing y labels. Wider plots
+    /// only widen the gaps.
+    static let minimumPlotWidth: Double = 300
+    /// A clear gap between neighbouring labels, in points.
+    static let labelGap: Double = 8
+
+    /// A label's width allowance in points at the default text size (the
+    /// axis does not scale past it), measured on the simulator ("Nov 18"
+    /// about 35 pt, "Wed" about 22 pt) and rounded up, plus Swift Charts'
+    /// offset of a label after its gridline.
+    static func labelWidth(_ style: TickStyle) -> Double {
+        switch style {
+        case .weekday, .month: 30
+        case .monthDay: 46
+        case .year: 38
+        }
+    }
+
+    /// The x-axis labels. Today is always labelled, its label ending at the
+    /// plot's trailing edge ("Wed" in a week, "Nov 18" otherwise); every
+    /// other label sits after its gridline. Candidates: every day of a week,
+    /// every seventh day back from today in a month, each month's first up
+    /// to four months, each quarter's first (January as its year) up to two
+    /// years, then each year's first. Walking back from today, a candidate
+    /// is kept only when its label, and today's when the next kept tick is
+    /// today, fit before the next kept gridline with `labelGap` to spare on
+    /// a `minimumPlotWidth` plot, so neighbouring labels never touch.
     var xTicks: [Tick] {
         let count = counts.count
-        if count <= 1 { return count == 1 ? [Tick(index: 0, day: start, style: .monthDay)] : [] }
+        guard count > 1 else { return count == 1 ? [Tick(index: 0, day: start, style: .monthDay)] : [] }
+        let today = Tick(index: lastIndex, day: day(at: lastIndex), style: count <= 7 ? .weekday : .monthDay)
+        let pointsPerDay = Self.minimumPlotWidth / Double(lastIndex)
+        var kept = [today]
+        for candidate in tickCandidates.reversed() where candidate.index < lastIndex {
+            let next = kept[kept.count - 1]
+            var needed = Self.labelWidth(candidate.style) + Self.labelGap
+            if next.index == lastIndex { needed += Self.labelWidth(today.style) }
+            if Double(next.index - candidate.index) * pointsPerDay >= needed { kept.append(candidate) }
+        }
+        return kept.reversed()
+    }
+
+    /// Every tick the range could label, oldest first, before spacing.
+    private var tickCandidates: [Tick] {
+        let count = counts.count
         if count <= 7 { return counts.indices.map { Tick(index: $0, day: day(at: $0), style: .weekday) } }
         if count <= 31 {
             return stride(from: lastIndex, through: 0, by: -7).reversed().map {

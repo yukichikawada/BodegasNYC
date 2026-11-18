@@ -675,9 +675,12 @@ the count and out of the line). Then the chart, 240pt tall at the 16pt inset: cu
 citywide, one value per walk day with days without walks flat, a 2pt step line in the `walked` cyan
 with round caps, no area fill, no gradient; a single day draws a point. Y-axis on the trailing edge
 from the range's minimum to its maximum (from zero for All; a flat range gets a block either side),
-whole-block gridlines; x labels every day of a week ("Tue"), every seventh day back from today in a
-month ("Nov 17"), each month's first in 3 months ("Sep"), each quarter's first in a year (January as
-"2026"), after their gridlines as Swift Charts places them, today's ending at the plot's edge; the
+whole-block gridlines whose top is always the range's maximum, labelled (every block up to a span of
+5, else 1, 2 or 5 times a power of ten with no tick less than a step under the top); x labels: today
+always ("Wed" in a week, "Nov 18" otherwise), ending at the plot's edge, then every other day of a
+week, every seventh day back from today in a month, each month's first in 3 months ("Sep"), each
+quarter's first in a year (January as "2026"), after their gridlines as Swift Charts places them, the
+one before today left out when the two would not sit 8pt apart on a 300pt plot (an iPhone SE's); the
 axis labels stay at the default text size (a month's dates overlapped at larger sizes) while the header
 scales fully. Under the chart a segmented range picker, 1W, 1M, 3M, 1Y, All, opening on 1M, read as "1
 week", "1 month", "3 months", "1 year", "All"; a range change is the 0.25s opacity change, Reduce
