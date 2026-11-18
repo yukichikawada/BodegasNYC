@@ -62,7 +62,9 @@ nonisolated enum BlockMatcher {
 
     /// Whether a leg can earn bins: same walk (20 min, 250 m), at most 60 m,
     /// walking speed (a zero-duration leg only under 5 m), and not during a
-    /// ride CoreMotion saw.
+    /// ride CoreMotion saw. Evidence saved on the end fix wins over
+    /// `activity`, so a rebuild after CoreMotion's window repeats the
+    /// original decision (#170).
     static func isCreditableLeg(
         from start: WalkedPointSnapshot,
         to end: WalkedPointSnapshot,
@@ -80,7 +82,26 @@ nonisolated enum BlockMatcher {
         } else if meters / seconds > maxWalkingSpeedMetersPerSecond {
             return false
         }
-        return !activity.isRide(from: start.recordedAt, to: end.recordedAt)
+        switch end.ride {
+        case .ride: return false
+        case .walking: return true
+        case .unknown: return !activity.isRide(from: start.recordedAt, to: end.recordedAt)
+        }
+    }
+
+    /// The ride evidence to save, keyed by each leg's end fix (#170): legs
+    /// whose end is still unknown and whose start `activity` covers. The
+    /// rest are left out and stay unknown, so no coverage saves nothing.
+    static func evidence(_ points: [WalkedPointSnapshot], activity: VehicleActivity) -> [UUID: RideEvidence] {
+        guard let coverage = activity.coverage, points.count >= 2 else { return [:] }
+        var result: [UUID: RideEvidence] = [:]
+        for index in 1 ..< points.count {
+            let start = points[index - 1]
+            let end = points[index]
+            guard end.ride == .unknown, coverage.contains(start.recordedAt) else { continue }
+            result[end.id] = activity.isRide(from: start.recordedAt, to: end.recordedAt) ? .ride : .walking
+        }
+        return result
     }
 
     /// Samples the leg and ORs each sample's bin into its nearest block.
