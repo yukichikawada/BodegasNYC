@@ -13,4 +13,4 @@ nothing was left to checkpoint, so the `.store` file alone is self-contained.
 Contents: 50 `WalkedPoint`s, all matched; one `WalkedMatchState` with dataset stamp 1792226103;
 six `WalkedBlock`s with masks 3: 1023, 5: 1023, 6: 1023, 14: 511, 23: 511, 24: 255.
 
-`StreetsWalkedMigrationTests` copies it to a temporary directory before opening it. Never open it in place.
+`RideEvidenceTests.theOneZeroZeroStoreOpensWithEveryFixUnknown` copies it to a temporary directory before opening it. Never open it in place.
