@@ -121,6 +121,7 @@ struct AppCopyVoiceTests {
         + AppCopy.Telemetry.allCases.map(\.copy)
         + AppCopy.YourWalks.allCases.map(\.copy)
         + yourWalksCopy
+        + walkProgressCopy
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),
@@ -164,6 +165,28 @@ struct AppCopyVoiceTests {
                 AppCopy.walkDayLabel(summary, isToday: true, isEstimate: true)
             ]
         }
+    }()
+
+    /// Your Walks' Progress templates (#170 PR 2): every range's names,
+    /// second line and VoiceOver values over zero, one and many blocks, and
+    /// every axis label style.
+    static let walkProgressCopy: [CopyString] = {
+        let today = WalkedDayKey(value: 20261117)
+        let points = [
+            WalkedHistory.CumulativePoint(day: today.advanced(by: -40), count: 1),
+            WalkedHistory.CumulativePoint(day: today.advanced(by: -2), count: 1_204)
+        ]
+        let history = WalkedHistory(days: [], cumulative: points, estimatedThroughDay: nil, version: 1)
+        let progress = WalkProgress(history: history, citywideWalked: 1_204, today: today)
+        let styles: [WalkProgressSlice.TickStyle] = [.weekday, .monthDay, .month, .year]
+        return WalkProgressRange.allCases.flatMap { range in
+            let slice = progress.slice(range)
+            return [
+                AppCopy.walkRangeShort(range), AppCopy.walkRangeSpoken(range), AppCopy.walkProgressSummary(slice)
+            ] + [0, 1, 1_204].map { AppCopy.walkProgressRestValue(headline: $0, slice: slice) }
+        }
+        + [0, 1, 1_204].map { AppCopy.walkProgressValue(count: $0, day: today) }
+        + styles.map { AppCopy.walkChartAxisLabel(today, style: $0) }
     }()
 
     /// (walked, total) for Your Blocks (#108 PR 2): zero, one, the "<1%"
