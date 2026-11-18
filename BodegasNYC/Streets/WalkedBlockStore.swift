@@ -1,12 +1,16 @@
 import Foundation
 import SwiftData
 
-/// The two kinds of match pass.
+/// The three kinds of match pass.
 nonisolated enum WalkedPassKind: Equatable {
     /// Unmatched fixes after the newest matched one, ORed into the masks.
     case incremental
     /// Every mask recomputed from all history.
     case rebuild
+    /// The per-day rows built once from matched history, each day mask
+    /// clamped to its block's saved mask; the masks are not touched (#170
+    /// eng A1).
+    case backfill
 }
 
 /// The synchronous core of a match pass (#108 spec Implementation 4, eng
@@ -19,9 +23,27 @@ nonisolated enum WalkedPassKind: Equatable {
 nonisolated final class WalkedBlockStore {
     /// History is read oldest first in pages of this many fixes (eng R4).
     static let pageSize = 5_000
+    /// The per-day rows' version (#170): a store whose state is behind it
+    /// backfills them once. A fix that changes how day rows are derived
+    /// bumps it to rebuild them from `WalkedPoint`.
+    static let dayIndexVersion = 1
 
     let container: ModelContainer
     let grid: StreetGrid
+    /// The clock `WalkedEstimate` reads (tests pin it).
+    let now: @Sendable () -> Date
+    /// The saved day rows, loaded once for the first `history()` and kept
+    /// current from each saved pass's day delta from then on (eng A3);
+    /// `nil` until then.
+    var days: WalkedDayRows?
+    /// Whether the saved day rows are at `dayIndexVersion`; `nil` until read.
+    var isDayIndexCurrent: Bool?
+    /// The history of `days`, until they change.
+    var cachedHistory: WalkedHistory?
+    /// Advanced whenever the day rows held in memory change.
+    var historyVersion = 0
+    /// Backfill passes saved so far (tests: a 1.0.0 store backfills once).
+    private(set) var backfillCount = 0
     /// The saved masks, read in full once for the first `summary()` and
     /// mirrored after every successful save from then on; `nil` until then.
     /// A pass never reads it: an incremental pass merges into the rows it
@@ -38,9 +60,10 @@ nonisolated final class WalkedBlockStore {
     /// fetches only the rows of the blocks it touches).
     private(set) var blockRowsFetched = 0
 
-    init(container: ModelContainer, grid: StreetGrid) {
+    init(container: ModelContainer, grid: StreetGrid, now: @escaping @Sendable () -> Date = { Date() }) {
         self.container = container
         self.grid = grid
+        self.now = now
     }
 
     /// One pass's input, gathered before the activity query.
@@ -65,12 +88,19 @@ nonisolated final class WalkedBlockStore {
     /// What the next pass must do, or `nil` when the cache is current.
     /// A stamp that differs from the bundle's (or none) rebuilds; so does an
     /// unmatched fix that sorts before the newest matched one (a late or
-    /// deferred delivery).
-    func plan() throws -> Plan? {
+    /// deferred delivery). A current stamp with day rows behind
+    /// `dayIndexVersion` backfills them first, unless `allowsBackfill` is
+    /// false (a backfill just failed, eng A6); the unmatched fixes then take
+    /// the next, incremental, pass.
+    func plan(allowsBackfill: Bool = true) throws -> Plan? {
         let context = Self.makeContext(container)
         let state = try context.fetch(FetchDescriptor<WalkedMatchState>()).first
-        guard state?.datasetStamp == Int(grid.datasetStamp) else {
+        guard let state, state.datasetStamp == Int(grid.datasetStamp) else {
             return try rebuildPlan(context)
+        }
+        if allowsBackfill, state.dayIndexVersion != Self.dayIndexVersion {
+            let matched = Self.ordered(try fetchPaged(context, predicate: #Predicate { $0.isMatched == true }))
+            return Plan(kind: .backfill, context: context, snapshots: matched, unmatched: [], evidenceRows: [])
         }
         let unmatched = try fetchPaged(context, predicate: #Predicate { $0.isMatched == false })
         let new = Self.ordered(unmatched)
@@ -117,23 +147,28 @@ nonisolated final class WalkedBlockStore {
         seam: (BlockMatchingActor.CommitPoint) throws -> Void = { _ in },
         shouldCommit: () -> Bool
     ) throws -> Bool {
-        let delta = BlockMatcher.match(plan.snapshots, grid: grid, activity: activity)
+        let result = BlockMatcher.matchByDay(plan.snapshots, grid: grid, activity: activity)
+        let evidence = BlockMatcher.evidence(plan.snapshots, activity: activity)
+        // Rebuilds and backfills re-derive old days (eng E2); an
+        // incremental pass leaves the saved value alone.
+        let estimated = plan.kind == .incremental
+            ? nil
+            : WalkedEstimate.throughDay(plan.snapshots, found: evidence, now: now())
         let context = plan.context
         let written: MaskWrite
+        let dayWrite: DayWrite
         do {
             written = switch plan.kind {
-            case .rebuild: try writeRebuild(delta, in: context)
-            case .incremental: try writeIncrement(delta, in: context)
+            case .rebuild: try writeRebuild(result.masks, in: context)
+            case .incremental: try writeIncrement(result.masks, in: context)
+            case .backfill: .merged([:]) // The totals stay as saved (eng A1).
             }
-            if let state = try context.fetch(FetchDescriptor<WalkedMatchState>()).first {
-                state.datasetStamp = Int(grid.datasetStamp)
-            } else {
-                context.insert(WalkedMatchState(datasetStamp: grid.datasetStamp))
-            }
+            dayWrite = try stageDays(plan.kind, result.days, in: context)
+            try stageState(plan.kind, estimatedThroughDay: estimated, in: context)
             for point in plan.unmatched {
                 point.isMatched = true
             }
-            Self.saveEvidence(BlockMatcher.evidence(plan.snapshots, activity: activity), on: plan.evidenceRows)
+            Self.saveEvidence(evidence, on: plan.evidenceRows)
             try seam(.beforeCheck)
             guard shouldCommit() else {
                 context.rollback()
@@ -145,6 +180,14 @@ nonisolated final class WalkedBlockStore {
             context.rollback()
             throw error
         }
+        didSave(written)
+        if plan.kind == .backfill { backfillCount += 1 }
+        didSave(dayWrite, estimatedThroughDay: estimated)
+        return true
+    }
+
+    /// Mirrors a saved pass's masks in memory.
+    private func didSave(_ written: MaskWrite) {
         switch written {
         case .replaced(let all):
             if all != masks { cachedSummary = nil }
@@ -155,7 +198,6 @@ nonisolated final class WalkedBlockStore {
             cachedSummary = nil
             masks?.merge(changed) { $1 }
         }
-        return true
     }
 
     /// What a pass staged, applied to `masks` only once it saves.
@@ -233,12 +275,20 @@ nonisolated final class WalkedBlockStore {
         try Self.clearCache(in: container)
         masks = [:]
         cachedSummary = nil
+        clearDays()
     }
 
+    /// Deletes the masks, the day rows (#170) and the stamp in one save.
     static func clearCache(in container: ModelContainer) throws {
         let context = makeContext(container)
         for block in try context.fetch(FetchDescriptor<WalkedBlock>()) {
             context.delete(block)
+        }
+        for row in try context.fetch(FetchDescriptor<WalkedDayBlock>()) {
+            context.delete(row)
+        }
+        for day in try context.fetch(FetchDescriptor<WalkedDay>()) {
+            context.delete(day)
         }
         for state in try context.fetch(FetchDescriptor<WalkedMatchState>()) {
             context.delete(state)
@@ -287,7 +337,7 @@ nonisolated final class WalkedBlockStore {
 
     private static let oldestFirst = [SortDescriptor(\WalkedPoint.recordedAt), SortDescriptor(\WalkedPoint.id)]
 
-    private static func makeContext(_ container: ModelContainer) -> ModelContext {
+    static func makeContext(_ container: ModelContainer) -> ModelContext {
         let context = ModelContext(container)
         context.autosaveEnabled = false
         return context

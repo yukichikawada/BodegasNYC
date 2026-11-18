@@ -1,0 +1,402 @@
+//
+//  WalkedDayStoreTests.swift
+//  BodegasNYCTests
+//
+//  Day rows in the Streets Walked store (#170 PR 1, spec rules 3 to 6, AC 1,
+//  2, 5; eng A1, A2, A3, A6): written in each pass's one save beside the
+//  masks, batching-invariant, backfilled once from matched history and
+//  clamped to the saved masks, cleared with Clear History, and read back as
+//  `WalkedHistory` that stays current in memory. Walks run on the fixture
+//  corner grid, anchored at noon New York time (eng A10), except the 1.0.0
+//  store, which was matched against the bundle.
+//
+
+import Foundation
+import SwiftData
+import Testing
+
+@testable import BodegasNYC
+
+@MainActor
+struct WalkedDayStoreTests {
+    private typealias F = StreetFixtures
+    private typealias K = WalkedDayKeyTests
+
+    private static let monday = K.newYork(2027, 1, 18, 12)
+    private static let tuesday = K.newYork(2027, 1, 19, 12)
+    private static let thursday = K.newYork(2027, 1, 21, 12)
+
+    /// Monday: block 100, then cross street 201. Tuesday: block 100 again
+    /// (a repeat) and block 300 (new). Thursday: block 400.
+    private static let history =
+        K.walk((0, 12), (100, 12), at: monday)
+        + K.walk((88, 12), (88, 80), at: monday.addingTimeInterval(1_800))
+        + K.walk((0, 12), (100, 12), at: tuesday)
+        + K.walk((0, 68), (100, 68), at: tuesday.addingTimeInterval(1_800))
+        + K.walk((100, 12), (200, 12), at: thursday)
+
+    private func savedMasks(_ container: ModelContainer) throws -> [UInt32: UInt16] {
+        Dictionary(uniqueKeysWithValues: try ModelContext(container).fetch(FetchDescriptor<WalkedBlock>()).map { ($0.physicalID, $0.mask) })
+    }
+
+    private struct DayRow: Hashable {
+        let day: Int
+        let id: UInt32
+        let mask: UInt16
+    }
+
+    private func dayRows(_ container: ModelContainer) throws -> Set<DayRow> {
+        Set(try ModelContext(container).fetch(FetchDescriptor<WalkedDayBlock>()).map { DayRow(day: $0.day, id: $0.physicalID, mask: $0.mask) })
+    }
+
+    private func dayMeters(_ container: ModelContainer) throws -> [Int: Double] {
+        Dictionary(uniqueKeysWithValues: try ModelContext(container).fetch(FetchDescriptor<WalkedDay>()).map { ($0.day, $0.meters) })
+    }
+
+    private struct StateValues: Equatable {
+        let dayIndexVersion: Int
+        let estimatedThroughDay: Int?
+    }
+
+    private func state(_ container: ModelContainer) throws -> StateValues? {
+        try ModelContext(container).fetch(FetchDescriptor<WalkedMatchState>()).first.map {
+            StateValues(dayIndexVersion: $0.dayIndexVersion, estimatedThroughDay: $0.estimatedThroughDay)
+        }
+    }
+
+    private func setMask(_ mask: UInt16, of physicalID: UInt32, in container: ModelContainer) throws {
+        let context = ModelContext(container)
+        let block = try #require(try context.fetch(FetchDescriptor<WalkedBlock>()).first { $0.physicalID == physicalID })
+        block.mask = mask
+        try context.save()
+    }
+
+    /// A2: every block's total mask is the OR of its day masks.
+    private func expectTotalsAreTheOROfTheDays(_ container: ModelContainer, _ note: Comment) throws {
+        var union: [UInt32: UInt16] = [:]
+        for row in try dayRows(container) { union[row.id, default: 0] |= row.mask }
+        let saved = try savedMasks(container)
+        #expect(union == saved, "\(note): days \(union), totals \(saved)")
+    }
+
+    private func pass(_ store: WalkedBlockStore, allowsBackfill: Bool = true) throws -> WalkedPassKind? {
+        guard let plan = try store.plan(allowsBackfill: allowsBackfill) else { return nil }
+        #expect(try store.apply(plan, activity: .unavailable) { true })
+        return plan.kind
+    }
+
+    /// Makes `container` look like a store from before #170: day rows gone,
+    /// day index version 0.
+    private func rewindToBeforeDays(_ container: ModelContainer) throws {
+        let context = ModelContext(container)
+        for row in try context.fetch(FetchDescriptor<WalkedDayBlock>()) { context.delete(row) }
+        for day in try context.fetch(FetchDescriptor<WalkedDay>()) { context.delete(day) }
+        for state in try context.fetch(FetchDescriptor<WalkedMatchState>()) {
+            state.dayIndexVersion = 0
+            state.estimatedThroughDay = nil
+        }
+        try context.save()
+    }
+
+    // MARK: Writes
+
+    /// protects: AC 2 and A2: the same history matched in one batch and in
+    /// many gives identical day rows and meters (within 0.001 m), and the
+    /// totals are the OR of the days after incremental passes and after a
+    /// rebuild.
+    /// fails_when: a batch boundary moves a leg's day, meters double-count
+    /// the predecessor leg, an incremental pass overwrites instead of ORing,
+    /// or a rebuild leaves stale rows.
+    /// no_claim: the bundle's real blocks (the 1.0.0 test below).
+    @Test(arguments: [1, 3, 7])
+    func batchesGiveTheSameDayRowsAsOnePass(batchSize: Int) throws {
+        let whole = try makeInMemoryModelContainer()
+        try F.seed(Self.history, in: whole.mainContext)
+        #expect(try pass(WalkedBlockStore(container: whole, grid: F.cornerGrid())) == .rebuild)
+
+        let batched = try makeInMemoryModelContainer()
+        let store = WalkedBlockStore(container: batched, grid: F.cornerGrid())
+        var start = 0
+        while start < Self.history.count {
+            let end = min(start + batchSize, Self.history.count)
+            try F.seed(Array(Self.history[start ..< end]), in: batched.mainContext)
+            _ = try pass(store)
+            start = end
+        }
+        #expect(try dayRows(batched) == dayRows(whole))
+        let wholeMeters = try dayMeters(whole)
+        let batchedMeters = try dayMeters(batched)
+        #expect(Set(wholeMeters.keys) == Set(batchedMeters.keys))
+        for (day, meters) in wholeMeters {
+            #expect(abs((batchedMeters[day] ?? -1) - meters) < 0.001, "day \(day)")
+        }
+        #expect(Set(wholeMeters.keys) == [20270118, 20270119, 20270121])
+        try expectTotalsAreTheOROfTheDays(batched, "incremental")
+        try expectTotalsAreTheOROfTheDays(whole, "rebuild")
+
+        // A data refresh rebuilds the batched store: same rows again.
+        _ = try pass(WalkedBlockStore(container: batched, grid: F.cornerGrid(stamp: 2)))
+        #expect(try dayRows(batched) == dayRows(whole))
+        try expectTotalsAreTheOROfTheDays(batched, "rebuild after batches")
+        #expect(try state(batched)?.dayIndexVersion == WalkedBlockStore.dayIndexVersion)
+    }
+
+    // MARK: Backfill (AC 1, eng A1)
+
+    /// protects: AC 1 on the fixture grid: a store from before #170 runs
+    /// exactly one backfill and no rebuild; every `WalkedBlock` row is what
+    /// it was, including a saved mask a fresh match would enlarge; no day
+    /// mask has a bit outside its block's saved mask; the next plan is
+    /// nothing at all.
+    /// fails_when: the backfill rebuilds or writes masks, a day row claims a
+    /// tenth the totals do not, or the version is not saved.
+    /// no_claim: a real 1.0.0 file (the next test).
+    @Test func aBackfillLeavesEveryMaskAsSavedAndClampsTheDays() throws {
+        let container = try makeInMemoryModelContainer()
+        try F.seed(Self.history, in: container.mainContext)
+        _ = try pass(WalkedBlockStore(container: container, grid: F.cornerGrid()))
+        try rewindToBeforeDays(container)
+        // A saved mask smaller than a fresh match (tenths 1 to 9; tenth 0
+        // snaps to cross street 200): 6 of block 100's tenths.
+        try setMask(0b111_1110, of: 100, in: container)
+        let before = try savedMasks(container)
+
+        let store = WalkedBlockStore(container: container, grid: F.cornerGrid())
+        #expect(try pass(store) == .backfill)
+        #expect(store.rebuildCount == 0 && store.backfillCount == 1)
+        #expect(try savedMasks(container) == before)
+        for row in try dayRows(container) {
+            #expect(row.mask & ~(before[row.id] ?? 0) == 0, "day \(row.day) block \(row.id)")
+        }
+        let blockRows = try dayRows(container).filter { $0.id == 100 }.sorted { $0.day < $1.day }
+        #expect(blockRows.map(\.mask) == [0b111_1110, 0b111_1110], "\(blockRows)")
+        try expectTotalsAreTheOROfTheDays(container, "backfill")
+        #expect(try state(container)?.dayIndexVersion == WalkedBlockStore.dayIndexVersion)
+        #expect(try store.plan() == nil)
+        #expect(try WalkedBlockStore(container: container, grid: F.cornerGrid()).plan() == nil)
+    }
+
+    /// protects: A1's scope: the backfill matches only matched fixes; the
+    /// unmatched ones take the incremental pass the actor runs right after,
+    /// in the same job, and a store with both stamp and version stale runs
+    /// one rebuild and no backfill.
+    /// fails_when: the backfill flips or credits unmatched fixes, the
+    /// actor stops after the backfill, or a stale stamp backfills first.
+    /// no_claim: CoreMotion (no activity in these passes).
+    @Test func theActorBackfillsThenMatchesTheRest() async throws {
+        let container = try makeInMemoryModelContainer()
+        // Monday's two walks are 11 + 8 fixes.
+        let monday = Array(Self.history.prefix(19))
+        #expect(monday.allSatisfy { WalkedDayKey(date: $0.recordedAt) == WalkedDayKey(value: 20270118) })
+        try F.seed(monday, in: container.mainContext)
+        _ = try pass(WalkedBlockStore(container: container, grid: F.cornerGrid()))
+        try rewindToBeforeDays(container)
+        try F.seed(Array(Self.history.dropFirst(19)), in: container.mainContext)
+
+        let probe = WalkedBlockStore(container: container, grid: F.cornerGrid())
+        let plan = try #require(try probe.plan())
+        #expect(plan.kind == .backfill)
+        #expect(plan.snapshots.count == monday.count && plan.unmatched.isEmpty)
+
+        let actor = BlockMatchingActor(container: container, activityProvider: FakeMotionProvider(), loadGrid: { F.cornerGrid() }, onGridLoadFailure: { _ in })
+        guard case .updated(let summary, _) = await actor.catchUp() else {
+            Issue.record("the pass did not save")
+            return
+        }
+        #expect(await actor.backfillCount == 1)
+        #expect(await actor.rebuildCount == 0)
+        #expect(summary.walkedIDs == [100, 201, 300, 400])
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<WalkedPoint>(predicate: #Predicate { $0.isMatched == false })) == 0)
+        try expectTotalsAreTheOROfTheDays(container, "backfill then incremental")
+
+        // Both stale: one rebuild, no backfill.
+        try rewindToBeforeDays(container)
+        let refreshed = BlockMatchingActor(container: container, activityProvider: FakeMotionProvider(), loadGrid: { F.cornerGrid(stamp: 2) }, onGridLoadFailure: { _ in })
+        _ = await refreshed.catchUp()
+        #expect(await refreshed.rebuildCount == 1)
+        #expect(await refreshed.backfillCount == 0)
+        #expect(try state(container)?.dayIndexVersion == WalkedBlockStore.dayIndexVersion)
+    }
+
+    /// protects: eng A6: a backfill that throws does not block the summary:
+    /// the pass still returns the saved masks, history reports failed, the
+    /// version stays 0, and the next pass retries and succeeds.
+    /// fails_when: a failed backfill fails the whole pass, saves a version,
+    /// or is never retried.
+    /// no_claim: which SwiftData error; the sheet's failure line (the
+    /// content tests).
+    @Test func aFailedBackfillStillCountsAndRetries() async throws {
+        let container = try makeInMemoryModelContainer()
+        try F.seed(Self.history, in: container.mainContext)
+        _ = try pass(WalkedBlockStore(container: container, grid: F.cornerGrid()))
+        try rewindToBeforeDays(container)
+        let commits = FailingCommits(failures: 1, at: .beforeCheck)
+        let actor = BlockMatchingActor(
+            container: container,
+            activityProvider: FakeMotionProvider(),
+            loadGrid: { F.cornerGrid() },
+            onGridLoadFailure: { _ in },
+            willCommit: { try commits.attempt($0) }
+        )
+
+        guard case .updated(let summary, _) = await actor.catchUp() else {
+            Issue.record("a failed backfill blocked the summary")
+            return
+        }
+        #expect(summary.walkedIDs == [100, 201, 300, 400])
+        guard case .failed = await actor.history() else {
+            Issue.record("history should report the failed backfill")
+            return
+        }
+        #expect(try state(container)?.dayIndexVersion == 0)
+
+        _ = await actor.catchUp()
+        #expect(await actor.backfillCount == 1)
+        guard case .ready(let history) = await actor.history() else {
+            Issue.record("the retried backfill did not make history ready")
+            return
+        }
+        #expect(history.walkedDays.map(\.day.value) == [20270118, 20270119, 20270121])
+    }
+
+    /// protects: AC 1 and P0-4 on the real 1.0.0 store file
+    /// (`Fixtures/streets-walked-1.0.0`): it opens under the new schema,
+    /// backfills exactly once with no rebuild, keeps every `WalkedBlock`
+    /// byte for byte (including one shrunk below what a fresh match gives),
+    /// clamps the day rows, records the estimate for history older than 7
+    /// days, and a second launch plans nothing.
+    /// fails_when: the new entities or state fields break lightweight
+    /// migration, the backfill touches the totals, or it runs twice.
+    /// no_claim: stores from before 1.0.0; an App Store device upgrade.
+    @Test func theOneZeroZeroStoreBackfillsOnceAndKeepsItsBlocks() throws {
+        let bundled = try #require(Bundle(for: FakeMotionProvider.self).url(forResource: "streets-walked-1.0.0", withExtension: "store"))
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let copy = directory.appendingPathComponent("streets-walked.store")
+        try FileManager.default.copyItem(at: bundled, to: copy)
+
+        let container = try ModelContainer(for: Schema(StreetsWalkedSchema.models), configurations: ModelConfiguration(url: copy))
+        #expect(try state(container) == StateValues(dayIndexVersion: 0, estimatedThroughDay: nil))
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<WalkedDayBlock>()) == 0)
+        try setMask(0b11_1111_0000, of: 3, in: container)
+        let before = try savedMasks(container)
+        #expect(before == [3: 0b11_1111_0000, 5: 1023, 6: 1023, 14: 511, 23: 511, 24: 255])
+
+        // Months after the fixture's 2027 walk, so all of it is past 7 days.
+        let later = K.newYork(2027, 6, 1, 12)
+        let grid = try StreetGrid.loadBundled()
+        let store = WalkedBlockStore(container: container, grid: grid, now: { later })
+        #expect(try pass(store) == .backfill)
+        #expect(try pass(store) == nil)
+        #expect(store.rebuildCount == 0 && store.backfillCount == 1)
+        #expect(try savedMasks(container) == before)
+        try expectTotalsAreTheOROfTheDays(container, "1.0.0 backfill")
+        let points = try ModelContext(container).fetch(FetchDescriptor<WalkedPoint>(sortBy: [SortDescriptor(\.recordedAt)]))
+        let newest = try #require(points.last)
+        #expect(try state(container)?.dayIndexVersion == WalkedBlockStore.dayIndexVersion)
+        #expect(try state(container)?.estimatedThroughDay == WalkedDayKey(date: newest.recordedAt).value)
+        let history = try #require(try store.history())
+        #expect(history.cumulative.last?.count == WalkedSummary(masks: before, grid: grid).citywide.walked)
+
+        #expect(try WalkedBlockStore(container: container, grid: grid, now: { later }).plan() == nil)
+    }
+
+    // MARK: Clear (AC 5)
+
+    /// protects: AC 5: Clear History leaves no day rows, including when it
+    /// lands inside a pass after its check (the pass saves after the Clear's
+    /// delete; #113's seam test, extended), and the next pass writes days
+    /// for the surviving fixes only.
+    /// fails_when: `clearCache` misses either day model, or the in-memory
+    /// history keeps cleared days.
+    /// no_claim: the view model's ordering (StreetsWalkedViewModelTests).
+    @Test(arguments: [BlockMatchingActor.CommitPoint.beforeCheck, .beforeSave])
+    func clearHistoryLeavesNoDayRows(_ point: BlockMatchingActor.CommitPoint) async throws {
+        let container = try makeInMemoryModelContainer()
+        let beforeTap = K.walk((0, 12), (100, 12), at: Self.monday)
+        let tapTime = Self.monday.addingTimeInterval(3_600)
+        let afterTap = K.walk((0, 68), (100, 68), at: Self.thursday)
+        try F.seed(beforeTap, in: container.mainContext)
+        let hook = CommitHook(at: point)
+        let actor = BlockMatchingActor(
+            container: container,
+            activityProvider: FakeMotionProvider(),
+            loadGrid: { F.cornerGrid() },
+            onGridLoadFailure: { _ in },
+            willCommit: { try hook.fire($0) }
+        )
+        hook.setOnce {
+            let context = ModelContext(container)
+            try context.delete(model: WalkedPoint.self, where: #Predicate { $0.recordedAt <= tapTime })
+            try context.save()
+            actor.invalidate()
+            for fix in afterTap {
+                context.insert(WalkedPoint(id: fix.id, latitude: fix.coordinate.latitude, longitude: fix.coordinate.longitude, recordedAt: fix.recordedAt))
+            }
+            try context.save()
+        }
+        _ = await actor.catchUp()
+        _ = await actor.clearCache()
+
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<WalkedDayBlock>()) == 0)
+        #expect(try ModelContext(container).fetchCount(FetchDescriptor<WalkedDay>()) == 0)
+        guard case .ready(let cleared) = await actor.history() else {
+            Issue.record("history after a clear should be ready and empty")
+            return
+        }
+        #expect(cleared.days.isEmpty)
+
+        _ = await actor.catchUp()
+        #expect(try Set(dayRows(container).map(\.day)) == [20270121])
+        guard case .ready(let after) = await actor.history() else {
+            Issue.record("history after the next pass should be ready")
+            return
+        }
+        #expect(after.walkedDays.map(\.day.value) == [20270121])
+    }
+
+    // MARK: In-memory history (eng A3)
+
+    /// protects: A3: history loaded once and kept current from each pass's
+    /// day delta equals a fresh load from disk after every pass; `version`
+    /// moves after a pass that changed a day, including a repeat walk that
+    /// changes no total mask, and not after a pass that changed nothing.
+    /// fails_when: a delta is dropped or double-applied, the cache is not
+    /// refreshed after a repeat walk, or the version moves for nothing.
+    /// no_claim: performance (WalkedBlocksPerformanceTests).
+    @Test func historyKeptInMemoryEqualsAFreshLoad() throws {
+        let container = try makeInMemoryModelContainer()
+        let store = WalkedBlockStore(container: container, grid: F.cornerGrid())
+        try F.seed(Array(Self.history.prefix(11)), in: container.mainContext)
+        _ = try pass(store)
+        var version = try #require(try store.history()).version
+
+        func expectFresh(_ note: Comment) throws -> WalkedHistory {
+            let kept = try #require(try store.history())
+            let fresh = try #require(try WalkedBlockStore(container: container, grid: F.cornerGrid()).history())
+            #expect(kept.days == fresh.days, note)
+            #expect(kept.cumulative == fresh.cumulative, note)
+            return kept
+        }
+
+        for part in [Self.history.dropFirst(11).prefix(11), Self.history.dropFirst(22).prefix(11), Self.history.dropFirst(33)] {
+            try F.seed(Array(part), in: container.mainContext)
+            _ = try pass(store)
+            let kept = try expectFresh("after a pass")
+            #expect(kept.version > version)
+            version = kept.version
+        }
+        #expect(try pass(store) == nil)
+        #expect(try store.history()?.version == version, "no pass, no new version")
+
+        // Tuesday again, an hour later: block 100 a third time, no total changes.
+        let masks = try savedMasks(container)
+        try F.seed(K.walk((0, 12), (100, 12), at: Self.tuesday.addingTimeInterval(3_600)), in: container.mainContext)
+        _ = try pass(store)
+        #expect(try savedMasks(container) == masks)
+        let repeated = try expectFresh("after a repeat walk")
+        #expect(repeated.version > version)
+        #expect(repeated.summary(for: WalkedDayKey(value: 20270119))?.walkedIDs == [100, 300])
+    }
+}

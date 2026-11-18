@@ -151,6 +151,47 @@ final class WalkedBlocksPerformanceTests: XCTestCase {
         XCTAssertGreaterThan(try XCTUnwrap(store.summary()).walkedIDs.count, 5_000)
     }
 
+    /// protects: #170 AC 8 and eng A11: Your Walks' first `history()` on the
+    /// 100,000-fix seed (over 5,000 walked blocks; every day row read and
+    /// built) stays under 500 ms, and a read after a pass that changed a day
+    /// (built again from the rows held in memory, no fetch) under 150 ms.
+    /// fails_when: a median passes 500 / 150 ms (Release) or 5 s / 1.5 s
+    /// (opted-in Debug).
+    /// no_claim: device timings; the sheet's own layout cost.
+    func testHistoryLoadBudget() throws {
+        try skipUnlessMeasurable()
+        let (container, grid, _) = try Self.seededHistory()
+        let warm = WalkedBlockStore(container: container, grid: grid)
+        if let plan = try warm.plan() {
+            try warm.apply(plan, activity: .unavailable) { true }
+        }
+        var firsts: [Duration] = []
+        var laters: [Duration] = []
+        var dayCount = 0
+        let clock = ContinuousClock()
+        measure(metrics: [XCTClockMetric()], options: manualOptions) {
+            let store = WalkedBlockStore(container: container, grid: grid)
+            startMeasuring()
+            var start = clock.now
+            let history = try? store.history()
+            firsts.append(clock.now - start)
+            stopMeasuring()
+            dayCount = history?.days.count ?? 0
+            XCTAssertGreaterThan(history?.cumulative.last?.count ?? 0, 5_000)
+            // A repeat walk on the last day: meters change, the cache drops.
+            guard let last = history?.days.last?.day else { return XCTFail("no days") }
+            store.didSave(.merged([last: BlockMatcher.DayDelta(masks: [:], meters: 10)]), estimatedThroughDay: nil)
+            start = clock.now
+            XCTAssertNotNil(try? store.history())
+            laters.append(clock.now - start)
+        }
+        let report = "history() first load median \(Self.median(firsts)), after a pass \(Self.median(laters)), \(dayCount) days"
+        print(report)
+        XCTContext.runActivity(named: report) { _ in }
+        XCTAssertLessThan(Self.median(firsts), Self.ceiling(release: .milliseconds(500), debug: .seconds(5)))
+        XCTAssertLessThan(Self.median(laters), Self.ceiling(release: .milliseconds(150), debug: .milliseconds(1_500)))
+    }
+
     /// protects: an incremental pass of 10 fixes on a 100,000-fix history
     /// (over 5,000 saved masks) stays inside its budget on a warm store.
     /// fails_when: the median passes 5 ms (Release) or 30 ms (opted-in Debug).

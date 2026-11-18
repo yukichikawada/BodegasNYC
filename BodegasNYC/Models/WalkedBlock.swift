@@ -28,10 +28,18 @@ final class WalkedBlock {
 
 /// The singleton record of which bundled street data the `WalkedBlock`
 /// masks were matched against (#108 eng R8). Absent, or a stamp that differs
-/// from the bundle's, means the cache is rebuilt from all history.
+/// from the bundle's, means the cache is rebuilt from all history. A
+/// `dayIndexVersion` behind `WalkedBlockStore.dayIndexVersion` means the
+/// per-day rows are backfilled once (#170). Both new fields have defaults,
+/// so a 1.0.0 store migrates lightweight.
 @Model
 final class WalkedMatchState {
     var datasetStamp: Int
+    /// The per-day rows' version; 0 in stores from before #170.
+    var dayIndexVersion: Int = 0
+    /// The newest walk day (`WalkedDayKey` value) rebuilt without saved ride
+    /// evidence (eng E2, `WalkedEstimate`); days up to it are estimates.
+    var estimatedThroughDay: Int?
 
     init(datasetStamp: UInt32) {
         self.datasetStamp = Int(datasetStamp)
@@ -41,5 +49,7 @@ final class WalkedMatchState {
 /// Every model in the Streets Walked store, in one place for the
 /// containers that hold them.
 nonisolated enum StreetsWalkedSchema {
-    static let models: [any PersistentModel.Type] = [WalkedPoint.self, WalkedBlock.self, WalkedMatchState.self]
+    static let models: [any PersistentModel.Type] = [
+        WalkedPoint.self, WalkedBlock.self, WalkedMatchState.self, WalkedDayBlock.self, WalkedDay.self
+    ]
 }
