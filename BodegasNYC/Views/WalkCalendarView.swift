@@ -28,7 +28,9 @@ struct WalkCalendarView: View {
                 .animation(.easeInOut(duration: 0.25), value: usesList)
             }
             .defaultScrollAnchor(.bottom)
-            .safeAreaInset(edge: .top, spacing: 0) { statusLine }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if let line = content.statusLine { YourWalksStatusLine(text: line) }
+            }
             .onChange(of: scrollToCurrentMonth) {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     proxy.scrollTo(Self.footerID, anchor: .bottom)
@@ -38,20 +40,6 @@ struct WalkCalendarView: View {
     }
 
     private static let footerID = "yourWalks.footer"
-
-    /// "Finding your walks…" or "No blocks counted yet." under the title.
-    @ViewBuilder
-    private var statusLine: some View {
-        if let line = content.statusLine {
-            Text(line)
-                .font(.subheadline)
-                .foregroundStyle(Color.textMuted)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color(.systemGroupedBackground))
-        }
-    }
 
     /// The sheet's footer (DS5), and the recording line (DS8.2).
     private var footer: some View {

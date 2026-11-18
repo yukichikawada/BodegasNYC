@@ -7,9 +7,9 @@ import UIKit
 ///
 /// `NavigationStack`, inline title, Done, `.large` only, opaque
 /// `systemGroupedBackground`, bare ground with no card around the grid
-/// (DS8.4). PR 1 ships the Calendar alone; PR 2 adds the Calendar/Progress
-/// switch under the title (`calendarOrProgress` is the one slot it
-/// replaces). A tap on the title scrolls to the current month (DS2), and
+/// (DS8.4). A Calendar / Progress switch sits under the title, opening on
+/// Calendar (PR 2, DS6; Progress is `WalkProgressView`). A tap on the title
+/// scrolls to the current month (DS2), and
 /// VoiceOver gets the same as a "Show This Month" action on the heading.
 ///
 /// States (DS8.2), failure > loading > empty: the street data failing, or
@@ -26,6 +26,11 @@ struct YourWalksSheet: View {
     @State private var path: [WalkedDayKey] = []
     /// Bumped by a title tap; the calendar scrolls to the current month.
     @State private var scrollToCurrentMonth = 0
+    @State private var tab = Tab.calendar
+    /// Kept across tab switches while the sheet is open; opens on 1 month.
+    @State private var range = WalkProgressRange.initial
+
+    enum Tab: Hashable { case calendar, progress }
 
     var body: some View {
         let content = viewModel.yourWalks()
@@ -64,13 +69,28 @@ struct YourWalksSheet: View {
         }
     }
 
-    /// The Calendar (PR 1). PR 2's switch chooses between this and Progress.
-    @ViewBuilder
+    /// The Calendar / Progress switch under the title (PR 2, DS6), opening
+    /// on Calendar, then the chosen tab. The states with no grid show the
+    /// same lines on both tabs.
     private func calendarOrProgress(_ content: YourWalksContent) -> some View {
-        if content.showsGrid {
-            WalkCalendarView(content: content, scrollToCurrentMonth: scrollToCurrentMonth)
-        } else {
-            stateList(content)
+        VStack(spacing: 0) {
+            Picker(AppCopy.YourWalks.tabPicker.copy.text, selection: $tab) {
+                Text(AppCopy.YourWalks.calendarTab.copy.text).tag(Tab.calendar)
+                Text(AppCopy.YourWalks.progressTab.copy.text).tag(Tab.progress)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            Group {
+                if !content.showsGrid {
+                    stateList(content)
+                } else if tab == .calendar {
+                    WalkCalendarView(content: content, scrollToCurrentMonth: scrollToCurrentMonth)
+                } else {
+                    WalkProgressView(content: content, progress: viewModel.walkProgress(), range: $range)
+                }
+            }
+            .frame(maxHeight: .infinity)
         }
     }
 
@@ -116,5 +136,21 @@ struct YourWalksSheet: View {
             }
         }
         .listStyle(.insetGrouped)
+    }
+}
+
+/// "Finding your walks…" or "No blocks counted yet." under the title
+/// (DS8.2), on both tabs.
+struct YourWalksStatusLine: View {
+    let text: String
+
+    var body: some View {
+        Text(text)
+            .font(.subheadline)
+            .foregroundStyle(Color.textMuted)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+            .background(Color(.systemGroupedBackground))
     }
 }

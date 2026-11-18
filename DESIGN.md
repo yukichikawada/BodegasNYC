@@ -632,11 +632,14 @@ Someone already recording whose Motion & Fitness was never asked gets an Allow M
 after a denial it is Open Settings. VoiceOver: each row is one element, "Manhattan, 412 of 9,300
 blocks, 4 percent."; "<1%" reads "less than 1 percent", "—" reads "counting".
 
-**Your Walks sheet** (`YourWalksSheet`, `WalkCalendarView`, `WalkDayView`, #170 PR 1, DS1 to DS8):
-opened by Your Walks, directly under Your Blocks in the Streets Walked menu (hint "Shows the days you
-walked."; PR 2 adds "and your progress"). `NavigationStack`, inline title "Your Walks" (a tap on it
-scrolls to the current month), Done, `.large` only, opaque `systemGroupedBackground`, bare ground, no
-card around the grid, no display register. A walk day starts at 4 a.m. New York time. The Calendar is
+**Your Walks sheet** (`YourWalksSheet`, `WalkCalendarView`, `WalkDayView`, `WalkProgressChart`, #170
+PR 1 and PR 2, DS1 to DS8): opened by Your Walks, directly under Your Blocks in the Streets Walked menu
+(hint "Shows the days you walked and your progress."). `NavigationStack`, inline title "Your Walks" (a
+tap on it scrolls to the current month), Done, `.large` only, opaque `systemGroupedBackground`, bare
+ground, no card around the grid or the chart, no display register. Under the title a segmented
+Calendar / Progress switch at the 16pt inset, opening on Calendar; the states with no grid (street
+data failed, days failed, no history) show the same lines on both tabs. A walk day starts at 4 a.m.
+New York time. The Calendar is
 one vertical scroll of months, the first walked month to the current one, opened at the bottom (no
 chevrons, no paging, no empty-month pages). Each month: "November 2026" in `.headline` (header trait),
 then "8 days · 24 new blocks" in `.subheadline` `textMuted` (none for a month without walks), then the
@@ -664,6 +667,32 @@ on an estimated day. Clear History with the sheet open empties it and pops an op
 walked day is one button, "Tuesday, November 3, 14 blocks, 9 new, 1.4 miles." with "today" after the
 date and "estimate" at the end when they apply; other days read the date only and are not buttons;
 the day map is one element, "Map of this day's walk.", with the counts as its value.
+Progress (PR 2, DS6): a header, "312 blocks" in `.title2` `.primary` over "40 new in the past month."
+(week, month, 3 months, year; the gain measured from the count just before the range starts, on the
+line) or "Since Mar 2024." for All, `.subheadline` `textMuted`, monospaced digits; the count is Your
+Blocks' citywide number, and the line is never shifted to meet it (a saved block with no day stays in
+the count and out of the line). Then the chart, 240pt tall at the 16pt inset: cumulative walked blocks
+citywide, one value per walk day with days without walks flat, a 2pt step line in the `walked` cyan
+with round caps, no area fill, no gradient; a single day draws a point. Y-axis on the trailing edge
+from the range's minimum to its maximum (from zero for All; a flat range gets a block either side),
+whole-block gridlines whose top is always the range's maximum, labelled (every block up to a span of
+5, else 1, 2 or 5 times a power of ten with no tick less than a step under the top); x labels: today
+always ("Wed" in a week, "Nov 18" otherwise), ending at the plot's edge, then every other day of a
+week, every seventh day back from today in a month, each month's first in 3 months ("Sep"), each
+quarter's first in a year (January as "2026"), after their gridlines as Swift Charts places them, the
+one before today left out when the two would not sit 8pt apart on a 300pt plot (an iPhone SE's); the
+axis labels stay at the default text size (a month's dates overlapped at larger sizes) while the header
+scales fully. Under the chart a segmented range picker, 1W, 1M, 3M, 1Y, All, opening on 1M, read as "1
+week", "1 month", "3 months", "1 year", "All"; a range change is the 0.25s opacity change, Reduce
+Motion included; then the sheet footer and the recording line, as under the Calendar. Scrubbing
+(Swift Charts' x selection) shows a 1pt `textMuted` rule and a cyan point on the day under the finger
+and swaps the header to that day's count over its date ("Nov 3, 2025") at a fixed height, both
+versions laid out with one hidden; lifting clears it; no haptic. A first read shows "Finding your
+walks…" under the title over the chart's empty room with the range picker disabled; history with no
+walked day shows the flat line at zero and "No blocks counted yet.". VoiceOver: the header and chart
+are one adjustable element, "Chart of the blocks you walked.", valued "312 blocks, 40 new in the past
+month." at rest; swiping up or down steps a day at a time from today ("298 blocks, Nov 3, 2025."),
+stopping at both ends; it carries an Audio Graph of the range's days.
 
 **Streets Walked intro sheet** (`StreetsWalkedIntroSheet`, #126): the intro's fourth page, delivered as a sheet the first time the map is quiet after onboarding (1.5 s after the gate holds, camera at rest, active scene, nothing presented, no first-add choreography, recording off, no history; once per device; reopened any time from the Streets Walked menu's "How Streets Walked Works"). `.large` only, opaque `systemBackground`, inline title "Streets Walked", Done. The onboarding page composition at the compact 16pt top inset: 44pt `figure.walk` in `.catPin` (the fourth spine symbol), headline in the display register (D5's fourth surface) with the header trait, body `.title3` `textMuted`, a `.headline` permission heading "Recording needs location set to Always.", the permission paragraph in `.primary` (consequence copy, #95 D8) chosen by authorization status (notDetermined, whenInUse, denied, restricted, always) or, while paused, the recorder problem's own line, then "It lives under Streets Walked, the walking figure in the map's toolbar." in `textMuted`; `VStack(spacing: 12)`, 24pt inset, 560 max width. On reopen the status line ("Recording is on." `textMuted`, or "Recording is paused. Your blocks stay." `.primary`) sits under the headline. Bottom `safeAreaInset` bar on the same opaque ground, `.controlSize(.large)`, 12pt apart: off → Start Recording (`.borderedProminent`) and Not Now (`.bordered`); off and restricted → Not Now; recording → none; paused for something Settings fixes → Open Settings (`.borderedProminent`); paused otherwise → none. Start Recording dismisses the sheet, then runs the menu's exact path (#123 DS4). VoiceOver: symbol hidden; headline and permission heading are headers; order headline, status, paragraphs, buttons; each paragraph its own element; escape dismisses without starting; focus returns to the Streets Walked toolbar control after a manual close. Every text `fixedSize`, no caps, labels wrap; where the pinned bar would leave under 200pt of reading space (AX sizes in compact height) the bar moves to the end of the scroll. System sheet motion only. Swipe-down is Not Now.
 
@@ -885,3 +914,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-07 | #156 phase two, the tilt: Locate Me and Show on Map land on one block-zoom camera, 420 m, heading kept, pitched 55° with the pitch on the same flight (spec D2, D5); `.realistic` elevation on the browse map, `.flat` on the preview, `.flat` the one-constant fallback (spec D4, AC 12, AC 13); block zoom, the trail bands, the clustering grid and the label candidates read a pitch-blind settled frame (level-equivalent height = distance × the level ratio per map height; the near-field data region), the walked culling keeps MapKit's region (spec D3, eng D2, D3, Shape B, DS2); Show on Map's centre is 74 m screen-down at any heading and its no-op is 30 m / 10% / 5° (eng D5, D6); a cluster tap keeps pitch and heading and never zooms out (`minimumZoomSpan` retired); the pitched `.nearby` radius is MapKit's north edge clamped 200 m to 1 km (DS4); landings level under Reduce Motion, in compact height and while the user's own level holds for the session (DS5, DS6, DS8); the coarse-fix fallback is level (DS9); MapKit's compass and pitch toggle, the toggle only at 840 m or closer and not while placing (DS7); Liquid Glass pins not adopted (spec D1) | Spec D1 to D5, `/plan-eng-review` D1 to D7 and `/plan-design-review` DS1 to DS10 with outside voices; owner accepted all. The probe's tilt frame was the one look decision left from #154; every wide view stays level |
 | 2026-11-08 | #166 probe: the band at the top of the map on iOS 27 (about 116 pt tall, roughly 3 to 6% lighter than the map, with a hairline) is MapKit's own top-edge effect drawn inside the map, not the toolbar's scroll edge effect; no public API removes it, so the app does not try to remove it and `{components.browse-toolbar.scrollEdgeEffect}` stays met on iOS 26 only; re-check on each iOS 27.x seed | Simulator probe on iOS 27.2 (#166). Every public toolbar and scroll-edge modifier tried left the hairline unchanged; only hiding private subviews removed it, which is not shippable and comes back after a camera move |
 | 2026-11-18 | #170 PR 1 Your Walks (owner D1 to D4, design DS1 to DS8): a sheet under Your Blocks with a Calendar of walked days, one vertical scroll of months opened at the current one, each headed "8 days · 24 new blocks"; days start at 4 a.m. New York time; a dot (the `walked` cyan) only for a day with a walked block, today bold and never green; the grid edge to edge (a new centred exception in Layout) and a list at accessibility sizes; a day opens a level, pan-and-zoom map with the shared trail and "14 blocks  9 new" over "1.4 miles"; estimate and counting lines in `textMuted` footnotes. Cyan widens from the trail alone to the marks of walked history (dots, PR 2 chart line), never a fill | Owner wants to see when, not only where; paging made empty pages and a tap per month, and seven 44pt cells do not fit an SE inside 16pt insets; Deli Green means tappable, so today cannot be green; the counts measure different things, so the footer says which |
+| 2026-11-18 | #170 PR 2 Your Walks Progress (design DS6, DS8.5 to DS8.7, eng E6): a Calendar / Progress switch under the title; the chart is a 2pt step line of cumulative walked blocks citywide in the `walked` cyan with no fill, a point for a single day, the y-axis fitted to the range (from zero for All); the header is "312 blocks" in `.title2` over the range's gain or "Since Mar 2024.", swapped to the scrubbed day at a fixed height with no haptic; ranges 1W to All under the chart, read as words; one adjustable VoiceOver element stepping a day at a time, with an Audio Graph. The headline is Your Blocks' count and the line is never shifted to meet it. The per-borough series is in TODOS | "Up 40 this month" was wrong for four of five ranges; a zero-based axis flattens a long-time walker's month; DESIGN.md keeps the one authored haptic for the first add; cyan is a mark, never a wash; topping the line up to the total would date blocks to days they were not walked on |

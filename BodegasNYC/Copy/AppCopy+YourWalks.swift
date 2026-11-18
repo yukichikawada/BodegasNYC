@@ -10,7 +10,7 @@ nonisolated extension AppCopy {
     nonisolated enum YourWalks: CaseIterable, Hashable, Sendable {
         /// The menu item and the sheet's title.
         case title
-        /// The menu item's VoiceOver hint (DS8.7, PR 1 wording).
+        /// The menu item's VoiceOver hint (DS8.7, PR 2 wording).
         case menuHint
         /// Under the title on a first load, from 0 s (DS8.2); shown with a
         /// trailing ellipsis (`withTrailingEllipsis`).
@@ -32,11 +32,23 @@ nonisolated extension AppCopy {
         case underATenthOfAMile
         /// The title's VoiceOver action: what a tap on it does (DS2).
         case showThisMonth
+        /// The switch under the title (PR 2, DS6): its label and segments.
+        case tabPicker
+        case calendarTab
+        case progressTab
+        /// The range picker under the chart (DS6).
+        case rangePicker
+        /// The chart's one adjustable VoiceOver element (DS6).
+        case chartLabel
+        /// The Audio Graph's axes and series (spec AC 13).
+        case chartDayAxis
+        case chartBlocksAxis
+        case chartSeries
 
         var copy: CopyString {
             switch self {
             case .title: CopyString(kind: .label, text: "Your Walks")
-            case .menuHint: CopyString(kind: .body, text: "Shows the days you walked.")
+            case .menuHint: CopyString(kind: .body, text: "Shows the days you walked and your progress.")
             case .findingWalks: CopyString(kind: .value, text: "Finding your walks")
             case .noBlocksYet: CopyString(kind: .body, text: "No blocks counted yet.")
             case .historyFailed:
@@ -48,6 +60,14 @@ nonisolated extension AppCopy {
             case .dayMapLabel: CopyString(kind: .body, text: "Map of this day's walk.")
             case .underATenthOfAMile: CopyString(kind: .value, text: "Less than 0.1 miles")
             case .showThisMonth: CopyString(kind: .label, text: "Show This Month")
+            case .tabPicker: CopyString(kind: .label, text: "Calendar or Progress")
+            case .calendarTab: CopyString(kind: .label, text: "Calendar")
+            case .progressTab: CopyString(kind: .label, text: "Progress")
+            case .rangePicker: CopyString(kind: .label, text: "Range")
+            case .chartLabel: CopyString(kind: .body, text: "Chart of the blocks you walked.")
+            case .chartDayAxis: CopyString(kind: .label, text: "Day")
+            case .chartBlocksAxis: CopyString(kind: .label, text: "Blocks")
+            case .chartSeries: CopyString(kind: .label, text: "Blocks Walked")
             }
         }
 
@@ -137,6 +157,82 @@ nonisolated extension AppCopy {
         if summary.newCount > 0 { parts.append(walkDayNew(summary.newCount).text) }
         parts.append(walkDayDistance(meters: summary.meters).text)
         return parts
+    }
+
+    // MARK: Progress (PR 2, DS6)
+
+    /// A range segment as shown: "1W", "1M", "3M", "1Y", "All".
+    static func walkRangeShort(_ range: WalkProgressRange) -> CopyString {
+        let text = switch range {
+        case .week: "1W"
+        case .month: "1M"
+        case .threeMonths: "3M"
+        case .year: "1Y"
+        case .all: "All"
+        }
+        return CopyString(kind: .value, text: text)
+    }
+
+    /// A range segment as VoiceOver reads it (DS8.5): "1 week", "1 month",
+    /// "3 months", "1 year", "All".
+    static func walkRangeSpoken(_ range: WalkProgressRange) -> CopyString {
+        let text = switch range {
+        case .week: "1 week"
+        case .month: "1 month"
+        case .threeMonths: "3 months"
+        case .year: "1 year"
+        case .all: "All"
+        }
+        return CopyString(kind: .value, text: text)
+    }
+
+    /// The header's second line at rest (DS6): "40 new in the past month."
+    /// for a fixed range, "Since Mar 2024." for All (from the first walked
+    /// day). A sentence, so it ends with a period like the status lines
+    /// under the title; it is too long for a value's four words.
+    static func walkProgressSummary(_ slice: WalkProgressSlice) -> CopyString {
+        let text = walkProgressSummaryText(slice)
+        return CopyString(kind: .body, text: text.prefix(1).uppercased() + text.dropFirst() + ".")
+    }
+
+    /// The chart's VoiceOver value at rest (DS6): "312 blocks, 40 new in
+    /// the past month." or "312 blocks since Mar 2024.".
+    static func walkProgressRestValue(headline: Int, slice: WalkProgressSlice) -> CopyString {
+        let separator = slice.range == .all ? " " : ", "
+        let text = walkDayBlocks(headline).text + separator + walkProgressSummaryText(slice)
+        return CopyString(kind: .body, text: text + ".")
+    }
+
+    /// "40 new in the past month", "since Mar 2024".
+    private static func walkProgressSummaryText(_ slice: WalkProgressSlice) -> String {
+        let period = switch slice.range {
+        case .week: "week"
+        case .month: "month"
+        case .threeMonths: "3 months"
+        case .year: "year"
+        case .all: ""
+        }
+        guard slice.range != .all else {
+            return "since " + slice.start.noon.formatted(walkDateStyle.month(.abbreviated).year())
+        }
+        return "\(groupedCount(slice.gain)) new in the past \(period)"
+    }
+
+    /// The chart's VoiceOver value while stepping (DS6): "298 blocks, Nov 3,
+    /// 2025.".
+    static func walkProgressValue(count: Int, day: WalkedDayKey) -> CopyString {
+        CopyString(kind: .body, text: "\(walkDayBlocks(count).text), \(walkDayTitle(day).text).")
+    }
+
+    /// An x-axis label: "Tue", "Nov 3", "Nov", "2026".
+    static func walkChartAxisLabel(_ day: WalkedDayKey, style: WalkProgressSlice.TickStyle) -> CopyString {
+        let format = switch style {
+        case .weekday: walkDateStyle.weekday(.abbreviated)
+        case .monthDay: walkDateStyle.month(.abbreviated).day()
+        case .month: walkDateStyle.month(.abbreviated)
+        case .year: walkDateStyle.year()
+        }
+        return CopyString(kind: .value, text: day.noon.formatted(format))
     }
 
     private static var walkDateStyle: Date.FormatStyle {

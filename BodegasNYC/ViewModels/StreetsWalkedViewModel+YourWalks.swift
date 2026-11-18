@@ -40,6 +40,15 @@ extension StreetsWalkedViewModel {
         await matcher.dayRuns(day)
     }
 
+    /// The Progress chart's data (PR 2, DS6), from the history already read,
+    /// with Your Blocks' citywide count as the headline once a count has
+    /// run; `nil` before the first history read.
+    func walkProgress(now: Date = Date()) -> WalkProgress? {
+        guard let walksHistory else { return nil }
+        let citywide = hasCounted ? boroughProgress.reduce(0) { $0 + $1.walked } : nil
+        return WalkProgress(history: walksHistory, citywideWalked: citywide, today: WalkedDayKey(date: now))
+    }
+
     /// What the Your Walks sheet shows (DS2, DS8.2).
     func yourWalks(now: Date = Date()) -> YourWalksContent {
         YourWalksContent(

@@ -78,6 +78,24 @@
 **Priority:** P3
 **Depends on:** #127 merged and the `delete-account` function deployed
 
+## Streets Walked
+
+### Per-borough series on the Your Walks Progress chart
+
+**What:** Let the Progress chart (`WalkProgressChart`, #170 PR 2) show one borough's cumulative walked blocks, or all five, beside the citywide line: a borough choice above or under the chart, the header's count and gain for that borough, and the same range, scrub and VoiceOver rules.
+
+**Why:** Your Blocks already counts by borough; the chart answers "when" only for the city as a whole, so a Brooklyn walker's pace is buried in the citywide line.
+
+**Pros:** The day rows already support it: `WalkedHistory.build` sees every block of every day, and `StreetGrid.borough(for:)` names each block's borough, so a per-borough cumulative is one more running count per borough in the same pass, and `WalkProgress` takes any cumulative series.
+
+**Cons:** Five series in one colour break the cyan rule's single mark (DESIGN.md: cyan is the trail and walked-history marks), so it needs a design pass: a borough picker showing one line at a time is the likely answer, not five colours. More VoiceOver and Audio Graph surface.
+
+**Context:** #170 eng review E6 (2026-11-17): build the citywide line first and see it in use. The design review kept "no borough series" for PR 2. Start from `WalkedHistory.build` (add per-borough counts to `CumulativePoint`) and `WalkProgress.init`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** #170 merged and some use of the citywide chart
+
 ## Completed
 
 ### Paginate `BodegaService.fetchAll` past the 1,000-row PostgREST cap (done 2026-10-21)
