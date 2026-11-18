@@ -119,6 +119,8 @@ struct AppCopyVoiceTests {
         + AppCopy.StreetsWalkedIntro.allCases.map(\.copy)
         + AppCopy.Account.allCases.map(\.copy)
         + AppCopy.Telemetry.allCases.map(\.copy)
+        + AppCopy.YourWalks.allCases.map(\.copy)
+        + yourWalksCopy
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),
@@ -130,6 +132,38 @@ struct AppCopyVoiceTests {
                 ]
             }
         }
+
+    /// Your Walks' templates (#170 PR 1) over zero, one and many, both ends
+    /// of a year, today and estimate.
+    static let yourWalksCopy: [CopyString] = {
+        let days = [WalkedDayKey(value: 20261103), WalkedDayKey(value: 20251231), WalkedDayKey(value: 20270101)]
+        let summaries = [
+            WalkedDaySummary(day: days[0], walkedIDs: Set(1 ... 14), newCount: 9, meters: 2_253),
+            WalkedDaySummary(day: days[1], walkedIDs: [1], newCount: 0, meters: 80),
+            WalkedDaySummary(day: days[2], walkedIDs: Set(1 ... 1_204), newCount: 1_204, meters: 160_934)
+        ]
+        let counts = [0, 1, 8, 1_204]
+        return days.flatMap { day in
+            [
+                AppCopy.walkMonthTitle(day), AppCopy.walkDayTitle(day), AppCopy.walkDayDate(day),
+                AppCopy.walkPlainDayLabel(day, isToday: false), AppCopy.walkPlainDayLabel(day, isToday: true)
+            ]
+        }
+        + counts.flatMap { count in
+            [
+                AppCopy.walkMonthDays(count), AppCopy.walkMonthNewBlocks(count),
+                AppCopy.walkDayBlocks(count), AppCopy.walkDayNew(count)
+            ]
+        }
+        + summaries.flatMap { summary in
+            [
+                AppCopy.walkDaySummary(summary),
+                AppCopy.walkDayDistance(meters: summary.meters),
+                AppCopy.walkDayLabel(summary, isToday: false, isEstimate: false),
+                AppCopy.walkDayLabel(summary, isToday: true, isEstimate: true)
+            ]
+        }
+    }()
 
     /// (walked, total) for Your Blocks (#108 PR 2): zero, one, the "<1%"
     /// band, a whole percent, grouped thousands, a full borough.

@@ -101,7 +101,13 @@ final class StreetsWalkedViewModel {
     /// Posts a VoiceOver announcement (design DS7); injected for tests.
     let announce: @MainActor (String) -> Void
     @ObservationIgnored private let telemetry: Telemetry // walk_started/stopped (#147)
-    private let matcher: BlockMatchingActor
+    let matcher: BlockMatchingActor
+    /// Your Walks (#170, `StreetsWalkedViewModel+YourWalks.swift`): the last
+    /// history read, whether the first read failed, and whether the sheet
+    /// is open (history is read after every pass only then).
+    var walksHistory: WalkedHistory?
+    var walksHistoryFailed = false
+    var isYourWalksOpen = false
     let motion: any MotionActivityProviding
     private var refreshTask: Task<Void, Never>?
     private let firstCountRetryDelay: Duration
@@ -229,6 +235,7 @@ final class StreetsWalkedViewModel {
             if !hasCounted, countState != .unavailable { countState = .failed }
         }
         hasHistory = storedPointCount() > 0
+        if isYourWalksOpen { await loadWalksHistory() }
         if hasHistory { scheduleRefresh() }
     }
 
@@ -304,6 +311,7 @@ final class StreetsWalkedViewModel {
             lastMatchError = message
             countState = hasCounted ? .ready : .failed
         }
+        if isYourWalksOpen { await loadWalksHistory() }
     }
 
     /// Publishes a summary only when its runs changed: the matcher's

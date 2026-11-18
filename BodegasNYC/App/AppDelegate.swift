@@ -82,7 +82,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// holding the fixture walk (#108 PR 2).
     private static func makeStreetsWalkedContainer() -> ModelContainer? {
         #if DEBUG
-        if UITestFixtures.seedsWalkedBlocks {
+        if UITestFixtures.seedsWalkedBlocks || UITestFixtures.seedsWalkedDays {
             return UITestFixtures.makeWalkedBlocksContainer()
         }
         #endif

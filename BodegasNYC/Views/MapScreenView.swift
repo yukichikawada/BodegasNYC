@@ -61,8 +61,8 @@ struct MapScreenView: View {
     /// Walked blocks (#108, `MapScreenView+WalkedBlocks.swift`): what the
     /// map draws, changed only at camera rest (design D10), and its width.
     @State var walkedDisplay = WalkedOverlayDisplay()
-    /// The Your Blocks sheet (#108 PR 2, design D7).
-    @State var showingYourBlocks = false
+    /// Your Blocks (#108 PR 2, design D7) or Your Walks (#170), one at a time.
+    @State var streetsSheet: StreetsSheet?
     /// The Streets Walked intro (#126, `MapScreenView+StreetsWalkedIntro.swift`).
     @State var showingStreetsWalkedIntro = false
     @State var introStartsRecording = false
