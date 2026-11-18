@@ -440,6 +440,56 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(yesterday.waitForNonExistence(timeout: 5), "Done left the sheet up")
     }
 
+    /// protects: #170 AC 12 and DS6 end to end: Your Walks' Calendar / Progress switch opens the chart on 1 month,
+    /// whose one VoiceOver element reads the headline and the month's gain; the range segments are found by their
+    /// spoken names ("1 year", "1 week", DS8.5) and each switches the gain; Calendar comes back with its days.
+    /// With `-UITestWalkedDays` five blocks are new on days 100, 35, 9, 3 and 1 back, so the month gains 3, the
+    /// year 5 and the week 2.
+    /// fails_when: there is no Progress tab, the chart's value is missing or wrong for a range, a segment does
+    /// not read its spoken name, or the Calendar does not come back.
+    /// no_claim: the line's drawing, scrubbing, the axis or the 0.25 s fade (unit tests, simulator captures).
+    @MainActor
+    func testYourWalksProgressSwitchesRange() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 20), "Streets Walked menu never appeared")
+        menu.tap()
+        let yourWalks = app.buttons["Your Walks"].firstMatch
+        XCTAssertTrue(yourWalks.waitForExistence(timeout: 5), "the menu has no Your Walks")
+        yourWalks.tap()
+
+        let yesterday = app.buttons["yourWalks.day.\(Self.walkDay(daysBefore: 1))"]
+        XCTAssertTrue(yesterday.waitForExistence(timeout: 20), "the sheet did not open on the Calendar")
+        let progress = app.buttons["Progress"].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 5), "there is no Progress tab")
+        progress.tap()
+
+        let chart = app.descendants(matching: .any)["yourWalks.progress.chart"].firstMatch
+        XCTAssertTrue(chart.waitForExistence(timeout: 10), "Progress never showed its chart")
+        XCTAssertTrue(
+            waitForValue(chart, "5 blocks, 3 new in the past month.", timeout: 20),
+            "1 month reads \(String(describing: chart.value))"
+        )
+        for (segment, value) in [("1 year", "5 blocks, 5 new in the past year."), ("1 week", "5 blocks, 2 new in the past week.")] {
+            let button = app.buttons[segment].firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 5), "no range segment reads \"\(segment)\"")
+            button.tap()
+            XCTAssertTrue(waitForValue(chart, value, timeout: 5), "\(segment) reads \(String(describing: chart.value))")
+        }
+
+        app.buttons["Calendar"].firstMatch.tap()
+        XCTAssertTrue(yesterday.waitForExistence(timeout: 5), "the Calendar did not come back")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(yesterday.waitForNonExistence(timeout: 5), "Done left the sheet up")
+    }
+
+    private func waitForValue(_ element: XCUIElement, _ value: String, timeout: TimeInterval) -> Bool {
+        let predicate = NSPredicate(format: "value == %@", value)
+        let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)
+        return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
+    }
+
     /// The element's frame once it has stopped changing (the controls fade
     /// over 0.2s), polled every 0.25s for up to 2s.
     @MainActor
