@@ -60,6 +60,19 @@ nonisolated extension WalkedBlockStore {
         }
     }
 
+    /// The estimate a pass records (eng E2): none for an incremental pass,
+    /// which leaves the saved value alone; a rebuild judges by CoreMotion's
+    /// 7 days, a backfill (no CoreMotion) by every unknown leg.
+    func estimatedThroughDay(_ plan: Plan, found evidence: [UUID: RideEvidence]) -> WalkedDayKey? {
+        guard plan.kind != .incremental else { return nil }
+        return WalkedEstimate.throughDay(
+            plan.snapshots,
+            found: evidence,
+            now: now(),
+            window: WalkedEstimate.askableWindow(for: plan.kind)
+        )
+    }
+
     /// Stages the match state: the bundle's stamp, and after a rebuild or
     /// backfill the day index version and the estimate (eng E2).
     func stageState(_ kind: WalkedPassKind, estimatedThroughDay: WalkedDayKey?, in context: ModelContext) throws {

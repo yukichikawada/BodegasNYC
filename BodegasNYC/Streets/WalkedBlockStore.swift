@@ -151,14 +151,7 @@ nonisolated final class WalkedBlockStore {
         let evidence = BlockMatcher.evidence(plan.snapshots, activity: activity)
         // Rebuilds and backfills re-derive old days (eng E2); an
         // incremental pass leaves the saved value alone.
-        let estimated = plan.kind == .incremental
-            ? nil
-            : WalkedEstimate.throughDay(
-                plan.snapshots,
-                found: evidence,
-                now: now(),
-                window: WalkedEstimate.askableWindow(for: plan.kind)
-            )
+        let estimated = estimatedThroughDay(plan, found: evidence)
         let context = plan.context
         let written: MaskWrite
         let dayWrite: DayWrite
