@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftData
 import Synchronization
 
@@ -77,8 +78,20 @@ actor BlockMatchingActor {
         generationLock.withLock { $0 += 1 }
     }
 
+    /// Your Walks' history (#170), read after every queued pass.
+    nonisolated enum HistoryOutcome: Sendable {
+        case ready(WalkedHistory)
+        /// The street data did not load (eng R5).
+        case unavailable
+        /// The day rows could not be read, or their backfill has not
+        /// succeeded yet (eng A6); the next pass retries.
+        case failed
+    }
+
     /// Full rebuilds saved so far (tests).
     var rebuildCount: Int { store?.rebuildCount ?? 0 }
+    /// Day-row backfills saved so far (tests).
+    var backfillCount: Int { store?.backfillCount ?? 0 }
 
     /// Matches whatever history is unmatched and returns the saved state.
     func catchUp() async -> Outcome {
@@ -90,9 +103,27 @@ actor BlockMatchingActor {
         await enqueue { await $0.runClear() }
     }
 
-    private func enqueue(_ job: @escaping @Sendable (isolated BlockMatchingActor) async -> Outcome) async -> Outcome {
+    /// The walk days, after any pass already queued (#170 spec rule 6). The
+    /// first read loads every day row; later reads are in memory.
+    func history() async -> HistoryOutcome {
+        await enqueue { actor in
+            guard let store = actor.prepareStore() else { return .unavailable }
+            guard let history = try? store.history() else { return .failed }
+            return .ready(history)
+        }
+    }
+
+    /// One day's walked runs for its map, built here, off the main actor
+    /// (eng A5). Empty when the day has none or the history is unavailable.
+    func dayRuns(_ day: WalkedDayKey) async -> [WalkedRun] {
+        await enqueue { actor in
+            (try? actor.prepareStore()?.dayRuns(day)) ?? []
+        }
+    }
+
+    private func enqueue<T: Sendable>(_ job: @escaping @Sendable (isolated BlockMatchingActor) async -> T) async -> T {
         let previous = tail
-        let task = Task { () -> Outcome in
+        let task = Task { () -> T in
             await previous?.value
             return await job(self)
         }
@@ -100,27 +131,50 @@ actor BlockMatchingActor {
         return await task.value
     }
 
+    /// A backfill (#170 eng A1) runs first when the day rows are behind,
+    /// then the unmatched fixes take an incremental pass in the same job. A
+    /// backfill that throws does not block the summary (A6): the pass goes
+    /// on without it, history reports `.failed`, and the next pass retries.
     private func runPass() async -> Outcome {
         let startGeneration = generation
         guard let store = prepareStore() else { return .unavailable }
         do {
-            guard let plan = try store.plan() else {
+            var plan = try store.plan()
+            if let backfill = plan, backfill.kind == .backfill {
+                do {
+                    guard try await run(backfill, on: store, generation: startGeneration) else { return .cancelled }
+                } catch {
+                    WalkRecorder.logger.error("backfill: \(error.localizedDescription, privacy: .public)")
+                }
+                plan = try store.plan(allowsBackfill: false)
+            }
+            guard let plan else {
                 return .updated(try store.summary(), store.grid)
             }
-            var activity = VehicleActivity.unavailable
-            if let range = plan.range {
-                activity = await activityProvider.vehicleActivity(from: range.start, to: range.end)
-            }
-            let saved = try store.apply(
-                plan,
-                activity: activity,
-                seam: willCommit,
-                shouldCommit: { generation == startGeneration }
-            )
+            let saved = try await run(plan, on: store, generation: startGeneration)
             return saved ? .updated(try store.summary(), store.grid) : .cancelled
         } catch {
             return .failed(error.localizedDescription)
         }
+    }
+
+    /// Queries the activity for `plan` (none for a backfill, which judges
+    /// legs by saved evidence and speed alone, eng A1) and applies it.
+    private func run(
+        _ plan: WalkedBlockStore.Plan,
+        on store: WalkedBlockStore,
+        generation startGeneration: Int
+    ) async throws -> Bool {
+        var activity = VehicleActivity.unavailable
+        if plan.kind != .backfill, let range = plan.range {
+            activity = await activityProvider.vehicleActivity(from: range.start, to: range.end)
+        }
+        return try store.apply(
+            plan,
+            activity: activity,
+            seam: willCommit,
+            shouldCommit: { generation == startGeneration }
+        )
     }
 
     private func runClear() async -> Outcome {

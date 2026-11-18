@@ -17,7 +17,7 @@ colors:
   pin-glow-cat: "#FF9F0A"     # catPinGlow asset (#154 DS2), the same in both appearances. The cat pin's glow only
   accent-cat: "#FF9500"       # catPin, systemOrange asset color; dark #FF9F0A. Cat symbol everywhere, cat pins, the onboarding spine and the Streets Walked intro's symbol (#126)
   star: "#FFCC00"             # systemYellow; dark #FFD60A. Rating stars only
-  walked: "#0891B2"           # walked asset (#154); dark #5AE3FF, Increase Contrast #066A85 / #A0F0FF. Walked trail only
+  walked: "#0891B2"           # walked asset (#154); dark #5AE3FF, Increase Contrast #066A85 / #A0F0FF. Walked trail and walked-history marks only (#170)
   error: "#FF3B30"            # systemRed as text only (form errors, destructive actions); dark #FF453A. The only red in the app (#154)
 typography:
   display:
@@ -215,8 +215,11 @@ corner at night; the map tiles already switch, so the chrome follows the system 
 - Red is text only: form errors and destructive actions in sheets (#154). Nothing on the map is red.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
   first-add card, the noBodegas empty state), and the Streets Walked intro's symbol (#126 D3). Yellow is stars and only stars.
-- Cyan is the walked trail and only the walked trail (#154, superseding #108 D1): the
+- Cyan is the walked trail and the marks of walked history, Your Walks' day dots and its chart
+  line, and nothing else (#154, superseding #108 D1; widened by #170 D2): the
   `walked` asset, #0891B2 light and #5AE3FF dark, with Increase Contrast slots #066A85 / #A0F0FF.
+  A mark is never a wash: no fill under the chart line (#170 DS6), and a dot is never the only
+  signal (the day's number is `.primary` when walked, DS8.1).
   At the 8 and 5pt bands the trail is breadcrumbs: round dots (zero-length dashes with round caps)
   over a translucent track of the same cyan at 35%: 8pt dots every 16pt on a 16pt track, and
   6.5pt dots every 13pt on a 14pt track. At the 3 and 2pt bands it is a plain solid line with no
@@ -290,8 +293,11 @@ fragments in a data position, 1 to 4 words, no period, not Title Case, never sta
 Grouping 12pt, title-to-body 4pt, section change 20 to 24pt, major break 32pt. Leading alignment
 everywhere, except a trailing data value on a list row, which sits at the row's trailing edge when
 the whole row fits on one line. Nothing is centered except the system `ContentUnavailableView` on
-the list tab, the page dots, the photo viewer counter (#107), and a viewer page's content (the
-photo, or its load failure standing in its place).
+the list tab, the page dots, the photo viewer counter (#107), a viewer page's content (the
+photo, or its load failure standing in its place), and the Your Walks calendar grid (#170 DS3): seven
+equal columns edge to edge with no page inset (45.7pt each on an iPhone SE), each day's number and
+dot centred in its column; its month headers, footers and the accessibility-size list stay leading
+at the 16pt inset.
 
 **Widths:** floating overlays `maxWidth: 480pt` centered (iPad, landscape); onboarding content
 `maxWidth: 560pt`, top-aligned at 25% of the height.
@@ -626,6 +632,39 @@ Someone already recording whose Motion & Fitness was never asked gets an Allow M
 after a denial it is Open Settings. VoiceOver: each row is one element, "Manhattan, 412 of 9,300
 blocks, 4 percent."; "<1%" reads "less than 1 percent", "—" reads "counting".
 
+**Your Walks sheet** (`YourWalksSheet`, `WalkCalendarView`, `WalkDayView`, #170 PR 1, DS1 to DS8):
+opened by Your Walks, directly under Your Blocks in the Streets Walked menu (hint "Shows the days you
+walked."; PR 2 adds "and your progress"). `NavigationStack`, inline title "Your Walks" (a tap on it
+scrolls to the current month), Done, `.large` only, opaque `systemGroupedBackground`, bare ground, no
+card around the grid, no display register. A walk day starts at 4 a.m. New York time. The Calendar is
+one vertical scroll of months, the first walked month to the current one, opened at the bottom (no
+chevrons, no paging, no empty-month pages). Each month: "November 2026" in `.headline` (header trait),
+then "8 days · 24 new blocks" in `.subheadline` `textMuted` (none for a month without walks), then the
+weekday initials (`.caption` `textMuted`, hidden from VoiceOver) and the grid, edge to edge (the Layout
+exception), cells at least 44pt, numbers `.body` monospaced and capped at `.xxxLarge`: a walked day's
+number is `.primary` over a 6pt `walked` dot 4pt below (scaled), any other day's is `textMuted`; today
+is bold in the normal text colour (`.primary`), walked or not, never green. A day gets a dot only when a block was walked on it (eng E3). At
+accessibility sizes each month lists its walked days instead, date (`.body`) over "14 blocks, 9 new ·
+1.4 miles" (`.subheadline` `textMuted`), fully scaling; the swap is the 0.25s opacity change. Under a
+month with estimated days: "Older days are estimates. Some rides may be counted." (`.footnote`
+`textMuted`). Sheet footer: "A block counts once a day. Miles include repeats. Days start at 4 a.m.",
+plus "Today shows up once it's counted." while recording. States, failure > loading > empty: Your
+Blocks' street-map line, or "Your days couldn't be loaded. Your walks are still saved.", in `.primary`
+with no grid; a first read shows this month's grid with muted numbers and "Finding your walks…" under
+the title from 0s; a refresh keeps the last result; no history shows "No streets yet." / "Walk
+somewhere. This fills in on its own." (the section empty state) with the recording lines and Open
+Settings as in Your Blocks; history with no walked day shows the grid and "No blocks counted yet.".
+A walked day pushes the day: title "Nov 3, 2025" inline; the map level, north-up, muted, wayfinding
+POIs only, fitted to the day's runs with 15% padding and a 300m floor, pan and zoom only, no pins, the
+shared trail (`WalkedTrail`) at the main map's bands, "Zoom in to see your blocks." over it past the
+run cap, at least 200pt tall (the page scrolls when the bar leaves less); under it a bar on the opaque
+ground, "14 blocks" `.body` `.primary` then "9 new" `textMuted` (left out at zero), over "1.4 miles"
+`.subheadline` `textMuted`, monospaced digits, stacking at accessibility sizes, plus the estimate line
+on an estimated day. Clear History with the sheet open empties it and pops an open day. VoiceOver: a
+walked day is one button, "Tuesday, November 3, 14 blocks, 9 new, 1.4 miles." with "today" after the
+date and "estimate" at the end when they apply; other days read the date only and are not buttons;
+the day map is one element, "Map of this day's walk.", with the counts as its value.
+
 **Streets Walked intro sheet** (`StreetsWalkedIntroSheet`, #126): the intro's fourth page, delivered as a sheet the first time the map is quiet after onboarding (1.5 s after the gate holds, camera at rest, active scene, nothing presented, no first-add choreography, recording off, no history; once per device; reopened any time from the Streets Walked menu's "How Streets Walked Works"). `.large` only, opaque `systemBackground`, inline title "Streets Walked", Done. The onboarding page composition at the compact 16pt top inset: 44pt `figure.walk` in `.catPin` (the fourth spine symbol), headline in the display register (D5's fourth surface) with the header trait, body `.title3` `textMuted`, a `.headline` permission heading "Recording needs location set to Always.", the permission paragraph in `.primary` (consequence copy, #95 D8) chosen by authorization status (notDetermined, whenInUse, denied, restricted, always) or, while paused, the recorder problem's own line, then "It lives under Streets Walked, the walking figure in the map's toolbar." in `textMuted`; `VStack(spacing: 12)`, 24pt inset, 560 max width. On reopen the status line ("Recording is on." `textMuted`, or "Recording is paused. Your blocks stay." `.primary`) sits under the headline. Bottom `safeAreaInset` bar on the same opaque ground, `.controlSize(.large)`, 12pt apart: off → Start Recording (`.borderedProminent`) and Not Now (`.bordered`); off and restricted → Not Now; recording → none; paused for something Settings fixes → Open Settings (`.borderedProminent`); paused otherwise → none. Start Recording dismisses the sheet, then runs the menu's exact path (#123 DS4). VoiceOver: symbol hidden; headline and permission heading are headers; order headline, status, paragraphs, buttons; each paragraph its own element; escape dismisses without starting; focus returns to the Streets Walked toolbar control after a manual close. Every text `fixedSize`, no caps, labels wrap; where the pinned bar would leave under 200pt of reading space (AX sizes in compact height) the bar moves to the end of the scroll. System sheet motion only. Swipe-down is Not Now.
 
 **Section empty state** (DD9, amended by #95 D7): title `.subheadline` `textMuted`, body
@@ -845,3 +884,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-06 | #160 wide layouts: the map's top edge is clear and the List tab keeps the scroll-edge fade (D1): iOS 26, the shipping OS, draws no band over the map, and the 3 to 5% band the iOS 27.2 navigation bar draws, which neither `toolbarBackgroundVisibility` nor `scrollEdgeEffectHidden` reaches, is tracked in #166 with the iOS 27 map-style check; at a measured browse width of 540pt or more (inside the safe areas, eng D1) the Map/List switch leaves the centre for the trailing group as a one-tap toggle naming the other tab, glyph and text, label colour (D2, D3, DS1), between Streets Walked and Account so it keeps its screen position on both tabs (DS2); below 540pt the segmented control and compact menu stay in the centre (#44, #143); no bespoke toolbar motion (DS3); item 3 (onboarding edges) closed as system sheet behaviour (D4); haze measured by a same-band main-vs-branch luminance comparison (eng D2, `scripts/band-luminance.py`); an AX5 landscape UI case (eng D3); dark landscape and Duo captures (DS4); `components.browse-toolbar` tokens (DS5); the List tab's width on wide layouts is a TODO (DS6) | Spec D1 to D4, `/plan-eng-review` D1 to D3 and `/plan-design-review` DS1 to DS6 with outside voices; owner accepted all. The haze was a white band over a map that does not scroll; an icon-only menu took two taps and named the tab you were already on |
 | 2026-11-07 | #156 phase two, the tilt: Locate Me and Show on Map land on one block-zoom camera, 420 m, heading kept, pitched 55° with the pitch on the same flight (spec D2, D5); `.realistic` elevation on the browse map, `.flat` on the preview, `.flat` the one-constant fallback (spec D4, AC 12, AC 13); block zoom, the trail bands, the clustering grid and the label candidates read a pitch-blind settled frame (level-equivalent height = distance × the level ratio per map height; the near-field data region), the walked culling keeps MapKit's region (spec D3, eng D2, D3, Shape B, DS2); Show on Map's centre is 74 m screen-down at any heading and its no-op is 30 m / 10% / 5° (eng D5, D6); a cluster tap keeps pitch and heading and never zooms out (`minimumZoomSpan` retired); the pitched `.nearby` radius is MapKit's north edge clamped 200 m to 1 km (DS4); landings level under Reduce Motion, in compact height and while the user's own level holds for the session (DS5, DS6, DS8); the coarse-fix fallback is level (DS9); MapKit's compass and pitch toggle, the toggle only at 840 m or closer and not while placing (DS7); Liquid Glass pins not adopted (spec D1) | Spec D1 to D5, `/plan-eng-review` D1 to D7 and `/plan-design-review` DS1 to DS10 with outside voices; owner accepted all. The probe's tilt frame was the one look decision left from #154; every wide view stays level |
 | 2026-11-08 | #166 probe: the band at the top of the map on iOS 27 (about 116 pt tall, roughly 3 to 6% lighter than the map, with a hairline) is MapKit's own top-edge effect drawn inside the map, not the toolbar's scroll edge effect; no public API removes it, so the app does not try to remove it and `{components.browse-toolbar.scrollEdgeEffect}` stays met on iOS 26 only; re-check on each iOS 27.x seed | Simulator probe on iOS 27.2 (#166). Every public toolbar and scroll-edge modifier tried left the hairline unchanged; only hiding private subviews removed it, which is not shippable and comes back after a camera move |
+| 2026-11-18 | #170 PR 1 Your Walks (owner D1 to D4, design DS1 to DS8): a sheet under Your Blocks with a Calendar of walked days, one vertical scroll of months opened at the current one, each headed "8 days · 24 new blocks"; days start at 4 a.m. New York time; a dot (the `walked` cyan) only for a day with a walked block, today bold and never green; the grid edge to edge (a new centred exception in Layout) and a list at accessibility sizes; a day opens a level, pan-and-zoom map with the shared trail and "14 blocks  9 new" over "1.4 miles"; estimate and counting lines in `textMuted` footnotes. Cyan widens from the trail alone to the marks of walked history (dots, PR 2 chart line), never a fill | Owner wants to see when, not only where; paging made empty pages and a tap per month, and seven 44pt cells do not fit an SE inside 16pt insets; Deli Green means tappable, so today cannot be green; the counts measure different things, so the footer says which |

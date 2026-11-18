@@ -49,15 +49,63 @@ nonisolated enum BlockMatcher {
         grid: StreetGrid,
         activity: VehicleActivity = .unavailable
     ) -> [UInt32: UInt16] {
+        matchByDay(points, grid: grid, activity: activity).masks
+    }
+
+    /// One walk day's share of a match (#170 spec rule 2).
+    struct DayDelta: Equatable, Sendable {
         var masks: [UInt32: UInt16] = [:]
-        guard points.count >= 2 else { return masks }
+        /// Summed length of the day's creditable legs, matched or not.
+        var meters: Double = 0
+    }
+
+    /// A match split by walk day: each leg belongs to the day of its end fix
+    /// (`WalkedDayKey`), and `masks` is the OR of the day masks, so it equals
+    /// what `match` always returned.
+    struct MatchResult: Equatable, Sendable {
+        var masks: [UInt32: UInt16] = [:]
+        var days: [WalkedDayKey: DayDelta] = [:]
+    }
+
+    /// `match`, keeping each leg's day and length. The current day's
+    /// interval is kept and recomputed only when a leg's end fix falls
+    /// outside it, so a long history costs about one calendar call per day
+    /// (eng A7).
+    static func matchByDay(
+        _ points: [WalkedPointSnapshot],
+        grid: StreetGrid,
+        activity: VehicleActivity = .unavailable
+    ) -> MatchResult {
+        var result = MatchResult()
+        guard points.count >= 2 else { return result }
+        var current: (key: WalkedDayKey, interval: DateInterval)?
+        var delta = DayDelta()
+        func flush() {
+            guard let key = current?.key else { return }
+            result.days[key, default: DayDelta()].meters += delta.meters
+            result.days[key, default: DayDelta()].masks.merge(delta.masks) { $0 | $1 }
+            delta = DayDelta()
+        }
         for index in 1 ..< points.count {
             let start = points[index - 1]
             let end = points[index]
             guard isCreditableLeg(from: start, to: end, activity: activity) else { continue }
-            creditLeg(from: start.coordinate, to: end.coordinate, grid: grid, into: &masks)
+            let time = end.recordedAt
+            if let interval = current?.interval, interval.start <= time, time < interval.end {
+                // Same day: keep accumulating.
+            } else {
+                flush()
+                let key = WalkedDayKey(date: time)
+                current = (key, key.interval)
+            }
+            delta.meters += distance(start.coordinate, end.coordinate)
+            creditLeg(from: start.coordinate, to: end.coordinate, grid: grid, into: &delta.masks)
         }
-        return masks
+        flush()
+        for day in result.days.values {
+            result.masks.merge(day.masks) { $0 | $1 }
+        }
+        return result
     }
 
     /// Whether a leg can earn bins: same walk (20 min, 250 m), at most 60 m,

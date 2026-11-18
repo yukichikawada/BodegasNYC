@@ -15,41 +15,12 @@ extension MapScreenView {
     @MapContentBuilder
     var walkedBlockOverlay: some MapContent {
         if case .runs(let runs) = walkedDisplay.visible {
-            switch WalkedOverlay.trailStyle(width: walkedDisplay.lineWidth) {
-            case .line(let width):
-                ForEach(runs) { run in
-                    // The run's cached `MKPolyline`: a reference in the content
-                    // list, not a coordinate array copied on every graph update.
-                    MapPolyline(run.polyline)
-                        .stroke(Color.walked, style: StrokeStyle(lineWidth: width, lineCap: .round, lineJoin: .round))
-                        .mapOverlayLevel(level: .aboveRoads)
-                }
-            case .breadcrumbs(let dot, let spacing, let track):
-                // Two passes (#154 eng D3): every run's track first, then every
-                // run's dots, so no track covers another run's dots where runs
-                // cross. Increase Contrast draws no track (DS7); `walked`
-                // resolves to its contrast slot there.
-                if colorSchemeContrast != .increased {
-                    ForEach(runs) { run in
-                        MapPolyline(run.polyline)
-                            .stroke(
-                                Color.walked.opacity(0.35),
-                                style: StrokeStyle(lineWidth: track, lineCap: .round, lineJoin: .round)
-                            )
-                            .mapOverlayLevel(level: .aboveRoads)
-                    }
-                }
-                ForEach(runs) { run in
-                    // Zero-length dashes with round caps draw as dots; the
-                    // 0.01pt dash is accepted, not compensated.
-                    MapPolyline(run.polyline)
-                        .stroke(
-                            Color.walked,
-                            style: StrokeStyle(lineWidth: dot, lineCap: .round, lineJoin: .round, dash: [0.01, spacing])
-                        )
-                        .mapOverlayLevel(level: .aboveRoads)
-                }
-            }
+            // Shared with the Your Walks day map (#170 eng A8).
+            WalkedTrail(
+                runs: runs,
+                lineWidth: walkedDisplay.lineWidth,
+                isContrastIncreased: colorSchemeContrast == .increased
+            )
         }
     }
 
@@ -73,9 +44,12 @@ extension MapScreenView {
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active, scene: streetsSceneToken)
                 }
-                .sheet(isPresented: $showingYourBlocks) {
+                .sheet(item: $streetsSheet) { sheet in
                     if let streetsWalkedViewModel {
-                        YourBlocksSheet(viewModel: streetsWalkedViewModel)
+                        switch sheet {
+                        case .yourBlocks: YourBlocksSheet(viewModel: streetsWalkedViewModel)
+                        case .yourWalks: YourWalksSheet(viewModel: streetsWalkedViewModel)
+                        }
                     }
                 }
         )
@@ -109,8 +83,8 @@ extension MapScreenView {
 
     // MARK: Menu actions (design D5, D6, D11)
 
-    /// The Streets Walked toolbar menu (design D5): Your Blocks with How
-    /// Streets Walked Works under it (#126), Show on Map, Start/Stop
+    /// The Streets Walked toolbar menu (design D5): Your Blocks, Your Walks
+    /// (#170) and How Streets Walked Works (#126), Show on Map, Start/Stop
     /// Recording, Clear History…, each in its own section. VoiceOver returns
     /// here after the intro closes (#126 design D8).
     @ToolbarContentBuilder
@@ -119,8 +93,10 @@ extension MapScreenView {
             ToolbarItem(placement: .topBarTrailing) {
                 Menu {
                     Section {
-                        Button(AppCopy.YourBlocks.title.copy.text) { showingYourBlocks = true }
+                        Button(AppCopy.YourBlocks.title.copy.text) { streetsSheet = .yourBlocks }
                             .accessibilityHint(AppCopy.YourBlocks.menuHint.copy.text)
+                        Button(AppCopy.YourWalks.title.copy.text) { streetsSheet = .yourWalks }
+                            .accessibilityHint(AppCopy.YourWalks.menuHint.copy.text)
                         Button(AppCopy.StreetsWalkedIntro.menuItem.copy.text) { presentStreetsWalkedIntro() }
                     }
                     Section {
@@ -217,6 +193,15 @@ extension MapScreenView {
         guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
         UIApplication.shared.open(url)
     }
+}
+
+/// The Streets Walked menu's sheets (#170): one presentation, so Your Blocks
+/// and Your Walks never compete, and the intro's gate reads one flag.
+enum StreetsSheet: Identifiable {
+    case yourBlocks
+    case yourWalks
+
+    var id: Self { self }
 }
 
 extension WalkedRegion {

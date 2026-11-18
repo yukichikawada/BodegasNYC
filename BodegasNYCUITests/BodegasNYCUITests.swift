@@ -394,6 +394,52 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(manhattan.waitForNonExistence(timeout: 5), "Done left the sheet up")
     }
 
+    /// The walk day `days` before today's, as `WalkedDayKey`'s yyyymmdd: New York time, a day starting at 4 am.
+    private static func walkDay(daysBefore days: Int) -> Int {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "America/New_York") ?? .current
+        let now = Date()
+        let startsToday = calendar.component(.hour, from: now) >= 4
+        let date = calendar.date(byAdding: .day, value: -days - (startsToday ? 0 : 1), to: now) ?? now
+        let parts = calendar.dateComponents([.year, .month, .day], from: date)
+        return (parts.year ?? 0) * 10_000 + (parts.month ?? 0) * 100 + (parts.day ?? 0)
+    }
+
+    /// protects: #170 AC 6: Streets Walked → Your Walks (under Your Blocks) opens the sheet; with
+    /// `-UITestWalkedDays` (walks at noon 100, 35, 9, 3 and 1 days back, in an in-memory store) yesterday is one
+    /// button whose label carries its counts, a day without walks is not a button, and the walked day opens
+    /// its map, one element whose value is the day's counts; back returns to the calendar and Done closes it.
+    /// fails_when: the menu has no Your Walks, the walked day never becomes a button, a day without walks is
+    /// a button, the day map or its value is missing, or Done leaves the sheet up.
+    /// no_claim: the layout, colours, the dot or the trail (simulator captures); which blocks the fixture
+    /// walks (YourWalksTests.uiFixtureWalksFourDays).
+    @MainActor
+    func testYourWalksOpensAWalkedDay() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 20), "Streets Walked menu never appeared")
+        menu.tap()
+        let yourWalks = app.buttons["Your Walks"].firstMatch
+        XCTAssertTrue(yourWalks.waitForExistence(timeout: 5), "the menu has no Your Walks")
+        yourWalks.tap()
+
+        let yesterday = app.buttons["yourWalks.day.\(Self.walkDay(daysBefore: 1))"]
+        XCTAssertTrue(yesterday.waitForExistence(timeout: 20), "yesterday never became a walked day")
+        XCTAssertTrue(yesterday.label.contains(", 1 block, 1 new, "), "yesterday reads \"\(yesterday.label)\"")
+        XCTAssertFalse(app.buttons["yourWalks.day.\(Self.walkDay(daysBefore: 2))"].exists, "a day without walks is a button")
+
+        yesterday.tap()
+        let map = app.descendants(matching: .any)["Map of this day's walk."].firstMatch
+        XCTAssertTrue(map.waitForExistence(timeout: 10), "the day never showed its map")
+        XCTAssertTrue((map.value as? String)?.hasPrefix("1 block, 1 new, ") == true, "the map's value is \(String(describing: map.value))")
+
+        app.navigationBars.buttons.element(boundBy: 0).tap()
+        XCTAssertTrue(yesterday.waitForExistence(timeout: 5), "back did not return to the calendar")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(yesterday.waitForNonExistence(timeout: 5), "Done left the sheet up")
+    }
+
     /// The element's frame once it has stopped changing (the controls fade
     /// over 0.2s), polled every 0.25s for up to 2s.
     @MainActor

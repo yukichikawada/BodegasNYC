@@ -19,7 +19,7 @@ extension MapScreenView {
                 dropState: addCompletion?.dropState ?? .none,
                 hasFirstAddCard: addCompletion?.firstAddCard != nil
             ),
-            isOwnSheetUp: showingYourBlocks || showingClearConfirmation,
+            isOwnSheetUp: streetsSheet != nil || showingClearConfirmation,
             isAwaitingLocationPrompt: locationPermissionClient.hasPendingAuthorizationRequest,
             isCameraMoving: isCameraMoving,
             recordingState: streetsWalkedViewModel.recordingState,
