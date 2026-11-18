@@ -52,6 +52,9 @@ nonisolated final class WalkedBlockStore {
         let snapshots: [WalkedPointSnapshot]
         /// The fixes this pass flips to matched.
         let unmatched: [WalkedPoint]
+        /// The fixes this pass may save ride evidence on (#170): every fix it
+        /// matches the leg into, never an incremental pass's predecessor.
+        let evidenceRows: [WalkedPoint]
 
         var range: DateInterval? {
             guard let first = snapshots.first, let last = snapshots.last else { return nil }
@@ -82,7 +85,13 @@ nonisolated final class WalkedBlockStore {
             return try rebuildPlan(context)
         }
         let snapshots = (predecessor.map { [$0] } ?? []) + new
-        return Plan(kind: .incremental, context: context, snapshots: snapshots, unmatched: unmatched)
+        return Plan(
+            kind: .incremental,
+            context: context,
+            snapshots: snapshots,
+            unmatched: unmatched,
+            evidenceRows: unmatched
+        )
     }
 
     private func rebuildPlan(_ context: ModelContext) throws -> Plan {
@@ -91,11 +100,12 @@ nonisolated final class WalkedBlockStore {
             kind: .rebuild,
             context: context,
             snapshots: Self.ordered(all),
-            unmatched: all.filter { !$0.isMatched }
+            unmatched: all.filter { !$0.isMatched },
+            evidenceRows: all
         )
     }
 
-    /// Matches the plan, stages masks, flips and stamp, then asks
+    /// Matches the plan, stages masks, flips, ride evidence and stamp, then asks
     /// `shouldCommit` immediately before the one `save()`, so the check is as
     /// late as it can be. If the work is stale (Clear History), or anything
     /// throws, the staged changes are rolled back. Returns whether it saved.
@@ -123,6 +133,7 @@ nonisolated final class WalkedBlockStore {
             for point in plan.unmatched {
                 point.isMatched = true
             }
+            Self.saveEvidence(BlockMatcher.evidence(plan.snapshots, activity: activity), on: plan.evidenceRows)
             try seam(.beforeCheck)
             guard shouldCommit() else {
                 context.rollback()
@@ -237,6 +248,16 @@ nonisolated final class WalkedBlockStore {
 
     // MARK: Helpers
 
+    /// Stages `evidence` on the rows it names. Evidence already known is
+    /// never overwritten: it was read while CoreMotion still remembered the
+    /// leg, and a late fix that splits the leg leaves it true (#170).
+    private static func saveEvidence(_ evidence: [UUID: RideEvidence], on rows: [WalkedPoint]) {
+        guard !evidence.isEmpty else { return }
+        for point in rows where point.ride == .unknown {
+            if let known = evidence[point.id] { point.ride = known }
+        }
+    }
+
     private func loadMasks() throws -> [UInt32: UInt16] {
         if let masks { return masks }
         let context = Self.makeContext(container)
@@ -276,7 +297,8 @@ nonisolated final class WalkedBlockStore {
         WalkedPointSnapshot(
             coordinate: Coordinate(latitude: point.latitude, longitude: point.longitude),
             recordedAt: point.recordedAt,
-            id: point.id
+            id: point.id,
+            ride: point.ride
         )
     }
 

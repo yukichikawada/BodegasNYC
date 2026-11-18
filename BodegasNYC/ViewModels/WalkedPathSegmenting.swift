@@ -11,6 +11,8 @@ nonisolated struct WalkedPointSnapshot: Sendable, Equatable {
     /// The `WalkedPoint`'s id: the tie-break when two fixes share a
     /// timestamp, so every pass orders history the same way (#108).
     var id = UUID()
+    /// The saved ride evidence for the leg that ends here (#170).
+    var ride: RideEvidence = .unknown
 
     /// History order (#108): `recordedAt`, then `id`.
     static func sortsBefore(_ lhs: WalkedPointSnapshot, _ rhs: WalkedPointSnapshot) -> Bool {
