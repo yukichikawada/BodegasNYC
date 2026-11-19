@@ -245,3 +245,74 @@ struct ReviewRow: View {
             .foregroundStyle(Color.textMuted)
     }
 }
+
+struct RatingSummaryView: View {
+    let averageRating: Double?
+    let reviewCount: Int
+
+    /// Renders nothing without a rating (design DD9): the reviews section
+    /// owns the empty state, so "No reviews yet." isn't said twice.
+    var body: some View {
+        if let averageRating {
+            HStack(spacing: 6) {
+                Image(systemName: "star.fill").foregroundStyle(.yellow)
+                Text(String(format: "%.1f", averageRating))
+                    .font(.headline)
+                Text("(\(reviewCount) review\(reviewCount == 1 ? "" : "s"))")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.textMuted)
+            }
+        }
+    }
+}
+
+/// A detail section's empty state (design DD9): quiet title and body,
+/// leading, no symbol, inside the section's own stack under its header and
+/// actions.
+struct SectionEmptyState: View {
+    let title: AppCopy
+    let message: AppCopy
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title.copy.text)
+                .font(.subheadline)
+                .foregroundStyle(Color.textMuted)
+            Text(message.copy.text)
+                .font(.footnote)
+                .foregroundStyle(Color.textMuted)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+struct ReviewsSection: View {
+    let reviews: [Review]
+    let hasCat: Bool
+    let currentUserID: UUID?
+    let onFlag: (Review) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Reviews").font(.headline)
+            if reviews.isEmpty {
+                let empty = AppCopy.noReviews(hasCat: hasCat)
+                SectionEmptyState(title: empty.title, message: empty.body)
+            } else {
+                ForEach(reviews) { review in
+                    // No flag option on your own review — edit it instead
+                    // (the "Edit Your Review" button below).
+                    if review.authorId == currentUserID {
+                        ReviewRow(review: review)
+                    } else {
+                        ReviewRow(review: review)
+                            .contextMenu {
+                                Button("Flag Review", systemImage: "flag") { onFlag(review) }
+                            }
+                    }
+                }
+            }
+        }
+    }
+}
