@@ -668,7 +668,7 @@ number is `.primary` over a 6pt `walked` dot 4pt below (scaled), any other day's
 is bold in the normal text colour (`.primary`), walked or not, never green. A day gets a dot only when a block was walked on it (eng E3). At
 accessibility sizes each month lists its walked days instead, date (`.body`) over "14 blocks, 9 new ·
 1.4 miles" (`.subheadline` `textMuted`), fully scaling; the swap is the 0.25s opacity change. Under a
-month with estimated days: "Older days are estimates. Some rides may be counted." (`.footnote`
+month with estimated days: "Some days are estimates. Rides may be counted." (`.footnote`
 `textMuted`). Sheet footer: "A block counts once a day. Miles include repeats. Days start at 4 a.m.",
 plus "Today shows up once it's counted." while recording. States, failure > loading > empty: Your
 Blocks' street-map line, or "Your days couldn't be loaded. Your walks are still saved.", in `.primary`
@@ -807,6 +807,59 @@ and that stands; the picture travels without a link in PR 1, so without the name
 `AppCopy` still never names the app; the name is a constant in `SharedWalkCard`.
 
 **Streets Walked intro sheet** (`StreetsWalkedIntroSheet`, #126): the intro's fourth page, delivered as a sheet the first time the map is quiet after onboarding (1.5 s after the gate holds, camera at rest, active scene, nothing presented, no first-add choreography, recording off, no history; once per device; reopened any time from the Streets Walked menu's "How Streets Walked Works"). `.large` only, opaque `systemBackground`, inline title "Streets Walked", Done. The onboarding page composition at the compact 16pt top inset: 44pt `figure.walk` in `.catPin` (the fourth spine symbol), headline in the display register (D5's fourth surface) with the header trait, body `.title3` `textMuted`, a `.headline` permission heading "Recording needs location set to Always.", the permission paragraph in `.primary` (consequence copy, #95 D8) chosen by authorization status (notDetermined, whenInUse, denied, restricted, always) or, while paused, the recorder problem's own line, then "It lives under Streets Walked, the walking figure in the map's toolbar." in `textMuted`; `VStack(spacing: 12)`, 24pt inset, 560 max width. On reopen the status line ("Recording is on." `textMuted`, or "Recording is paused. Your blocks stay." `.primary`) sits under the headline. Bottom `safeAreaInset` bar on the same opaque ground, `.controlSize(.large)`, 12pt apart: off → Start Recording (`.borderedProminent`) and Not Now (`.bordered`); off and restricted → Not Now; recording → none; paused for something Settings fixes → Open Settings (`.borderedProminent`); paused otherwise → none. Start Recording dismisses the sheet, then runs the menu's exact path (#123 DS4). VoiceOver: symbol hidden; headline and permission heading are headers; order headline, status, paragraphs, buttons; each paragraph its own element; escape dismisses without starting; focus returns to the Streets Walked toolbar control after a manual close. Every text `fixedSize`, no caps, labels wrap; where the pinned bar would leave under 200pt of reading space (AX sizes in compact height) the bar moves to the end of the scroll. System sheet motion only. Swipe-down is Not Now.
+
+**Walk history file** (#180, `MapScreenView+WalkHistoryFile.swift`, `MapScreenView+WalkHistoryImport.swift`,
+`WalkHistoryImportSheet`, design DS1 to DS6, D1 to D14): the Streets Walked menu gains an untitled
+section directly above Clear History: "Export History…", then "Import History…", no icons, labels
+stored without the ellipsis and shown through `menuItemWithEllipsis`, hints "Saves your walks to a
+file." and "Adds walks from a file.". Export is disabled with no history; Import is there with or
+without history. While an export runs, an import reads, previews or saves, or a Clear deletes, Export,
+Import and Clear History are disabled in every window. Export opens a confirmation dialog, "Export
+your walked history?" with "The file holds everywhere you walked and when, to the second. It isn't
+locked. Anyone who gets it can read it." (plus "It comes as 2 files. Keep them together and import
+each one." when the history comes as parts) and "Export History"; from 0.5 s into an export the
+toolbar's `figure.walk` pulses (none under Reduce Motion) and VoiceOver hears "Making the file.";
+a failure is the alert "The file didn't come out." with Retry and Cancel; a completed or cancelled
+share shows nothing. Clear History's dialog gains a third action, "Export First", between Delete
+History and Cancel: it closes the dialog and opens the export confirmation, never continues to the
+delete, and is hidden while a transfer is busy. Import History… opens the system picker (single
+selection); a `.mybodegas` file opened from Files, AirDrop or Mail reaches the same sheet. The Import
+History sheet is a `StreetsSheet` case on the Account sheet's pattern: inset-grouped `Form`, inline
+title "Import History", `.medium` and `.large` (`.large` only at accessibility sizes), opaque
+`systemGroupedBackground`, one state enum, 0.25 s opacity swaps. States: Reading ("Reading the
+file…" from 0.5 s; Cancel); Preview (heading "Add walks from this file?" in `.headline`, the file's
+name as a `textMuted` data line that wraps, the dates in `.body` as "Aug 16–Nov 19, 2026", "84 days of
+recording" in `.subheadline` `textMuted` monospaced, never a point count; then, when they apply,
+"Some of it is already on this phone. Only the rest is added.", "Part of the file couldn't be read.
+The rest comes in." and "Days from a file show as estimates. This phone can't check them for rides.";
+always "They mix into your blocks, days and counts. Taking them out again means clearing everything."
+in `.subheadline` `.primary`; the footer "Walks recorded on two phones can count distance twice.";
+Cancel leading, and Add Walks `.borderedProminent`, large, full width in a bottom `safeAreaInset`
+while at least 200pt remain to read, else at the end of the scroll); Nothing new ("Nothing new in
+this file." over "Every walk in it is already on this phone.", plus the skipped line; Done); one
+`.primary` line with Done for no walks, nothing readable, a wrong or newer file, too large, a read
+failure ("The file couldn't be read. Open it again."), "History was cleared, so nothing was added."
+and the count failure; Saving ("Adding your walks…", the form disabled, no Done or Cancel, no
+swipe-down, escape does nothing); Counting ("Counting your blocks…", Done; the count goes on);
+Done ("Your walks are in.", and with recording off "Recording is off on this phone." and a
+`.bordered` Start Recording that closes the sheet and then runs the menu's path; Show Your Walks
+`.borderedProminent` swaps the sheet to Your Walks; Done; no auto-dismiss, toast, haptic, green or
+checkmark); a failed save is the preview again with "Those walks didn't save. Try again." in
+`.footnote` red under the action. Incoming files: on the List tab the app switches to the Map tab
+(a pushed detail is popped) and then presents; Your Blocks, Your Walks and the intro are closed and
+replaced by the import sheet; anything else presented (Add Bodega, photos, a review, Account,
+sign-in, Filters, a dialog, a shared walk) keeps the file waiting until it closes; after onboarding
+the import outranks the intro; a file opened while an import saves waits and comes after; a second
+file over a preview returns the sheet to reading, with "Another file opened." and focus on the
+reading row; another window taking the import over closes the first window's sheet without a word,
+and a window that did not start it shows only the disabled menu items. After an import the next
+count is shown as a first count in Your Blocks ("—", "Counting your blocks…") and Your Walks
+("Finding your walks…"). VoiceOver: focus to the heading on the preview, to a failure line, to the
+terminal line, and back to the Streets Walked item when the sheet closes; one announcement per
+state change ("Reading the file.", "Adding your walks.", "Counting your blocks.", "Another file
+opened."); dates read spelled out ("August 16 to November 19, 2026"). Known limit (eng A11): two
+phones that recorded the same walk merge into interleaved fixes, which can inflate that day's
+distance; block masks are unaffected in practice, and the preview's footer says so.
 
 **Section empty state** (DD9, amended by #95 D7): title `.subheadline` `textMuted`, body
 `.footnote` `textMuted` (never `.tertiary`), 2pt
@@ -1030,3 +1083,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-19 | #119 no culling under the cap: a walked history at or under the settled band's run cap (500 runs for breadcrumbs, 1,000 for the line) hands MapKit every run once, whatever the view, so a pan settle leaves the drawn set unchanged; over the cap the layer culls to the view + 25% and hides past the cap as before, with the same runs, styles and width bands. Per-tile pieces stay shelved (2026-11-11: retraced polylines drew stray curves on SwiftUI Map) | Device A/B on the iPhone 17 Pro Max (593-run seed, scripted pans at 5.2 km): main had 10 and 12 hitches of 50 ms or more per 30 s, longest 133 ms; no-cull had 0 and 0, longest 16.7 ms. The full rewrite at a band change hitched no more than one frame. At the breadcrumb band the seed is over 500, so both builds cull alike there. Not measured: a history near 1,000 runs at the line bands, or a slower phone |
 | 2026-11-19 | #177 PR 1 Share a Walk (eng E1, E4, E6, E7; design DS2 to DS7): a Share a Walk form from Your Walks (most recent walked day) and from a walked day (that day), whose preview is the exported picture itself and whose Share sends exactly that image plus one line of text through the system share sheet; the picture is always dark, in the sender's `walked` cyan as a solid line, with the count in the display register (a fifth surface, for the exported image only) and "My Bodegas" in its band (an exception for the exported image only; #154 DS11's no-wordmark rule for the app's map stands); its type is fixed, a named exception in the Typography scale; `WalkRunsMap` extracted from the day view with Zoom In, Zoom Out and Show Whole Walk for VoiceOver; every promise that walks stay on the phone gains the sharing exception, except the Account sheet's deletion line ("Walked blocks stay on this phone.") and the privacy policy's account-deletion paragraph, which are kept because they describe what deleting an account leaves alone (owner decision). The link, the Shared Walk sheet, the violet and the five-colour rule are PR 2 | Design review DS1 to DS7 and eng review E1 to E9, owner accepted all. A picture alone reads in the thread with no link; a live map preview differed in colour, framing and shape from what was sent; the picture is the one artifact strangers see, so it has one look and carries the app's name |
 | 2026-11-19 | #177 PR 2 walk links (eng E2, E3, E5, E7, E8; design DS1, DS5, DS7): a share also carries a link, `https://yukichikawada.github.io/BodegasNYC/walk/#1.<payload>.w`, whose fragment holds the walk (dates, counts, the estimate flag, at most 5,000 block ids) and nothing else; it opens the Shared Walk sheet, which waits for anything presented and comes before the Streets Walked intro, draws the sender's walk in a fifth data colour, `sharedWalk` violet (#7E22CE / #CF8AFF, contrast #5A0FA3 / #DDB0FF), as a solid line at every band, shows the sender's counts with a coverage line when this street file knows fewer blocks, and saves nothing; a phone without the app, or on 1.0.0, gets the static fallback page. The share sheet's items are picture, text, link, all from one frozen walk | Design review DS1 (violet holds against cyan, Deli Green and red under colour-blind simulation; the solid line is the cue that does not rely on colour) and eng review E2, E3, E5, E7, E8, owner accepted all; the night capture of the violet at the four bands was taken before the build continued |
+| 2026-11-19 | #180 walk history file (design DS1 to DS6, D1 to D14; eng E1 to E4, A1 to A12): Export History… and Import History… in their own menu section above Clear History; export is a confirmation dialog that says plainly what the file holds, with Export First on Clear History's dialog; import is a sheet on the Account sheet's pattern that previews the file by name, dates and days of recording (never points), always states that the walks mix in and only Clear History takes them out, and ends on "Your walks are in." with Show Your Walks and, when recording is off, Start Recording. Imported days with no ride evidence are estimates, so the Your Walks line becomes "Some days are estimates. Rides may be counted." | Owner decisions O1 to O5 (a file, merge only, one format, two ways in, no encryption), design review DS1 to DS6 and eng review E1 to E4, owner accepted all. A point is a unit the app never shows; dates and days are what a person can check against memory before a permanent merge; a dialog cannot hold a spinner, a retry or a replaced preview; someone restoring onto a new phone is never shown the intro, so the result offers recording |

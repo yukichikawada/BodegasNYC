@@ -128,6 +128,22 @@
 **Priority:** P3
 **Depends on:** #177 PR 1 merged
 
+### Undo an import
+
+**What:** Let someone take back one walk history import: delete the fixes whose `WalkedPoint.importBatch` is that import's UUID, then rebuild (drop `WalkedMatchState`, as the import itself does). Needs a place to list imports (when, which file, how many fixes) and a confirmation.
+
+**Why:** An import is permanent today. A mistaken one (someone else's file, the wrong phone's backup) can only be removed with Clear History, which takes everything; the preview says so ("Taking them out again means clearing everything.").
+
+**Pros:** The column already exists and every import since #180 PR 2 stamps it, so nothing has to be reconstructed. A fix this phone also recorded was never inserted by the import (merge by id), so deleting a batch never removes the phone's own walks.
+
+**Cons:** A list of imports is new UI and new copy, and the batch says nothing about the file once the sheet closes unless that is stored too. Two imports of overlapping files: the second batch holds only what the first did not add, so undoing the first leaves gaps the second does not fill.
+
+**Context:** #180 eng review E3 (2026-11-19): the column is in scope, the undo is not (owner, spec Out of Scope). Start from `WalkHistoryTransfer.commit` in `WalkHistoryTransfer+Import.swift`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** #180 PR 2 merged
+
 ## Completed
 
 ### Paginate `BodegaService.fetchAll` past the 1,000-row PostgREST cap (done 2026-10-21)
