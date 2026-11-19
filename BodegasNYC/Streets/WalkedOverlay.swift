@@ -53,8 +53,12 @@ nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
 
     /// Recomputes for the current data and settled camera. While the camera
     /// moves it does nothing; the settle that ends the gesture calls it
-    /// again. Culling reads the spatial index, so the cost follows the cells
-    /// in view. Returns whether anything the map draws changed; when nothing
+    /// again. A history at or under the settled band's run cap draws whole,
+    /// whatever the region (#119): the visible list is the index's own
+    /// array, so a pan settle compares it with itself (`Array ==` returns on
+    /// shared storage, no per-run work) and writes nothing. A larger history
+    /// is culled through the spatial index, so the cost follows the cells in
+    /// view. Returns whether anything the map draws changed; when nothing
     /// did, the caller writes no state and the Map's content is not touched.
     @discardableResult
     mutating func refresh(
@@ -72,7 +76,7 @@ nonisolated struct WalkedOverlayDisplay: Sendable, Equatable {
         if showsOverlay, let region {
             // The cap follows the settled width's style (#154 eng D8).
             let cap = WalkedOverlay.maxVisibleRuns(for: WalkedOverlay.trailStyle(width: lineWidth))
-            visible = index.visible(in: region, cap: cap)
+            visible = index.runs.count <= cap ? .runs(index.runs) : index.visible(in: region, cap: cap)
         } else {
             visible = .runs([])
         }
