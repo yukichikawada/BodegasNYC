@@ -311,12 +311,8 @@ nonisolated enum WalkHistoryFile {
         let version: Int
         let entries: [Entry]
 
-        private enum CodingKeys: String, CodingKey {
-            case format, version, fixes
-        }
-
         init(from decoder: any Decoder) throws {
-            let fields = try decoder.container(keyedBy: CodingKeys.self)
+            let fields = try decoder.container(keyedBy: WalkHistoryDocumentKeys.self)
             guard let format = try? fields.decode(String.self, forKey: .format),
                   format == WalkHistoryFile.format,
                   let version = try? fields.decode(Int.self, forKey: .version),
@@ -382,4 +378,10 @@ nonisolated enum WalkHistoryFile {
             return Fix(id: id, latitude: lat, longitude: lon, recordedAt: recordedAt, ride: ride)
         }
     }
+}
+
+/// The walk history file's top-level keys (`WalkHistoryFile.Document`), kept
+/// at file level so the decoder type nests only one level (SwiftLint).
+private nonisolated enum WalkHistoryDocumentKeys: String, CodingKey {
+    case format, version, fixes
 }
