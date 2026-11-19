@@ -156,7 +156,7 @@ struct WalkHistoryImportSheet: View {
                         .accessibilityLabel(AppCopy.sharedWalkSpokenDates(first: first, last: last))
                 }
                 Text(AppCopy.historyImportDays(preview.dayCount).text)
-                    .font(.subheadline.monospaced())
+                    .font(.subheadline.monospacedDigit()) // DESIGN.md Numerals: digits, not a typewriter face
                     .foregroundStyle(Color.textMuted)
             }
             .fixedSize(horizontal: false, vertical: true)
