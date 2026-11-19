@@ -33,6 +33,7 @@ struct MapScreenView: View {
     @State var selectedItemID: MapDisplayItem.ID?
     @State var lastVisibleRegion: MKCoordinateRegion?
     @State var showingClearConfirmation = false
+    @State var historyExport = HistoryExportPresentation() // #180, `MapScreenView+WalkHistoryFile.swift`
     /// A settle held back under the List tab, and the last data region
     /// delivered: the held one is replayed on return only if it changed.
     @State var pendingSettledFrame: SettledFrame?
@@ -216,20 +217,7 @@ struct MapScreenView: View {
                 mapToolbarItems
             }
         }
-        .confirmationDialog(
-            AppCopy.clearHistoryConfirmTitle.copy.text,
-            isPresented: $showingClearConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(AppCopy.deleteHistoryAction.copy.text, role: .destructive) {
-                // The cutoff is this tap (design D5, eng R9).
-                let tapTime = Date()
-                Task { await clearStreetsWalkedHistory(at: tapTime) }
-            }
-            Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
-        } message: {
-            Text(AppCopy.clearHistoryConfirmBody.copy.text)
-        }
+        // Clear History's confirmation is in `MapScreenView+WalkHistoryFile.swift` (#180 DS3).
     }
 
     private func map(_ proxy: MapProxy) -> some View {

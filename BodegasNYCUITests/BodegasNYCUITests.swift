@@ -599,6 +599,61 @@ final class BodegasNYCUITests: XCTestCase {
         return XCTWaiter().wait(for: [expectation], timeout: timeout) == .completed
     }
 
+    /// protects: #180 PR 1 (design D11, DS2, DS3): with `-UITestWalkedDays` the Streets Walked menu has an enabled
+    /// "Export History…", which opens the export confirmation with DS2's body and an "Export History" action, and
+    /// Cancel closes it; Clear History's confirmation offers "Export First", which opens the export confirmation
+    /// instead of deleting.
+    /// fails_when: the item is missing or disabled with history, the dialog's body or action differ, Export First
+    /// is missing, or it leads anywhere but the export confirmation.
+    /// no_claim: the share sheet and the file itself (out of process; the file is decoded in unit tests), Export
+    /// disabled with no history (WalkHistoryExportViewModelTests), the pulse.
+    @MainActor
+    func testExportHistoryReachesItsConfirmation() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 20), "Streets Walked menu never appeared")
+        menu.tap()
+        let exportItem = app.buttons["Export History\u{2026}"].firstMatch
+        XCTAssertTrue(exportItem.waitForExistence(timeout: 5), "the menu has no Export History…")
+        XCTAssertTrue(exportItem.isEnabled, "Export History… is disabled with history")
+        exportItem.tap()
+
+        let body = app.staticTexts[
+            "The file holds everywhere you walked and when, to the second. It isn't locked. "
+                + "Anyone who gets it can read it."
+        ].firstMatch
+        XCTAssertTrue(body.waitForExistence(timeout: 10), "Export History… never showed its confirmation")
+        XCTAssertTrue(app.buttons["Export History"].firstMatch.exists, "the confirmation has no Export History action")
+        dismissDialog(app)
+        XCTAssertTrue(body.waitForNonExistence(timeout: 5), "Cancel left the export confirmation up")
+
+        menu.tap()
+        let clearItem = app.buttons["Clear History\u{2026}"].firstMatch
+        XCTAssertTrue(clearItem.waitForExistence(timeout: 5), "the menu has no Clear History…")
+        clearItem.tap()
+        let exportFirst = app.buttons["Export First"].firstMatch
+        XCTAssertTrue(exportFirst.waitForExistence(timeout: 5), "Clear History's confirmation has no Export First")
+        exportFirst.tap()
+        XCTAssertTrue(body.waitForExistence(timeout: 10), "Export First did not open the export confirmation")
+        dismissDialog(app)
+        XCTAssertTrue(body.waitForNonExistence(timeout: 5), "Cancel left the export confirmation up")
+    }
+
+    /// Cancels a confirmation dialog: its Cancel button, or, where iOS 26 shows it as a popover from the toolbar
+    /// with no Cancel, the popover's dismiss region or a tap near the bottom, away from the popover.
+    @MainActor
+    private func dismissDialog(_ app: XCUIApplication) {
+        let cancel = app.buttons["Cancel"].firstMatch
+        let dismissRegion = app.otherElements["PopoverDismissRegion"].firstMatch
+        if cancel.waitForExistence(timeout: 2), cancel.isHittable {
+            cancel.tap()
+        } else if dismissRegion.exists {
+            dismissRegion.tap()
+        } else {
+            app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.92)).tap()
+        }
+    }
+
     /// The element's frame once it has stopped changing (the controls fade
     /// over 0.2s), polled every 0.25s for up to 2s.
     @MainActor
