@@ -604,7 +604,8 @@ final class BodegasNYCUITests: XCTestCase {
     /// Cancel closes it; Clear History's confirmation offers "Export First", which opens the export confirmation
     /// instead of deleting.
     /// fails_when: the item is missing or disabled with history, the dialog's body or action differ, Export First
-    /// is missing, or it leads anywhere but the export confirmation.
+    /// is missing, it leads anywhere but the export confirmation, or it also clears the history (Export History…
+    /// disabled afterwards).
     /// no_claim: the share sheet and the file itself (out of process; the file is decoded in unit tests), Export
     /// disabled with no history (WalkHistoryExportViewModelTests), the pulse.
     @MainActor
@@ -637,6 +638,11 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(body.waitForExistence(timeout: 10), "Export First did not open the export confirmation")
         dismissDialog(app)
         XCTAssertTrue(body.waitForNonExistence(timeout: 5), "Cancel left the export confirmation up")
+
+        // Export First deleted nothing (DS3): the history is still there, so Export History… is still enabled.
+        menu.tap()
+        XCTAssertTrue(exportItem.waitForExistence(timeout: 5), "the menu has no Export History… after Export First")
+        XCTAssertTrue(exportItem.isEnabled, "Export History… is disabled after Export First: the history was cleared")
     }
 
     /// Cancels a confirmation dialog: its Cancel button, or, where iOS 26 shows it as a popover from the toolbar

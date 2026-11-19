@@ -11,6 +11,9 @@ struct HistoryExportPresentation {
     /// The written files, while the share sheet is up.
     var sharing: WalkHistoryTransfer.Export?
     var isShowingFailure = false
+    /// Export First was tapped: the export confirmation opens once Clear
+    /// History's dialog has closed (design DS3).
+    var opensAfterClearDialog = false
 
     /// Something of the export is on screen in this window.
     var isPresenting: Bool {
@@ -24,10 +27,6 @@ struct HistoryExportPresentation {
 // Clear History's confirmation with Export First (DS3). Kept out of
 // `MapScreenView.swift`, which is at its length limit.
 extension MapScreenView {
-    /// The time between closing one dialog and presenting the next, so the
-    /// second is not lost to the first's dismissal (Export First).
-    static let dialogHandoffDelay: Duration = .milliseconds(450)
-
     /// The menu's walk history section, directly above Clear History
     /// (design D11): no icon, the label with an ellipsis, disabled with no
     /// history and while a transfer or a Clear runs. PR 2 adds Import
@@ -41,13 +40,14 @@ extension MapScreenView {
     }
 
     /// Counts the parts on the transfer, then opens the export
-    /// confirmation. From Clear History's Export First it waits for that
-    /// dialog to close first.
-    func requestHistoryExport(afterDialog: Bool = false) {
+    /// confirmation.
+    func requestHistoryExport() {
         guard let streetsWalkedViewModel, streetsWalkedViewModel.canExportHistory else { return }
         Task {
+            // Counted now, cut at the confirm tap: fixes recorded in between
+            // could only tip a history sitting exactly at the cap into one
+            // more part than the dialog said.
             let partCount = await streetsWalkedViewModel.historyExportPartCount()
-            if afterDialog { try? await Task.sleep(for: Self.dialogHandoffDelay) }
             historyExport.partCount = partCount
             historyExport.isConfirming = true
         }
@@ -74,6 +74,9 @@ extension MapScreenView {
                 titleVisibility: .visible
             ) {
                 Button(AppCopy.deleteHistoryAction.copy.text, role: .destructive) {
+                    // An export another window started while this dialog was
+                    // open wins: Clear waits for it (design D7).
+                    guard streetsWalkedViewModel?.canClearHistory == true else { return }
                     // The cutoff is this tap (design D5, eng R9).
                     let tapTime = Date()
                     Task { await clearStreetsWalkedHistory(at: tapTime) }
@@ -82,12 +85,19 @@ extension MapScreenView {
                 // delete (DS3). Hidden while a transfer is busy.
                 if streetsWalkedViewModel?.canExportHistory == true {
                     Button(AppCopy.HistoryFile.exportFirstAction.copy.text) {
-                        requestHistoryExport(afterDialog: true)
+                        historyExport.opensAfterClearDialog = true
                     }
                 }
                 Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
             } message: {
                 Text(AppCopy.clearHistoryConfirmBody.copy.text)
+            }
+            // Export First's handoff: presented once the Clear dialog's
+            // binding is false, never in the same update as its dismissal.
+            .onChange(of: showingClearConfirmation) { _, isShown in
+                guard !isShown, historyExport.opensAfterClearDialog else { return }
+                historyExport.opensAfterClearDialog = false
+                requestHistoryExport()
             }
             .confirmationDialog(
                 AppCopy.HistoryFile.exportConfirmTitle.copy.text,
