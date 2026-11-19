@@ -47,8 +47,11 @@ final class SharedWalkInbox {
         }
     }
 
-    /// The sheet closed: the walk is discarded (nothing is saved).
-    func close() {
+    /// The sheet showing `shown` closed: that walk is discarded (nothing is
+    /// saved). A link that replaced it after the dismissal began has a
+    /// newer revision and survives, to present again through the gate.
+    func close(_ shown: Item) {
+        guard pending?.id == shown.id, pending?.revision == shown.revision else { return }
         pending = nil
     }
 }

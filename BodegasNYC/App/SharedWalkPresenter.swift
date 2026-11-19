@@ -13,13 +13,15 @@ struct SharedWalkPresenter: ViewModifier {
     let isEnvironmentReady: Bool
     let isOnboardingShowing: Bool
     @State private var isShowing = false
+    /// The walk on screen when its dismissal began.
+    @State private var dismissing: SharedWalkInbox.Item?
     @State private var gate = SharedWalkPresentation()
     @Environment(\.scenePhase) private var scenePhase
 
     func body(content: Content) -> some View {
         content
             .onOpenURL { inbox.receive($0) }
-            .sheet(item: shown, onDismiss: inbox.close, content: SharedWalkSheet.init(item:))
+            .sheet(item: shown, onDismiss: closeDismissed, content: SharedWalkSheet.init(item:))
             .environment(inbox)
             .task(id: waitKey) {
                 await waitToPresent()
@@ -48,12 +50,22 @@ struct SharedWalkPresenter: ViewModifier {
     }
 
     /// The inbox's walk while the sheet is up; setting `nil` (Done, a swipe)
-    /// ends the showing, and `onDismiss` discards the walk.
+    /// ends the showing and remembers which walk was on screen, and
+    /// `onDismiss` discards only that one.
     private var shown: Binding<SharedWalkInbox.Item?> {
         Binding(
             get: { isShowing ? inbox.pending : nil },
-            set: { if $0 == nil { isShowing = false } }
+            set: {
+                guard $0 == nil, isShowing else { return }
+                dismissing = inbox.pending
+                isShowing = false
+            }
         )
+    }
+
+    private func closeDismissed() {
+        if let dismissing { inbox.close(dismissing) }
+        dismissing = nil
     }
 
     private func waitToPresent() async {

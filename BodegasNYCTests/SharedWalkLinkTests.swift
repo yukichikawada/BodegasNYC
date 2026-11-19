@@ -158,8 +158,85 @@ struct SharedWalkLinkTests {
         ("n of 0", SharedWalkLinkTests.fragment([20261103, 0, 100, 0, 0, 0])),
         ("n over 5,000", SharedWalkLinkTests.fragment([20261103, 0, 100, 1, 0, 5_001] + manyOnes)),
         ("unknown flag bit", SharedWalkLinkTests.fragment([20261103, 0, 100, 1, 2, 1, 7])),
-        ("fragment over 4,096", "1." + String(repeating: "A", count: 4_100) + ".w")
+        ("fragment over 4,096", "1." + String(repeating: "A", count: 4_100) + ".w"),
+        ("more new blocks than blocks", SharedWalkLinkTests.fragment([20261103, 0, 100, 2, 0, 1, 7])),
+        ("metres over 10,000,000", SharedWalkLinkTests.fragment([20261103, 0, 10_000_001, 1, 0, 1, 7])),
+        ("first day before 2020", SharedWalkLinkTests.fragment([20191231, 0, 100, 1, 0, 1, 7])),
+        ("last day after 2100", SharedWalkLinkTests.fragment([21001231, 1, 100, 1, 0, 1, 7])),
+        ("version 0", SharedWalkLinkTests.fragment(oneBlock, version: "0")),
+        ("version 01", SharedWalkLinkTests.fragment(oneBlock, version: "01")),
+        ("empty version", SharedWalkLinkTests.fragment(oneBlock, version: "")),
+        ("non-digit version", SharedWalkLinkTests.fragment(oneBlock, version: "v1")),
+        ("percent-encoded fragment", "1.%41%41.w")
     ]
+
+    /// protects=the decoder's new bounds from the valid side: exactly
+    /// 10,000,000 m, as many new blocks as blocks, Jan 1, 2020 and a span
+    /// ending Dec 31, 2100 all decode; fails_when=a bound is off by one;
+    /// no_claim=none beyond protects.
+    @Test func boundsDecodeAtTheirEdges() {
+        let cases: [[UInt32]] = [
+            [20261103, 0, 10_000_000, 1, 0, 1, 7],
+            [20200101, 0, 100, 1, 0, 1, 7],
+            [21001230, 1, 100, 1, 0, 1, 7]
+        ]
+        for varints in cases {
+            guard case .walk = SharedWalkLink.decode(fragment: Self.fragment(varints)) else {
+                Issue.record("\(varints) did not decode")
+                continue
+            }
+        }
+    }
+
+    /// protects=encode never makes a link the decoder refuses: a block id
+    /// of 0 (unwritable, since every delta is at least 1; the bundled file
+    /// has none), more new blocks than blocks, metres past 10,000,000 and a
+    /// day outside 2020 to 2100 are all `.tooLong`, never a URL;
+    /// fails_when=any of them encodes; no_claim=the form's reason line
+    /// for these (they cannot arise from real history).
+    @Test func encodeRefusesWhatDecodeRejects() throws {
+        #expect(SharedWalkLink.encode(Self.walk([0, 5])) == .tooLong)
+        let grid = try StreetGridLoader.shared.grid()
+        #expect(grid.index(ofPhysicalID: 0) == nil)
+        func walk(first: Int, last: Int, meters: Int = 100, new: Int = 1) -> SharedWalk {
+            SharedWalk(
+                firstDay: WalkedDayKey(value: first), lastDay: WalkedDayKey(value: last),
+                blockIDs: [7], meters: meters, newCount: new, isEstimate: false
+            )
+        }
+        #expect(SharedWalkLink.encode(walk(first: 20261103, last: 20261103, new: 2)) == .tooLong)
+        #expect(SharedWalkLink.encode(walk(first: 20261103, last: 20261103, meters: 10_000_001)) == .tooLong)
+        #expect(SharedWalkLink.encode(walk(first: 20191231, last: 20200101)) == .tooLong)
+        #expect(SharedWalkLink.encode(walk(first: 21001231, last: 21010101)) == .tooLong)
+    }
+
+    /// protects=which URLs count as walk links: a port, a user or a
+    /// password make it not a walk link (ignored, `nil`); a query string is
+    /// ignored and the walk still decodes; a percent-encoded fragment is
+    /// damaged; fails_when=a URL with a port or credentials is read, a
+    /// query stops a walk decoding, or an encoded fragment decodes;
+    /// no_claim=which URLs iOS routes to the app.
+    @Test func portsCredentialsQueriesAndEncodedFragments() throws {
+        let walk = Self.walk([7, 9, 30])
+        guard case .url(let url) = SharedWalkLink.encode(walk), let fragment = url.fragment() else {
+            Issue.record("did not encode")
+            return
+        }
+        let host = "yukichikawada.github.io"
+        for text in [
+            "https://\(host):443/BodegasNYC/walk/#\(fragment)",
+            "https://\(host):8443/BodegasNYC/walk/#\(fragment)",
+            "https://someone@\(host)/BodegasNYC/walk/#\(fragment)",
+            "https://someone:secret@\(host)/BodegasNYC/walk/#\(fragment)",
+            "ftp://\(host)/BodegasNYC/walk/#\(fragment)"
+        ] {
+            #expect(SharedWalkLink.decode(try #require(URL(string: text))) == nil, "\(text)")
+        }
+        let queried = try #require(URL(string: "https://\(host)/BodegasNYC/walk/?utm_source=x#\(fragment)"))
+        #expect(SharedWalkLink.decode(queried) == .walk(walk))
+        let percent = try #require(URL(string: "https://\(host)/BodegasNYC/walk/#1.%41\(fragment.dropFirst(2))"))
+        #expect(SharedWalkLink.decode(percent) == .damaged)
+    }
 
     /// protects=the same rules hold at their edge from the valid side: 3,660
     /// days (offset 3,659), 5,000 ids, the estimate bit and Feb 29 of a leap

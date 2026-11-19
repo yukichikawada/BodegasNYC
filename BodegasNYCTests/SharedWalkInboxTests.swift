@@ -23,7 +23,7 @@ struct SharedWalkInboxTests {
         lastDay: WalkedDayKey(value: 20261109),
         blockIDs: [100, 200, 999],
         meters: 3_380,
-        newCount: 6,
+        newCount: 2,
         isEstimate: false
     )
 
@@ -66,7 +66,7 @@ struct SharedWalkInboxTests {
     /// protects=eng E2's "a second link replaces the pending one" and the
     /// design's "replaced in place": a newer link keeps the item's id (so a
     /// sheet on screen is not dismissed and presented again) and bumps its
-    /// revision (so the map refits); after `close()` the next link is a new
+    /// revision (so the map refits); after `close(_:)` the next link is a new
     /// item; fails_when=a replacement changes the id, keeps the old walk,
     /// or a closed walk lingers; no_claim=SwiftUI's in-place update of a
     /// same-id `.sheet(item:)` (UI checks).
@@ -83,10 +83,35 @@ struct SharedWalkInboxTests {
         #expect(replaced.id == first.id)
         #expect(replaced.revision == first.revision + 1)
         #expect(replaced.result == .walk(other))
-        inbox.close()
+        inbox.close(replaced)
         #expect(inbox.pending == nil)
         inbox.receive(try Self.link())
         #expect(inbox.pending?.id != first.id)
+    }
+
+    /// protects=QA's dismiss race: closing the sheet discards only the walk
+    /// that was on screen; a link that replaced it after the dismissal began
+    /// (same id, newer revision) stays pending to present again, a stale
+    /// item from an earlier slot closes nothing, and closing the current
+    /// item discards it; fails_when=a dismissal drops a newer link, or a
+    /// stale close clears a different walk; no_claim=SwiftUI's timing of
+    /// the binding and `onDismiss` (the presenter records the shown item
+    /// when the binding goes nil).
+    @Test func closingDiscardsOnlyTheShownWalk() throws {
+        let inbox = SharedWalkInbox()
+        inbox.receive(try Self.link())
+        let shown = try #require(inbox.pending)
+        inbox.receive(Self.damagedLink)
+        inbox.close(shown)
+        let newer = try #require(inbox.pending)
+        #expect(newer.id == shown.id && newer.revision == shown.revision + 1 && newer.result == .damaged)
+
+        inbox.close(newer)
+        #expect(inbox.pending == nil)
+        inbox.receive(try Self.link())
+        let next = try #require(inbox.pending)
+        inbox.close(shown)
+        #expect(inbox.pending == next)
     }
 
     /// protects=the inbox ignores every URL that is not a walk link: no
@@ -310,7 +335,7 @@ struct SharedWalkInboxTests {
         } else {
             Issue.record("no walk pending")
         }
-        inbox.close()
+        if let shown = inbox.pending { inbox.close(shown) }
 
         #expect(try counts() == rowsBefore)
         #expect(!context.hasChanges)

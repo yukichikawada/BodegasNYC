@@ -42,6 +42,16 @@ nonisolated enum SharedWalkLink {
     /// Inflating stops here; a payload that would grow past it is damaged.
     static let maxInflatedBytes = 64 * 1_024
 
+    /// Metres past this (about 6,200 miles) are not a walk.
+    static let maxMeters = 10_000_000
+    /// Days before the first or after the last of these are not a walk.
+    static let earliestDay = WalkedDayKey(value: 20200101)
+    static let latestDay = WalkedDayKey(value: 21001231)
+
+    static func isInDayRange(_ day: WalkedDayKey) -> Bool {
+        day >= earliestDay && day <= latestDay
+    }
+
     /// Bit 0 of the flags: the range includes an estimated day.
     static let estimateFlag: UInt32 = 1
 
@@ -62,10 +72,20 @@ nonisolated enum SharedWalkLink {
 
     // MARK: Encoding
 
+    /// Refuses (`.tooLong`) anything the decoder would call damaged, so a
+    /// link is never made that cannot be opened: past the caps, outside the
+    /// day range, more new blocks than blocks, metres past the cap, or a
+    /// block id of 0. The first delta is at least 1, so 0 cannot be
+    /// written; the bundled street file has no `physicalid` 0 (its ids run
+    /// 3 to 208,400, checked 2026-11-19), so a real walk never holds one,
+    /// and a walk that somehow did is refused whole rather than sent with
+    /// a different block count than its picture.
     static func encode(_ walk: SharedWalk) -> Encoded {
         let ids = walk.blockIDs.sorted()
-        guard !ids.isEmpty, ids.count <= maxBlocks,
+        guard let firstID = ids.first, firstID >= 1, ids.count <= maxBlocks,
               let offset = dayOffset(from: walk.firstDay, to: walk.lastDay), (0 ... maxDayOffset).contains(offset),
+              isInDayRange(walk.firstDay), isInDayRange(walk.lastDay),
+              (0 ... maxMeters).contains(walk.meters), (0 ... ids.count).contains(walk.newCount),
               let meters = UInt32(exactly: walk.meters), let newCount = UInt32(exactly: walk.newCount)
         else { return .tooLong }
         var bytes: [UInt8] = []
@@ -90,10 +110,15 @@ nonisolated enum SharedWalkLink {
 
     // MARK: Decoding
 
-    /// Whether `url` is a walk link at all: `https`, this host, this path.
-    /// Anything else is not for this decoder and is ignored by the caller.
+    /// Whether `url` is a walk link at all: `https`, this host with no port,
+    /// user or password, this path. Anything else is not for this decoder
+    /// and is ignored by the caller. A query string is ignored (the walk is
+    /// in the fragment); a percent-encoded fragment is not base64url, so it
+    /// reads as damaged.
     static func isWalkLink(_ url: URL) -> Bool {
-        guard url.scheme?.lowercased() == "https", url.host()?.lowercased() == host else { return false }
+        guard url.scheme?.lowercased() == "https", url.host()?.lowercased() == host,
+              url.port == nil, url.user() == nil, url.password() == nil
+        else { return false }
         let urlPath = url.path(percentEncoded: true)
         return urlPath == path || urlPath + "/" == path
     }
@@ -104,13 +129,17 @@ nonisolated enum SharedWalkLink {
         return decode(fragment: url.fragment(percentEncoded: true) ?? "")
     }
 
-    /// The version comes first: digits other than `1` before the first dot
-    /// are a newer format, whatever follows. Everything else that is not a
-    /// well-formed version 1 walk is damaged.
+    /// The version comes first: a canonical decimal (ASCII digits, no
+    /// leading zero) other than `1` before the first dot is a newer format,
+    /// whatever follows. An empty, zero, zero-padded or non-digit version,
+    /// and everything else that is not a well-formed version 1 walk, is
+    /// damaged.
     static func decode(fragment: String) -> Decoded {
         guard let dot = fragment.firstIndex(of: ".") else { return .damaged }
         let versionText = fragment[..<dot]
-        guard !versionText.isEmpty, versionText.allSatisfy(\.isASCIIDigit) else { return .damaged }
+        guard let leading = versionText.first, leading != "0", versionText.allSatisfy(\.isASCIIDigit) else {
+            return .damaged
+        }
         guard versionText == version else { return .needsUpdate }
         guard fragment.count <= maxFragmentLength, fragment.hasSuffix(terminator) else { return .damaged }
         let rest = fragment[fragment.index(after: dot)...]
@@ -123,18 +152,21 @@ nonisolated enum SharedWalkLink {
     }
 
     /// The varints of a version 1 payload as a walk, or `nil` when any rule
-    /// is broken: an unreal date, a span past 3,660 days, an unknown flag,
-    /// `n` outside 1 to 5,000, a zero delta, an id past `UInt32`, or bytes
-    /// left over.
+    /// is broken: an unreal date, a day outside 2020 to 2100, a span past
+    /// 3,660 days, an unknown flag, `n` outside 1 to 5,000, more new blocks
+    /// than blocks, metres past 10,000,000, a zero delta, an id past
+    /// `UInt32`, or bytes left over.
     static func walk(from bytes: [UInt8]) -> SharedWalk? {
         var reader = VarintReader(bytes: bytes)
         guard let dayValue = reader.next(), let offset = reader.next(), let meters = reader.next(),
               let newCount = reader.next(), let flags = reader.next(), let count = reader.next()
         else { return nil }
-        guard let firstDay = realDay(Int(dayValue)), offset <= UInt32(maxDayOffset),
-              flags & ~estimateFlag == 0, (1 ... UInt32(maxBlocks)).contains(count)
+        guard let firstDay = realDay(Int(dayValue)), isInDayRange(firstDay), offset <= UInt32(maxDayOffset),
+              flags & ~estimateFlag == 0, (1 ... UInt32(maxBlocks)).contains(count),
+              newCount <= count, meters <= UInt32(maxMeters)
         else { return nil }
         let lastDay = firstDay.advanced(by: Int(offset))
+        guard isInDayRange(lastDay) else { return nil }
         var ids = Set<UInt32>(minimumCapacity: Int(count))
         var previous: UInt32 = 0
         for _ in 0 ..< count {
