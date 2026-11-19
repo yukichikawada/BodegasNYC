@@ -48,6 +48,12 @@ nonisolated enum WalkHistoryFile {
     /// it lives outside `AppCopy`, as the shared picture's name does.
     static let fileNamePrefix = "My Bodegas Walks"
 
+    /// A walk history file handed to the app (`.onOpenURL`, #180 eng A10):
+    /// a file URL with this format's extension.
+    static func isHistoryFileURL(_ url: URL) -> Bool {
+        url.isFileURL && url.pathExtension.lowercased() == fileExtension
+    }
+
     /// The most fixes in one file, shared by export and import (eng A2): a
     /// longer history exports as part files of at most this many each. The
     /// starting value; PR 2 measures import at the cap and lowers it to the
@@ -75,12 +81,41 @@ nonisolated enum WalkHistoryFile {
         let fixes: [Fix]
     }
 
+    /// A file read for import (#180 PR 2, the spec's validation table): the
+    /// valid fixes, each id once (its first valid occurrence), in file
+    /// order, and how many entries were skipped as unreadable.
+    nonisolated struct Validated: Equatable, Sendable {
+        let version: Int
+        let fixes: [Fix]
+        /// Entries that were not a readable fix. A later valid duplicate of
+        /// an id already read is dropped without being counted.
+        let skippedCount: Int
+    }
+
     nonisolated enum DecodeError: Error, Equatable {
-        /// Not this format: not JSON, another `format`, or a version under 1.
+        /// Not this format: not JSON, another `format`, a `version` or
+        /// `fixes` missing or of the wrong type, or a version under 1.
         case notWalkHistory
         /// A version newer than `currentVersion`.
         case newerVersion(Int)
+        /// More than `maxFixCount` entries (eng A2), or a file larger than
+        /// `maxFileBytes` (checked by the transfer before reading).
+        case tooLarge
     }
+
+    /// The largest file import reads, derived from the cap (eng A2: cap ×
+    /// 160 bytes, not a second number). A written fix is about 110 bytes.
+    static func maxFileBytes(maxFixCount: Int = maxFixCount) -> Int {
+        maxFixCount * bytesPerFixAllowance
+    }
+
+    static let bytesPerFixAllowance = 160
+
+    /// No real fix is older: the app did not exist (validation table).
+    static let earliestFixTime = Date(timeIntervalSince1970: 1_577_836_800) // 2020-01-01T00:00:00Z
+    /// How far past the importing phone's clock a fix may be: clocks and
+    /// time zones drift; more than a day is a broken file.
+    static let futureAllowance: TimeInterval = 24 * 60 * 60
 
     // MARK: Encode
 
@@ -134,11 +169,48 @@ nonisolated enum WalkHistoryFile {
 
     // MARK: Decode
 
-    /// The fixes in `data`, strictly: any malformed entry fails the whole
-    /// file. The round trip of what `encode` writes (AC 1). PR 2's import
-    /// replaces the strict entry rule with the validation table (an invalid
-    /// entry is skipped and counted) and adds the size checks.
+    /// The fixes in `data`, strictly: any entry that is not a readable fix
+    /// fails the whole file, every entry is kept (duplicates too) and no
+    /// time bound applies. The round trip of what `encode` writes (AC 1);
+    /// import reads through `validate` instead. One parser serves both.
     static func decode(_ data: Data) throws -> Decoded {
+        let (version, entries) = try parse(data)
+        let fixes = try entries.map { entry in
+            guard let fix = entry.fix(notBefore: nil, notAfter: nil) else { throw DecodeError.notWalkHistory }
+            return fix
+        }
+        return Decoded(version: version, fixes: fixes)
+    }
+
+    /// The fixes in `data` for import, by the spec's validation table: the
+    /// file is refused when it is not this format, is newer, or holds more
+    /// than `maxFixCount` entries; otherwise each entry that is not an
+    /// object, lacks `id`, `lat`, `lon` or `t`, has one of the wrong type,
+    /// an unparseable `id` or `t`, a non-finite or out-of-range coordinate,
+    /// or a `t` before 2020 or more than a day after `now` is skipped and
+    /// counted. A `ride` that is missing or not 0 to 3 reads as 0. An id
+    /// seen twice keeps its first valid occurrence. Fixes outside New York
+    /// are kept: they are raw history, and the matcher ignores them.
+    static func validate(_ data: Data, now: Date, maxFixCount: Int = maxFixCount) throws -> Validated {
+        let (version, entries) = try parse(data)
+        guard entries.count <= maxFixCount else { throw DecodeError.tooLarge }
+        let latest = now.addingTimeInterval(futureAllowance)
+        var seen = Set<UUID>()
+        var fixes: [Fix] = []
+        fixes.reserveCapacity(entries.count)
+        var skipped = 0
+        for entry in entries {
+            guard let fix = entry.fix(notBefore: earliestFixTime, notAfter: latest) else {
+                skipped += 1
+                continue
+            }
+            if seen.insert(fix.id).inserted { fixes.append(fix) }
+        }
+        return Validated(version: version, fixes: fixes, skippedCount: skipped)
+    }
+
+    /// The header checks, then every entry as read, in file order.
+    private static func parse(_ data: Data) throws -> (version: Int, entries: [Entry]) {
         let header: Header
         do {
             header = try JSONDecoder().decode(Header.self, from: data)
@@ -147,23 +219,11 @@ nonisolated enum WalkHistoryFile {
         }
         guard header.format == format, header.version >= 1 else { throw DecodeError.notWalkHistory }
         guard header.version <= currentVersion else { throw DecodeError.newerVersion(header.version) }
-        let entries: [Entry]
         do {
-            entries = try JSONDecoder().decode(Body.self, from: data).fixes
+            return (header.version, try JSONDecoder().decode(Body.self, from: data).fixes)
         } catch {
             throw DecodeError.notWalkHistory
         }
-        let fixes = try entries.map { entry in
-            guard let recordedAt = date(unixSeconds: entry.t) else { throw DecodeError.notWalkHistory }
-            return Fix(
-                id: entry.id,
-                latitude: entry.lat,
-                longitude: entry.lon,
-                recordedAt: recordedAt,
-                ride: entry.ride ?? 0
-            )
-        }
-        return Decoded(version: header.version, fixes: fixes)
     }
 
     // MARK: Exact Unix seconds (eng E1)
@@ -246,11 +306,47 @@ nonisolated enum WalkHistoryFile {
         let fixes: [Entry]
     }
 
+    /// One entry of `fixes`, read leniently: a field that is missing or of
+    /// the wrong type is `nil` rather than a failure of the whole file, and
+    /// an entry that is not an object has every field `nil`. `t` is read as
+    /// `Decimal` (eng E1: the exact digits, not the nearest `Double`).
     private nonisolated struct Entry: Codable {
-        let id: UUID
-        let lat: Double
-        let lon: Double
-        let t: Decimal // swiftlint:disable:this identifier_name
+        let id: UUID?
+        let lat: Double?
+        let lon: Double?
+        let t: Decimal? // swiftlint:disable:this identifier_name
         let ride: Int?
+
+        init(id: UUID, lat: Double, lon: Double, t: Decimal, ride: Int) { // swiftlint:disable:this identifier_name
+            self.id = id
+            self.lat = lat
+            self.lon = lon
+            self.t = t
+            self.ride = ride
+        }
+
+        init(from decoder: any Decoder) {
+            let fields = try? decoder.container(keyedBy: CodingKeys.self)
+            id = try? fields?.decode(UUID.self, forKey: .id)
+            lat = try? fields?.decode(Double.self, forKey: .lat)
+            lon = try? fields?.decode(Double.self, forKey: .lon)
+            t = try? fields?.decode(Decimal.self, forKey: .t)
+            ride = try? fields?.decode(Int.self, forKey: .ride)
+        }
+
+        /// The fix, or `nil` when the entry is not a readable one: an
+        /// unparseable or missing field, a non-finite or out-of-range
+        /// coordinate, or a time outside the bounds given. `ride` outside
+        /// 0 to 3, or missing, reads as 0 (unknown).
+        func fix(notBefore earliest: Date?, notAfter latest: Date?) -> Fix? {
+            guard let id, let lat, let lon, let unixSeconds = t,
+                  lat.isFinite, lon.isFinite, (-90.0 ... 90.0).contains(lat), (-180.0 ... 180.0).contains(lon),
+                  let recordedAt = WalkHistoryFile.date(unixSeconds: unixSeconds)
+            else { return nil }
+            if let earliest, recordedAt < earliest { return nil }
+            if let latest, recordedAt > latest { return nil }
+            let ride = ride.flatMap { (0 ... 3).contains($0) ? $0 : nil } ?? 0
+            return Fix(id: id, latitude: lat, longitude: lon, recordedAt: recordedAt, ride: ride)
+        }
     }
 }
