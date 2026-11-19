@@ -124,6 +124,8 @@ struct AppCopyVoiceTests {
         + walkProgressCopy
         + AppCopy.ShareWalk.allCases.map(\.copy)
         + sharedWalkCopy
+        + AppCopy.ReceivedWalk.allCases.map(\.copy)
+        + receivedWalkCopy
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),
@@ -218,6 +220,19 @@ struct AppCopyVoiceTests {
         [AppCopy.sharedWalkDates(first: walk.firstDay, last: walk.lastDay), AppCopy.sharedWalkLinkTitle(walk)]
     }
 
+    /// The Shared Walk sheet's templates (#177 PR 2, DS7) over the same
+    /// walks: "6 new to them", the coverage line with one, some and
+    /// grouped counts, and the map's VoiceOver value with and without
+    /// "some blocks not shown".
+    static let receivedWalkCopy: [CopyString] = sharedWalks.flatMap { walk in
+        [
+            AppCopy.sharedWalkNewToThem(walk.newCount),
+            AppCopy.sharedWalkMapValue(walk, someNotShown: false),
+            AppCopy.sharedWalkMapValue(walk, someNotShown: true),
+            AppCopy.sharedWalkCoverage(shown: max(0, walk.blockCount - 1), of: walk.blockCount)
+        ]
+    }
+
     /// The cross-month and cross-year dates and titles ("Nov 28–Dec 2,
     /// 2026", "Walk, Dec 30, 2026–Jan 2, 2027"): data the design review set
     /// as `.value` (DS7) that runs to five or six words, past a value's
@@ -277,9 +292,10 @@ struct AppCopyVoiceTests {
     }
 
     /// protects=Share a Walk's fixed strings are the design review's copy
-    /// table (DS7, PR 1's consequence line) with their kinds; fails_when=a
-    /// string drifts, the PR 2 wording (a link) ships in PR 1, or a kind
-    /// changes; no_claim=where each is shown (the views, UI tests).
+    /// table (DS7, PR 2's consequence line, which names the link) with
+    /// their kinds; fails_when=a string drifts, PR 1's picture-only wording
+    /// returns, or a kind changes; no_claim=where each is shown (the views,
+    /// UI tests).
     @Test func shareWalkCopyMatchesTheDesignTable() {
         typealias Share = AppCopy.ShareWalk
         let table: [(Share, CopyString.Kind, String)] = [
@@ -290,8 +306,8 @@ struct AppCopyVoiceTests {
             (.shareAction, .label, "Share"),
             (.definition, .body, "Blocks count once across these days. Miles include repeats."),
             (.consequenceWhatGoes, .body,
-             "This sends a picture of the blocks you walked on these days, with the dates, counts and distance. "
-                + "No times of day."),
+             "This sends a picture and a link with the blocks you walked on these days, the dates, counts and "
+                + "distance. No times of day."),
             (.consequenceStartAndEnd, .body, "The map can show where your walks start and end."),
             (.consequencePassedOn, .body, "Anyone who gets it can pass it on. It can't be taken back."),
             (.noBlocks, .body, "No blocks counted on these days."),
@@ -309,6 +325,45 @@ struct AppCopyVoiceTests {
             #expect(copy.copy == CopyString(kind: kind, text: text))
         }
         #expect(Share.makingPicture.withTrailingEllipsis == "Making the picture\u{2026}")
+    }
+
+    /// protects=the Shared Walk sheet's strings are the design review's PR 2
+    /// copy table (DS7) with their kinds, and its templates read "6 new to
+    /// them", "32 of 38 blocks shown. Update the app to see the rest." and
+    /// the map value "November 3 to November 9, 2026, 38 blocks, 6 new to
+    /// them, 2.1 miles, estimate, some blocks not shown."; fails_when=a
+    /// string or template drifts or a kind changes; no_claim=where each is
+    /// shown (SharedWalkInboxTests' states, UI tests).
+    @Test func receivedWalkCopyMatchesTheDesignTable() {
+        typealias Received = AppCopy.ReceivedWalk
+        let table: [(Received, CopyString.Kind, String)] = [
+            (.title, .label, "Shared Walk"),
+            (.mapLabel, .body, "Map of a shared walk."),
+            (.loadingMap, .value, "Loading the map"),
+            (.streetMapFailed, .body, "The street map didn't load. Try again."),
+            (.zoomIn, .title, "Zoom in to see the blocks."),
+            (.notSaved, .body, "This walk isn't saved. Open the link to see it again."),
+            (.noneDrawable, .body, "None of these blocks can be shown yet. Update the app, then tap the link again."),
+            (.needsUpdate, .body, "This walk needs a newer version of the app. Update, then tap the link again."),
+            (.damaged, .body, "This link couldn't be opened. Ask them to send it again."),
+            (.update, .label, "Update")
+        ]
+        #expect(table.count == Received.allCases.count)
+        for (copy, kind, text) in table {
+            #expect(copy.copy == CopyString(kind: kind, text: text))
+        }
+        #expect(Received.loadingMap.withTrailingEllipsis == "Loading the map\u{2026}")
+        #expect(AppCopy.sharedWalkNewToThem(6).text == "6 new to them")
+        #expect(AppCopy.sharedWalkCoverage(shown: 32, of: 38).text
+            == "32 of 38 blocks shown. Update the app to see the rest.")
+        #expect(AppCopy.sharedWalkCoverage(shown: 1_204, of: 5_000).text
+            == "1,204 of 5,000 blocks shown. Update the app to see the rest.")
+        let walk = Self.sharedWalks[1]
+        #expect(AppCopy.sharedWalkMapValue(walk, someNotShown: true).text
+            == "November 3 to November 9, 2026, 38 blocks, 6 new to them, 2.1 miles, estimate, some blocks not shown.")
+        let distance = AppCopy.walkDayDistance(meters: 60).text
+        #expect(AppCopy.sharedWalkMapValue(Self.sharedWalks[0], someNotShown: false).text
+            == "November 3, 2026, 1 block, \(distance).")
     }
 
     /// protects=#177 PR 1's privacy wording: Streets Walked's intro and Your

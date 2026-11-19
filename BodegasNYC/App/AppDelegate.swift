@@ -21,12 +21,18 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     /// Authorization status, accuracy and Location Services (eng C2).
     private let accessReader = LocationAccessReader()
     private var streetsWalkedViewModel: StreetsWalkedViewModel?
+    /// Every opened walk link (#177 PR 2). Independent of the Streets Walked
+    /// store: a shared walk opens even when that container failed.
+    private(set) lazy var sharedWalkInbox = SharedWalkInbox { [weak self] in self?.telemetry.capture($0) }
 
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         telemetry = Telemetry.live()
+        #if DEBUG
+        UITestFixtures.openLaunchURL(in: sharedWalkInbox)
+        #endif
         setUpStreetsWalked(
             container: Self.makeStreetsWalkedContainer(),
             isBackgroundLaunch: application.applicationState == .background

@@ -59,9 +59,9 @@ struct ShareWalkPicturePanel: View {
 }
 
 /// Presents the system share sheet (#177 DS5) from a zero-size controller
-/// behind the form while `picture` is set, with two items in order: the
-/// picture, titled "Walk, Nov 3–9, 2026" for the sheet's header, and the
-/// text line. `onFinish` gets whether a destination completed.
+/// behind the form while `picture` is set, with three items in order: the
+/// picture, titled "Walk, Nov 3–9, 2026" for the sheet's header, the text
+/// line, and the walk's link (#177 PR 2). `onFinish` gets whether a destination completed.
 struct ShareSheetPresenter: UIViewControllerRepresentable {
     @Binding var picture: SharedWalkPicture?
     let onFinish: (Bool) -> Void
@@ -79,19 +79,29 @@ struct ShareSheetPresenter: UIViewControllerRepresentable {
             onFinish(completed)
         }
         guard let picture, !coordinator.isPresenting else { return }
+        guard let items = Self.items(for: picture) else {
+            Task { @MainActor in coordinator.finish(false) }
+            return
+        }
         coordinator.isPresenting = true
-        let controller = UIActivityViewController(activityItems: Self.items(for: picture), applicationActivities: nil)
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
         controller.completionWithItemsHandler = { _, completed, _, _ in
             Task { @MainActor in coordinator.didFinish(completed: completed) }
         }
         host.present(controller, animated: true)
     }
 
-    /// The share's items, in order (DS5): the picture, then the text.
-    static func items(for picture: SharedWalkPicture) -> [Any] {
-        [
+    /// The share's items, in order (DS5, #177 PR 2): the picture, the text,
+    /// then the link, all made from the picture's own frozen walk, so what
+    /// the link opens is what the picture shows. `nil` when no link can be
+    /// made: then nothing is shared (never the picture without its link,
+    /// never the link alone).
+    static func items(for picture: SharedWalkPicture) -> [Any]? {
+        guard let link = ShareWalkForm.link(for: picture.walk) else { return nil }
+        return [
             SharedWalkImageItem(image: picture.image, title: AppCopy.sharedWalkLinkTitle(picture.walk).text),
-            AppCopy.sharedWalkText(picture.walk).text
+            AppCopy.sharedWalkText(picture.walk).text,
+            link
         ]
     }
 

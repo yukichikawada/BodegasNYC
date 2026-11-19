@@ -49,6 +49,10 @@ phone's share sheet. It is not sent to us and we never see it. A shared
 picture can show where your walks start and end, anyone who has it can pass
 it on, and it cannot be recalled once sent.
 
+A share can also include a link. The link itself holds the same blocks,
+dates and counts; it is not stored on our servers. Anyone who has the link
+can open it in the app.
+
 ## Usage and crash reports
 
 The app sends us a short record of how it is used: which features were used

@@ -136,6 +136,26 @@ Status as of 2026-11-03 is in brackets.
       in Icon Composer (Xcode 27.2's copy) to change it, then regenerate the
       three PNGs with `tools/carx.swift` from an `actool` compile.
 
+## Walk links (#177)
+
+- **Before the next archive:** the App ID `Yukichi.BodegasNYC` needs the
+  Associated Domains capability (Certificates, Identifiers & Profiles →
+  Identifiers → the app → Capabilities → Associated Domains), or the archive's
+  signing fails on the `applinks:yukichikawada.github.io` entitlement. The
+  first version that carries it is the first that can open walk links; a
+  phone on 1.0.0 opens them in Safari on the fallback page
+  (`docs/walk/index.html`), which tells the person to update.
+- **The association file** lives in the separate `yukichikawada.github.io`
+  repository (`.well-known/apple-app-site-association`, published through its
+  `_config.yml` `include` line), not in this one. It must stay served with
+  HTTP 200 and no redirect.
+- **Rollback rule:** never attach a custom domain to the
+  `yukichikawada.github.io` repository itself. GitHub would then redirect
+  `/.well-known/` to the new domain, Apple refuses a redirected association
+  file, and every link already sent would stop opening the app. A future
+  domain goes on a different repository and is added beside this one in the
+  entitlement, keeping both.
+
 ## Every release
 
 1. **Pick the version.** `MARKETING_VERSION` is what users see and follows

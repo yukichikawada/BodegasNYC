@@ -6,8 +6,8 @@ nonisolated extension AppCopy {
     /// The Share a Walk strings (`ShareWalk`, apart from the `SharedWalk`
     /// value), nested like `YourWalks`: one case per
     /// string, an exhaustive `copy`, and `allCases` in `AppCopyVoiceTests`.
-    /// Wording is the design review's copy table (DS7), PR 1's consequence
-    /// line. No string names the app: "My Bodegas" is drawn into the picture
+    /// Wording is the design review's copy table (DS7), PR 2's consequence
+    /// line (the share carries a link). No string names the app: "My Bodegas" is drawn into the picture
     /// only (`SharedWalkCard.appName`), outside `AppCopy`.
     nonisolated enum ShareWalk: CaseIterable, Hashable, Sendable {
         /// The form's title and the entry buttons' VoiceOver label.
@@ -53,8 +53,8 @@ nonisolated extension AppCopy {
             case .consequenceWhatGoes:
                 CopyString(
                     kind: .body,
-                    text: "This sends a picture of the blocks you walked on these days, "
-                        + "with the dates, counts and distance. No times of day."
+                    text: "This sends a picture and a link with the blocks you walked on these days, "
+                        + "the dates, counts and distance. No times of day."
                 )
             case .consequenceStartAndEnd:
                 CopyString(kind: .body, text: "The map can show where your walks start and end.")

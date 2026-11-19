@@ -23,7 +23,8 @@ extension MapScreenView {
             isAwaitingLocationPrompt: locationPermissionClient.hasPendingAuthorizationRequest,
             isCameraMoving: isCameraMoving,
             recordingState: streetsWalkedViewModel.recordingState,
-            hasHistory: streetsWalkedViewModel.hasHistory
+            hasHistory: streetsWalkedViewModel.hasHistory,
+            isSharedWalkPending: sharedWalkInbox?.pending != nil
         )
     }
 

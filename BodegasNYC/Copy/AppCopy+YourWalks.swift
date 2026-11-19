@@ -243,7 +243,8 @@ nonisolated extension AppCopy {
         )
     }
 
-    private static func groupedCount(_ count: Int) -> String {
+    /// "1,204", en_US grouping (also the Shared Walk sheet's coverage line).
+    static func groupedCount(_ count: Int) -> String {
         count.formatted(.number.grouping(.automatic).locale(Locale(identifier: "en_US")))
     }
 }

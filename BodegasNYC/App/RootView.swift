@@ -56,6 +56,18 @@ struct RootView: View {
                 .transition(OnboardingView.transition(reduceMotion: reduceMotion))
             }
         }
+        // Walk links (#177 PR 2): `.onOpenURL` into the inbox, and the
+        // Shared Walk sheet once nothing else is up.
+        .modifier(SharedWalkPresenter(
+            inbox: appDelegate.sharedWalkInbox,
+            isEnvironmentReady: !isLoading && !isFailed,
+            isOnboardingShowing: showingOnboarding
+        ))
+    }
+
+    private var isFailed: Bool {
+        if case .failed = state { return true }
+        return false
     }
 
     /// Every onboarding exit, first run or replay. `BrowseView` reacts to
