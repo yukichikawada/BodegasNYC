@@ -35,7 +35,13 @@ nonisolated extension UITestFixtures {
               )
         else { return nil }
         let context = container.mainContext
-        let fixes = seedsWalkedDays ? walkedDaysFixture(grid: grid, now: now) : walkedBlockFixture(grid: grid, now: now)
+        let fixes: [WalkedPointSnapshot] = if seedsWalkedDays {
+            walkedDaysFixture(grid: grid, now: now)
+        } else if seedsWalkedBlocks {
+            walkedBlockFixture(grid: grid, now: now)
+        } else {
+            [] // -UITestImportFixture alone: an empty store for the import to fill
+        }
         for fix in fixes {
             context.insert(
                 WalkedPoint(

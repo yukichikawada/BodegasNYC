@@ -645,6 +645,71 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(exportItem.isEnabled, "Export History… is disabled after Export First: the history was cleared")
     }
 
+    /// protects: #180 PR 2 (design D1, D2, D8, DS1, DS4; AC 9 import half): with history (`-UITestWalkedDays`) the
+    /// Streets Walked menu has an enabled "Import History…" directly under "Export History…".
+    /// fails_when: the item is missing, disabled with history, or out of D11's order.
+    /// no_claim: the system file picker (out of process, checked by hand), Import with no history (view model
+    /// tests), the item while another window imports.
+    @MainActor
+    func testImportHistoryIsInTheMenu() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 20), "Streets Walked menu never appeared")
+        menu.tap()
+        let importItem = app.buttons["Import History\u{2026}"].firstMatch
+        XCTAssertTrue(importItem.waitForExistence(timeout: 5), "the menu has no Import History…")
+        XCTAssertTrue(importItem.isEnabled, "Import History… is disabled")
+        let exportItem = app.buttons["Export History\u{2026}"].firstMatch
+        XCTAssertLessThan(exportItem.frame.minY, importItem.frame.minY, "Import History… is not under Export History…")
+    }
+
+    /// protects: #180 PR 2 end to end on the DEBUG hook (`-UITestImportFixture`: an empty in-memory store and a
+    /// file holding one walked Manhattan block, handed to the inbox as `.onOpenURL` would): on a map that has never
+    /// shown the Streets Walked intro, the import sheet presents instead of the intro (D8) with the preview's
+    /// heading, "1 day of recording" (DS1, never points) and the consequence line (D2); Add Walks saves and counts
+    /// and ends on "Your walks are in." with Show Your Walks and, recording being off, Start Recording (DS4); after
+    /// Done, Your Blocks counts the imported block.
+    /// fails_when: the intro covers the file, the preview shows points or lacks the consequence, Add Walks does
+    /// not save, the result is silent, or Your Blocks does not count the block.
+    /// no_claim: document registration and URL delivery from Files, AirDrop or Mail, warm or cold (eng A12: checked
+    /// by hand), the picker, the Saving and Counting rows (too quick here), VoiceOver focus.
+    @MainActor
+    func testImportingAnOpenedFileAddsItsBlock() throws {
+        let app = launchWithFixtures(["-UITestImportFixture"], seenStreetsWalkedIntro: false)
+
+        let heading = app.staticTexts["Add walks from this file?"].firstMatch
+        XCTAssertTrue(heading.waitForExistence(timeout: 30), "the import sheet never showed its preview")
+        XCTAssertTrue(app.staticTexts["1 day of recording"].firstMatch.exists, "the preview has no days line")
+        XCTAssertTrue(
+            app.staticTexts[
+                "They mix into your blocks, days and counts. Taking them out again means clearing everything."
+            ].firstMatch.exists,
+            "the preview has no consequence line"
+        )
+        XCTAssertFalse(app.navigationBars["Streets Walked"].exists, "the intro presented over the opened file")
+
+        let add = app.buttons["historyImport.add"].firstMatch
+        XCTAssertTrue(add.waitForExistence(timeout: 5), "the preview has no Add Walks")
+        add.tap()
+        let done = app.staticTexts["Your walks are in."].firstMatch
+        XCTAssertTrue(done.waitForExistence(timeout: 30), "the import never reached its result")
+        XCTAssertTrue(app.buttons["Show Your Walks"].firstMatch.exists, "the result has no Show Your Walks")
+        XCTAssertTrue(app.buttons["Start Recording"].firstMatch.exists, "the result does not offer recording")
+        app.buttons["Done"].firstMatch.tap()
+        XCTAssertTrue(done.waitForNonExistence(timeout: 5), "Done left the import sheet up")
+
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 10), "Streets Walked menu never appeared")
+        menu.tap()
+        app.buttons["Your Blocks"].firstMatch.tap()
+        let manhattan = app.descendants(matching: .any)["yourBlocks.row.1"]
+        XCTAssertTrue(manhattan.waitForExistence(timeout: 10), "Your Blocks never showed a Manhattan row")
+        XCTAssertTrue(
+            waitForLabel(manhattan, "Manhattan, 1 of 9,300 blocks, less than 1 percent.", timeout: 20),
+            "Manhattan row reads \"\(manhattan.label)\""
+        )
+    }
+
     /// Cancels a confirmation dialog: its Cancel button, or, where iOS 26 shows it as a popover from the toolbar
     /// with no Cancel, the popover's dismiss region or a tap near the bottom, away from the popover.
     @MainActor

@@ -1,11 +1,18 @@
 import Foundation
 
 /// What the app's one `WalkHistoryTransfer` is doing (eng A4), published on
-/// the shared view model so every window sees it. PR 2 adds previewing and
-/// committing an import.
+/// the shared view model so every window sees it. Anything but `idle`
+/// disables Export, Import and Clear History in every window (design D7,
+/// D13, eng A7).
 nonisolated enum WalkHistoryTransferState: Equatable, Sendable {
     case idle
     case exporting
+    /// An import is reading and checking its file.
+    case reading
+    /// An import's preview is up, holding the request's fixes.
+    case previewing(Int)
+    /// An import is saving (eng A7: Clear History cannot interleave).
+    case committing
 }
 
 /// Export of walk history as a file (#180 PR 1). The transfer does the
@@ -25,8 +32,8 @@ extension StreetsWalkedViewModel {
     /// "Making the file." (design D7: the Locate Me precedent).
     nonisolated static let historyExportProgressDelay: Duration = .milliseconds(500)
 
-    /// Export, Clear History and (PR 2) Import wait while a transfer runs
-    /// or a Clear is deleting, in every window (design D7, eng A7).
+    /// Export, Clear History and Import wait while a transfer runs or a
+    /// Clear is deleting, in every window (design D7, D13, eng A7).
     var isHistoryFileBusy: Bool {
         historyTransferState != .idle || isClearingHistory
     }
@@ -39,6 +46,12 @@ extension StreetsWalkedViewModel {
 
     /// The menu's Clear History: disabled while busy (design D7).
     var canClearHistory: Bool {
+        !isHistoryFileBusy
+    }
+
+    /// The menu's Import History: with or without history (AC 9), not
+    /// while busy (design D7, D13).
+    var canImportHistory: Bool {
         !isHistoryFileBusy
     }
 

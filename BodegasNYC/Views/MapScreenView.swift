@@ -34,6 +34,7 @@ struct MapScreenView: View {
     @State var lastVisibleRegion: MKCoordinateRegion?
     @State var showingClearConfirmation = false
     @State var historyExport = HistoryExportPresentation() // #180, `MapScreenView+WalkHistoryFile.swift`
+    @State var historyImportUI = HistoryImportPresentation() // #180 PR 2, `MapScreenView+WalkHistoryImport.swift`
     /// A settle held back under the List tab, and the last data region
     /// delivered: the held one is replayed on return only if it changed.
     @State var pendingSettledFrame: SettledFrame?

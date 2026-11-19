@@ -24,6 +24,11 @@ final class WalkedPoint {
     /// CoreMotion forgets after 7 days, so a later rebuild reads this
     /// instead. The default lets 1.0.0 stores migrate lightweight as unknown.
     var storedRide: Int = 0
+    /// The import that added this fix (#180 eng E3): one new UUID per
+    /// commit, `nil` on every fix this phone recorded. Not shown, not
+    /// exported; kept so a mistaken import can be undone later (`TODOS.md`).
+    /// Optional with a nil default, so older stores migrate lightweight.
+    var importBatch: UUID?
 
     init(id: UUID = UUID(), latitude: Double, longitude: Double, recordedAt: Date) {
         self.id = id
@@ -44,4 +49,9 @@ nonisolated enum RideEvidence: Int, Sendable {
     case unknown = 0
     case walking = 1
     case ride = 2
+    /// Imported from a file with no evidence (#180 eng E2): another phone
+    /// recorded it, so this phone's CoreMotion is never asked about its leg
+    /// (the speed rule alone judges it), no pass overwrites it, and its day
+    /// is an estimate at any age.
+    case imported = 3
 }

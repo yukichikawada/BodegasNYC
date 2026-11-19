@@ -115,6 +115,11 @@ final class StreetsWalkedViewModel {
     var historyTransferState = WalkHistoryTransferState.idle
     var showsHistoryExportProgress = false
     private(set) var isClearingHistory = false
+    /// The one import in progress, app-wide (#180 PR 2, eng A4, design D13):
+    /// which window shows its sheet and what the sheet shows.
+    var historyImport: HistoryImportSession?
+    @ObservationIgnored var historyImportRequests = 0 // each file read gets the next
+    @ObservationIgnored var historyImportTask: Task<Void, Never>?
     let motion: any MotionActivityProviding
     private var refreshTask: Task<Void, Never>?
     private let firstCountRetryDelay: Duration
@@ -287,6 +292,9 @@ final class StreetsWalkedViewModel {
     func scheduleRefresh(evenWithoutHistory: Bool = false) {
         hasHistory = storedPointCount() > 0
         guard hasHistory || isTrackingEnabled || evenWithoutHistory else { return }
+        // No pass starts while an import saves (#180): the import refreshes
+        // once its save lands.
+        guard historyTransferState != .committing else { return }
         guard refreshTask == nil else {
             refreshQueued = true
             return
@@ -294,6 +302,21 @@ final class StreetsWalkedViewModel {
         refreshTask = Task { [weak self] in
             await self?.runRefreshes()
         }
+    }
+
+    /// Waits for a pass already running (an import's save waits so no pass
+    /// holds the match state it deletes, #180).
+    func waitForRunningRefresh() async {
+        await refreshTask?.value
+    }
+
+    /// An import saved (#180 design D10): the next count is shown as a first
+    /// count ("—", "Finding your walks…"), never as the stale one.
+    func importDidSave() {
+        hasCounted = false
+        walksHistory = nil
+        walksHistoryFailed = false
+        hasHistory = storedPointCount() > 0
     }
 
     private func runRefreshes() async {

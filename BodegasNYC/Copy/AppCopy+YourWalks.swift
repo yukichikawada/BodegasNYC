@@ -53,7 +53,8 @@ nonisolated extension AppCopy {
             case .noBlocksYet: CopyString(kind: .body, text: "No blocks counted yet.")
             case .historyFailed:
                 CopyString(kind: .body, text: "Your days couldn't be loaded. Your walks are still saved.")
-            case .estimates: CopyString(kind: .body, text: "Older days are estimates. Some rides may be counted.")
+            // #180 DS5: an imported day can be last week's, so not "Older".
+            case .estimates: CopyString(kind: .body, text: "Some days are estimates. Rides may be counted.")
             case .footer:
                 CopyString(kind: .body, text: "A block counts once a day. Miles include repeats. Days start at 4 a.m.")
             case .todayPending: CopyString(kind: .body, text: "Today shows up once it's counted.")

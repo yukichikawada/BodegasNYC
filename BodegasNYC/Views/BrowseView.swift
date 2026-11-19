@@ -193,6 +193,7 @@ struct BrowseView: View {
                     detailOrigin = path.isEmpty ? nil : activeTab
                 }
                 .modifier(spotlightWiring)
+                .modifier(HistoryFileLanding(activeTab: $activeTab, path: $path, onboarding: showingOnboarding))
                 .onChange(of: showingOnboarding) { _, isShowing in
                     syncTipParameters()
                     guard !isShowing else { return }

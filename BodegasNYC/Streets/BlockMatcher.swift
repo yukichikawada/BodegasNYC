@@ -132,14 +132,18 @@ nonisolated enum BlockMatcher {
         }
         switch end.ride {
         case .ride: return false
-        case .walking: return true
+        // Imported with no evidence (#180 eng E2): the speed rule above
+        // alone, never this phone's CoreMotion.
+        case .walking, .imported: return true
         case .unknown: return !activity.isRide(from: start.recordedAt, to: end.recordedAt)
         }
     }
 
     /// The ride evidence to save, keyed by each leg's end fix (#170): legs
     /// whose end is still unknown and whose start `activity` covers. The
-    /// rest are left out and stay unknown, so no coverage saves nothing.
+    /// rest are left out and stay unknown, so no coverage saves nothing. An
+    /// `.imported` end is never unknown, so it is never overwritten (#180
+    /// eng E2).
     static func evidence(_ points: [WalkedPointSnapshot], activity: VehicleActivity) -> [UUID: RideEvidence] {
         guard let coverage = activity.coverage, points.count >= 2 else { return [:] }
         var result: [UUID: RideEvidence] = [:]

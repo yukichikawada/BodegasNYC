@@ -7,7 +7,8 @@ import SwiftData
 /// it. It is the only thing that reads or writes for this feature: nothing
 /// fetches, encodes or writes a file on the main actor (AC 10).
 ///
-/// PR 1 is the export half. PR 2 adds `inspect` and `commit` for import.
+/// Export is here; import (`inspect`, `commit`) is in
+/// `WalkHistoryTransfer+Import.swift`.
 actor WalkHistoryTransfer {
     /// One export's files, in part order, in a directory of their own.
     nonisolated struct Export: Equatable, Sendable {
@@ -16,33 +17,42 @@ actor WalkHistoryTransfer {
         let fixCount: Int
     }
 
-    private let container: ModelContainer
+    let container: ModelContainer
     private let exportRoot: URL
     nonisolated let maxFixCount: Int
     private let appVersion: String
     /// Test seam: runs after the history is read and before the first file
     /// is written.
     private let willWrite: @Sendable () async -> Void
+    /// Test seam (import): runs after a commit has staged its inserts and
+    /// before its generation check and save; a throw is a failed save.
+    let willSaveImport: @Sendable () async throws -> Void
     /// Export directories handed out and not yet finished or discarded: a
     /// share sheet in some window may still be offering their files.
     private var liveDirectories: Set<URL> = []
+    /// The one import inspected and not yet committed or dropped (eng A4:
+    /// at most one app-wide). A newer request replaces it.
+    var pendingImport: PendingImport?
 
     /// - Parameters:
     ///   - exportRoot: where export directories go, under the temporary
     ///     directory by default (eng A6).
-    ///   - maxFixCount: the per-file cap (eng A2); injected small in tests.
+    ///   - maxFixCount: the per-file cap (eng A2), export and import alike;
+    ///     injected small in tests.
     init(
         container: ModelContainer,
         exportRoot: URL = WalkHistoryTransfer.defaultExportRoot,
         maxFixCount: Int = WalkHistoryFile.maxFixCount,
         appVersion: String = WalkHistoryTransfer.bundleAppVersion,
-        willWrite: @escaping @Sendable () async -> Void = {}
+        willWrite: @escaping @Sendable () async -> Void = {},
+        willSaveImport: @escaping @Sendable () async throws -> Void = {}
     ) {
         self.container = container
         self.exportRoot = exportRoot
         self.maxFixCount = maxFixCount
         self.appVersion = appVersion
         self.willWrite = willWrite
+        self.willSaveImport = willSaveImport
     }
 
     nonisolated static let defaultExportRoot = URL.temporaryDirectory.appending(
@@ -74,7 +84,15 @@ actor WalkHistoryTransfer {
     /// files of at most `maxFixCount` fixes, in history order, and returns
     /// them. One fetch on this actor's own context (eng A3): no offset
     /// paging, so concurrent inserts and deletes can never leave a gap or a
-    /// repeat. Earlier exports are swept first (eng A6), except those still
+    /// repeat. The fetch reads one committed state of the store, the one at
+    /// the moment it runs, and materialises it before anything else runs on
+    /// this actor. A writer whose change spans more than one transaction is
+    /// seen at whichever of its states was committed: SwiftData's
+    /// `delete(model:where:)` commits its batch delete apart from the
+    /// inserts of the same `save()` (measured for #180 PR 2). The app's
+    /// writers are the recorder (inserts only) and Clear History (deletes
+    /// only, one batch), so each export is the history before or after any
+    /// of them. Earlier exports are swept first (eng A6), except those still
     /// live: handed out and not yet finished or discarded, which another
     /// window's share sheet may be offering. Each file is
     /// written under a temporary name and renamed (`.atomic`), with default

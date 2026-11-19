@@ -28,14 +28,15 @@ struct HistoryExportPresentation {
 // `MapScreenView.swift`, which is at its length limit.
 extension MapScreenView {
     /// The menu's walk history section, directly above Clear History
-    /// (design D11): no icon, the label with an ellipsis, disabled with no
-    /// history and while a transfer or a Clear runs. PR 2 adds Import
-    /// History under it.
+    /// (design D11): no icons, the labels with an ellipsis. Export History
+    /// is disabled with no history and while a transfer or a Clear runs;
+    /// Import History (`MapScreenView+WalkHistoryImport.swift`) under it.
     func historyFileSection(_ viewModel: StreetsWalkedViewModel) -> some View {
         Section {
             Button(AppCopy.HistoryFile.exportMenuItem.menuItemWithEllipsis) { requestHistoryExport() }
                 .accessibilityHint(AppCopy.HistoryFile.exportMenuHint.copy.text)
                 .disabled(!viewModel.canExportHistory)
+            historyImportMenuItem(viewModel)
         }
     }
 
@@ -67,6 +68,39 @@ extension MapScreenView {
     /// Clear History's confirmation and the export's dialog, alert and share
     /// sheet, wrapped around `content`.
     func historyFileDialogs(_ content: some View) -> some View {
+        clearHistoryDialog(content)
+            .confirmationDialog(
+                AppCopy.HistoryFile.exportConfirmTitle.copy.text,
+                isPresented: $historyExport.isConfirming,
+                titleVisibility: .visible
+            ) {
+                Button(AppCopy.HistoryFile.exportAction.copy.text) {
+                    let tapTime = Date()
+                    Task { await runHistoryExport(at: tapTime) }
+                }
+                Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
+            } message: {
+                Text(exportConfirmMessage)
+            }
+            .alert(AppCopy.HistoryFile.exportFailed.copy.text, isPresented: $historyExport.isShowingFailure) {
+                Button(AppCopy.retryAction.copy.text) {
+                    let tapTime = Date()
+                    Task { await runHistoryExport(at: tapTime) }
+                }
+                Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
+            }
+            .background {
+                WalkHistoryFilePresenter(export: $historyExport.sharing) { export, completed in
+                    Task { await streetsWalkedViewModel?.historyExportFinished(export, completed: completed) }
+                }
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            }
+    }
+
+    /// Clear History's confirmation with Export First (DS3) and its handoff
+    /// to the export confirmation, wrapped around `content`.
+    private func clearHistoryDialog(_ content: some View) -> some View {
         content
             .confirmationDialog(
                 AppCopy.clearHistoryConfirmTitle.copy.text,
@@ -98,33 +132,6 @@ extension MapScreenView {
                 guard !isShown, historyExport.opensAfterClearDialog else { return }
                 historyExport.opensAfterClearDialog = false
                 requestHistoryExport()
-            }
-            .confirmationDialog(
-                AppCopy.HistoryFile.exportConfirmTitle.copy.text,
-                isPresented: $historyExport.isConfirming,
-                titleVisibility: .visible
-            ) {
-                Button(AppCopy.HistoryFile.exportAction.copy.text) {
-                    let tapTime = Date()
-                    Task { await runHistoryExport(at: tapTime) }
-                }
-                Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
-            } message: {
-                Text(exportConfirmMessage)
-            }
-            .alert(AppCopy.HistoryFile.exportFailed.copy.text, isPresented: $historyExport.isShowingFailure) {
-                Button(AppCopy.retryAction.copy.text) {
-                    let tapTime = Date()
-                    Task { await runHistoryExport(at: tapTime) }
-                }
-                Button(AppCopy.cancelAction.copy.text, role: .cancel) {}
-            }
-            .background {
-                WalkHistoryFilePresenter(export: $historyExport.sharing) { export, completed in
-                    Task { await streetsWalkedViewModel?.historyExportFinished(export, completed: completed) }
-                }
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
             }
     }
 

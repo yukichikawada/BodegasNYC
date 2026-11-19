@@ -128,6 +128,8 @@ struct AppCopyVoiceTests {
         + receivedWalkCopy
         + AppCopy.HistoryFile.allCases.map(\.copy)
         + [2, 3, 1_204].map(AppCopy.historyFileParts)
+        + AppCopy.HistoryImport.allCases.map(\.copy)
+        + [1, 2, 84, 1_204].map(AppCopy.historyImportDays)
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),

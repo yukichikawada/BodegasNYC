@@ -84,9 +84,10 @@ nonisolated enum WalkedEstimate {
 
     /// The day of the newest fix whose leg has no ride evidence (saved, or
     /// found by this pass in `found`) and which is older than `window` at
-    /// `now` (any fix before `now` when `window` is 0); `nil` when there is
-    /// none. `points` is in history order and its first fix ends no leg, so
-    /// it is skipped.
+    /// `now` (any fix before `now` when `window` is 0), or of the newest
+    /// `.imported` fix at any age (#180 eng E2: this phone could never ask
+    /// about it); `nil` when there is none. `points` is in history order
+    /// and its first fix ends no leg, so it is skipped.
     static func throughDay(
         _ points: [WalkedPointSnapshot],
         found: [UUID: RideEvidence],
@@ -94,9 +95,14 @@ nonisolated enum WalkedEstimate {
         window: TimeInterval = window
     ) -> WalkedDayKey? {
         let cutoff = now.addingTimeInterval(-window)
-        for point in points.dropFirst().reversed() where point.recordedAt < cutoff {
-            if point.ride == .unknown, found[point.id] == nil {
+        for point in points.dropFirst().reversed() {
+            switch point.ride {
+            case .imported:
                 return WalkedDayKey(date: point.recordedAt)
+            case .unknown where point.recordedAt < cutoff && found[point.id] == nil:
+                return WalkedDayKey(date: point.recordedAt)
+            default:
+                continue
             }
         }
         return nil
