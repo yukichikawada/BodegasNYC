@@ -197,6 +197,7 @@ struct WalkHistoryTransferTests {
         #expect(!FileManager.default.fileExists(atPath: cancelled.directory.path))
 
         let completed = try await transfer.export(through: tapTime)
+        await transfer.finish(completed) // the share sheet completed
         let other = root.appending(path: "keep.txt")
         try Data("keep".utf8).write(to: other)
         let nested = root.appending(path: "nested", directoryHint: .isDirectory)
@@ -206,10 +207,62 @@ struct WalkHistoryTransferTests {
         let next = try await transfer.export(through: tapTime) // sweeps first
         #expect(!FileManager.default.fileExists(atPath: completed.directory.path))
         #expect(FileManager.default.fileExists(atPath: next.files[0].path))
-        await transfer.sweepExports()
+        // A relaunch: a new transfer has nothing live, so its sweep removes
+        // even an export whose share never reported back.
+        await WalkHistoryTransfer(container: container, exportRoot: root).sweepExports()
         #expect(!FileManager.default.fileExists(atPath: next.directory.path))
         #expect(FileManager.default.fileExists(atPath: other.path))
         #expect(FileManager.default.fileExists(atPath: nested.appending(path: "keep.json").path))
+    }
+
+    /// protects=a share sheet still open in one window keeps its files when
+    /// another window exports: the sweep skips live exports, and removes
+    /// them once their share completes; fails_when=window B's export
+    /// deletes the files window A is offering, or a finished export is
+    /// never swept; no_claim=the share sheets themselves (manual).
+    @Test func anotherExportKeepsALiveShareUntilItFinishes() async throws {
+        let container = try makeInMemoryModelContainer()
+        try Self.seed(5, in: container.mainContext)
+        let root = Self.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transfer = WalkHistoryTransfer(container: container, exportRoot: root)
+        let tapTime = Self.base.addingTimeInterval(100)
+
+        let first = try await transfer.export(through: tapTime) // window A's sheet is up
+        let second = try await transfer.export(through: tapTime) // window B exports; sweeps first
+        #expect(FileManager.default.fileExists(atPath: first.files[0].path), "B's export deleted A's live share")
+        #expect(FileManager.default.fileExists(atPath: second.files[0].path))
+
+        await transfer.finish(first)
+        await transfer.sweepExports()
+        #expect(!FileManager.default.fileExists(atPath: first.directory.path), "a finished export was not swept")
+        #expect(FileManager.default.fileExists(atPath: second.files[0].path), "the sweep took B's live share")
+    }
+
+    /// protects=the dialog's part count and the export agree: a fix with a
+    /// non-finite coordinate is neither counted nor written;
+    /// fails_when=`fixCount` counts a fix the export drops, so the parts
+    /// sentence could promise one file more than it gets; no_claim=how such
+    /// a fix could be recorded (none has been).
+    @Test func partCountUsesTheExportsRule() async throws {
+        let container = try makeInMemoryModelContainer()
+        let fixes = try Self.seed(6, in: container.mainContext)
+        container.mainContext.insert(
+            WalkedPoint(latitude: -.infinity, longitude: -74, recordedAt: Self.base.addingTimeInterval(3.5))
+        )
+        container.mainContext.insert(
+            WalkedPoint(latitude: 40.7, longitude: .infinity, recordedAt: Self.base.addingTimeInterval(4.5))
+        )
+        try container.mainContext.save()
+        let root = Self.makeRoot()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let transfer = WalkHistoryTransfer(container: container, exportRoot: root, maxFixCount: 3)
+        let tapTime = Self.base.addingTimeInterval(100)
+
+        #expect(try await transfer.fixCount(through: tapTime) == 6)
+        let export = try await transfer.export(through: tapTime)
+        #expect(export.files.count == WalkHistoryFile.partCount(fixCount: 6, maxFixCount: 3))
+        #expect(try Self.read(export) == fixes)
     }
 
     /// protects=the failure rule: an export that cannot write throws and

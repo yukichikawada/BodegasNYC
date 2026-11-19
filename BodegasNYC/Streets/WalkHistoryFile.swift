@@ -28,12 +28,15 @@ import Foundation
 ///
 /// `t` is Unix time in seconds (eng E1), a JSON number that carries every
 /// bit of `recordedAt`. A `Date` holds seconds since 2001, and adding the
-/// 1970 offset in `Double` arithmetic drops the lowest bit for about a third
-/// of real timestamps (one ulp at 2^30 s, about 0.24 µs), so `t` is written
-/// as the exact decimal sum instead: the whole seconds as an integer, then
-/// the fraction's shortest round-trip digits (`unixSeconds(_:)`). Any JSON
+/// 1970 offset in `Double` arithmetic rounds to the coarser grid of the
+/// larger sum, so any `recordedAt` with a bit below that grid (one ulp at
+/// 2^30 s, about 0.24 µs) would come back changed. So `t` is written as the
+/// exact decimal sum instead: the whole seconds as an integer, then the
+/// fraction's shortest round-trip digits (`unixSeconds(_:)`). Any JSON
 /// reader gets the nearest `Double`; `date(unixSeconds:)` gets the exact
-/// `recordedAt` back.
+/// `recordedAt` back for every time from 2001 on. Earlier times (no real
+/// fix has one) are written as the plain `Double` and come back within a
+/// microsecond.
 nonisolated enum WalkHistoryFile {
     static let format = "my-bodegas-walk-history"
     static let currentVersion = 1
@@ -170,12 +173,14 @@ nonisolated enum WalkHistoryFile {
 
     /// `date` as Unix seconds, exactly: the whole seconds since 2001 plus the
     /// 1970 offset as an integer, then the fraction's shortest round-trip
-    /// digits. A non-finite or pre-1970 date falls back to the plain
-    /// `Double` (no real fix is either).
+    /// digits. Exact for every finite time from 2001 on. A time before 2001
+    /// (including -0.0: below zero, `seconds - floor(seconds)` is not always
+    /// representable) or a non-finite one falls back to the plain `Double`,
+    /// within a microsecond; no real fix is either.
     static func unixSeconds(_ date: Date) -> Decimal {
         let seconds = date.timeIntervalSinceReferenceDate
         let fallback = Decimal(date.timeIntervalSince1970)
-        guard seconds.isFinite, abs(seconds) < 1e15 else { return fallback }
+        guard seconds.isFinite, seconds.sign == .plus, seconds < 1e15 else { return fallback }
         let whole = seconds.rounded(.down)
         let unixWhole = Int64(whole) + referenceOffset
         guard unixWhole >= 0 else { return fallback }

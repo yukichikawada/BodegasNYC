@@ -77,10 +77,12 @@ extension StreetsWalkedViewModel {
 
     /// The share sheet closed (AC 11, eng A6). Completed: one
     /// `walk_history_exported`, no properties, and the files stay for the
-    /// destination until the next sweep. Cancelled: the files go now.
+    /// destination until the next sweep (no longer live, so it may remove
+    /// them). Cancelled: the files go now.
     func historyExportFinished(_ export: WalkHistoryTransfer.Export, completed: Bool) async {
         if completed {
             telemetry.capture(.walkHistoryExported)
+            await historyTransfer.finish(export)
         } else {
             await historyTransfer.discard(export)
         }

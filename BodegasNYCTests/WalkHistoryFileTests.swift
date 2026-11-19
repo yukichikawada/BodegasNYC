@@ -80,6 +80,27 @@ struct WalkHistoryFileTests {
         #expect(back[0].recordedAt < back[1].recordedAt)
     }
 
+    /// protects=the stated limit of the exact `t`: times before 2001 (the
+    /// `Date` reference, -0.0 included), which no real fix has, take the
+    /// plain-`Double` fallback and come back within a microsecond, still in
+    /// order; fails_when=a pre-2001 time is lost, garbled or reordered, or
+    /// the fallback is taken for a time from 2001 on (+0.0 stays exact);
+    /// no_claim=bit-exactness before 2001, which the format does not promise.
+    @Test func timesBefore2001ComeBackWithinAMicrosecond() throws {
+        let times = [-0.0, -1e-9, -1e-7, -0.5, -86_400.25, -500_000_000.123_456]
+        let fixes = times.map { Self.fix($0) }
+        let back = try Self.roundTrip(fixes)
+        for (written, read) in zip(fixes, back) {
+            let error = abs(read.recordedAt.timeIntervalSince(written.recordedAt))
+            #expect(error < 1e-6, "\(written.recordedAt.timeIntervalSinceReferenceDate) came back off by \(error) s")
+        }
+        let ascending = try Self.roundTrip(fixes.sorted(by: Fix.sortsBefore)).map(\.recordedAt)
+        // Times closer than the fallback's grid (-1e-9 and -0.0) may tie, never swap.
+        #expect(zip(ascending, ascending.dropFirst()).allSatisfy { $0 <= $1 }, "pre-2001 times lost their order")
+        let zero = try Self.roundTrip([Self.fix(0)])[0].recordedAt.timeIntervalSinceReferenceDate
+        #expect(zero.bitPattern == (0.0).bitPattern)
+    }
+
     /// protects=the version 1 shape: `format`, `version`, `exportedAt`
     /// (ISO 8601 UTC with milliseconds), `appVersion`, and per fix exactly
     /// `id`, `lat`, `lon`, `t` (a JSON number, Unix seconds) and `ride`,

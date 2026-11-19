@@ -23,6 +23,9 @@ actor WalkHistoryTransfer {
     /// Test seam: runs after the history is read and before the first file
     /// is written.
     private let willWrite: @Sendable () async -> Void
+    /// Export directories handed out and not yet finished or discarded: a
+    /// share sheet in some window may still be offering their files.
+    private var liveDirectories: Set<URL> = []
 
     /// - Parameters:
     ///   - exportRoot: where export directories go, under the temporary
@@ -57,18 +60,23 @@ actor WalkHistoryTransfer {
 
     // MARK: Export
 
-    /// How many fixes an export at `tapTime` would hold: the export
-    /// dialog's part count (design D12).
+    /// How many fixes an export at `tapTime` would hold, under the same
+    /// rule as `readHistory` (no non-finite coordinates): the export
+    /// dialog's part count (design D12). Only the coordinates are fetched.
     func fixCount(through tapTime: Date) throws -> Int {
         let context = ModelContext(container)
-        return try context.fetchCount(FetchDescriptor<WalkedPoint>(predicate: Self.through(tapTime)))
+        var descriptor = FetchDescriptor<WalkedPoint>(predicate: Self.through(tapTime))
+        descriptor.propertiesToFetch = [\.latitude, \.longitude]
+        return try context.fetch(descriptor).count(where: Self.isPlace)
     }
 
     /// Writes every fix recorded up to `tapTime` (the confirm tap) into
     /// files of at most `maxFixCount` fixes, in history order, and returns
     /// them. One fetch on this actor's own context (eng A3): no offset
     /// paging, so concurrent inserts and deletes can never leave a gap or a
-    /// repeat. Earlier exports are swept first (eng A6). Each file is
+    /// repeat. Earlier exports are swept first (eng A6), except those still
+    /// live: handed out and not yet finished or discarded, which another
+    /// window's share sheet may be offering. Each file is
     /// written under a temporary name and renamed (`.atomic`), with default
     /// file protection (eng A6: `.complete` would lock the file mid-AirDrop
     /// when the phone locks). On any failure the new directory is removed:
@@ -89,6 +97,7 @@ actor WalkHistoryTransfer {
                 try data.write(to: url, options: .atomic)
                 files.append(url)
             }
+            liveDirectories.insert(directory)
             return Export(directory: directory, files: files, fixCount: fixes.count)
         } catch {
             try? FileManager.default.removeItem(at: directory)
@@ -100,23 +109,36 @@ actor WalkHistoryTransfer {
     /// completed share leaves them for the destination, which may read them
     /// lazily, until the next sweep.
     func discard(_ export: Export) {
+        liveDirectories.remove(export.directory)
         try? FileManager.default.removeItem(at: export.directory)
     }
 
-    /// Removes every walk history file left under the export root, and the
-    /// directories that held them, and nothing else (eng A6): at launch and
-    /// before each export.
-    func sweepExports() {
-        Self.sweep(exportRoot)
+    /// The share sheet completed: the files stay for the destination, but
+    /// are no longer live, so the next sweep removes them.
+    func finish(_ export: Export) {
+        liveDirectories.remove(export.directory)
     }
 
-    nonisolated static func sweep(_ root: URL) {
+    /// Removes every walk history file left under the export root, and the
+    /// directories that held them, and nothing else (eng A6): at launch
+    /// (nothing is live yet, so everything goes) and before each export
+    /// (live exports are kept).
+    func sweepExports() {
+        Self.sweep(exportRoot, keeping: liveDirectories)
+    }
+
+    nonisolated static func sweep(_ root: URL, keeping live: Set<URL> = []) {
         let manager = FileManager.default
         guard let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey]) else {
             return
         }
         var directories: [URL] = []
+        let livePaths = Set(live.map { $0.resolvingSymlinksInPath().path })
         for case let url as URL in enumerator {
+            if livePaths.contains(url.resolvingSymlinksInPath().path) {
+                enumerator.skipDescendants()
+                continue
+            }
             let isDirectory = (try? url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) ?? false
             if isDirectory {
                 directories.append(url)
@@ -139,9 +161,7 @@ actor WalkHistoryTransfer {
             sortBy: [SortDescriptor(\.recordedAt)]
         )
         return try context.fetch(descriptor)
-            // A non-finite coordinate is no place: nothing can match it, and
-            // JSON cannot carry it. Real fixes never have one.
-            .filter { $0.latitude.isFinite && $0.longitude.isFinite }
+            .filter(Self.isPlace)
             .map { point in
                 WalkHistoryFile.Fix(
                     id: point.id,
@@ -154,6 +174,12 @@ actor WalkHistoryTransfer {
             // The store sorts by time; ties settle by id exactly as
             // `sortsBefore` defines them.
             .sorted(by: WalkHistoryFile.Fix.sortsBefore)
+    }
+
+    /// A non-finite coordinate is no place: nothing can match it, and JSON
+    /// cannot carry it. Real fixes never have one.
+    private static func isPlace(_ point: WalkedPoint) -> Bool {
+        point.latitude.isFinite && point.longitude.isFinite
     }
 
     private static func through(_ tapTime: Date) -> Predicate<WalkedPoint> {
