@@ -158,7 +158,15 @@ struct WalkHistoryTransferTests {
         try await Task.detached {
             let context = ModelContext(container)
             let ids = Array(deleted)
-            try context.delete(model: WalkedPoint.self, where: #Predicate { ids.contains($0.id) })
+            // Each row deleted on the context, so the deletes and inserts
+            // commit in one transaction. `delete(model:where:)` commits its
+            // batch delete in a transaction of its own, so the store really
+            // holds the history without the deleted fixes and without the
+            // new ones for a moment, and an export in that moment rightly
+            // writes it (#180 PR 2 QA: about 1 in 40 runs).
+            for point in try context.fetch(FetchDescriptor<WalkedPoint>(predicate: #Predicate { ids.contains($0.id) })) {
+                context.delete(point)
+            }
             for fix in inserted {
                 context.insert(Self.point(fix))
             }

@@ -84,7 +84,15 @@ actor WalkHistoryTransfer {
     /// files of at most `maxFixCount` fixes, in history order, and returns
     /// them. One fetch on this actor's own context (eng A3): no offset
     /// paging, so concurrent inserts and deletes can never leave a gap or a
-    /// repeat. Earlier exports are swept first (eng A6), except those still
+    /// repeat. The fetch reads one committed state of the store, the one at
+    /// the moment it runs, and materialises it before anything else runs on
+    /// this actor. A writer whose change spans more than one transaction is
+    /// seen at whichever of its states was committed: SwiftData's
+    /// `delete(model:where:)` commits its batch delete apart from the
+    /// inserts of the same `save()` (measured for #180 PR 2). The app's
+    /// writers are the recorder (inserts only) and Clear History (deletes
+    /// only, one batch), so each export is the history before or after any
+    /// of them. Earlier exports are swept first (eng A6), except those still
     /// live: handed out and not yet finished or discarded, which another
     /// window's share sheet may be offering. Each file is
     /// written under a temporary name and renamed (`.atomic`), with default
