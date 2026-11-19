@@ -50,7 +50,7 @@ down.
 | --- | --- | --- |
 | User-generated content | **Yes** | Photos, reviews, added bodegas and flags are posted by users and visible to everyone. |
 | Does the app show user-generated content in a feed or recommend it | **No** (if asked) | Content is attached to a place on a map and to that place's detail screen; there is no feed and no ranking of people. |
-| Does the app let users share their location with others | **No** | The nearby query sends coordinates to the server and does not store them; Streets Walked history stays on the device unless the user shares a picture of a walk. **Owner: revisit this answer at the next release (#177 lets a user share a picture of past walked streets; recommended: Yes, the rating is already 13+).** |
+| Does the app let users share their location with others | **No** | The nearby query sends coordinates to the server and does not store them; Streets Walked history stays on the device unless the user shares a picture of a walk. Export History (#180) also lets the user hand their whole walk history, as a file, to the system share sheet. **Owner: revisit this answer at the next release (#177 lets a user share a picture of past walked streets; recommended: Yes, the rating is already 13+).** |
 | Messaging, chat, user profiles | **No** | There is no messaging and no public profile. |
 | Gambling, contests | **No** | "Lotto" is a data point about the store, not a feature. |
 | Alcohol, tobacco | **No** (reference only) | "Beer" and "Cigarettes" are yes/no facts about a store, with no sale, promotion or imagery. If the questionnaire offers "infrequent/mild references", pick that over "none". |
