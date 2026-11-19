@@ -55,10 +55,13 @@ nonisolated enum WalkHistoryFile {
     }
 
     /// The most fixes in one file, shared by export and import (eng A2): a
-    /// longer history exports as part files of at most this many each. The
-    /// starting value; PR 2 measures import at the cap and lowers it to the
-    /// largest size that imports under 30 s and 300 MB.
-    static let maxFixCount = 1_000_000
+    /// longer history exports as part files of at most this many each. Set
+    /// by measurement (#180 PR 2, eng A2: the largest size that imports in
+    /// under 30 s and 300 MB): on the simulator host, Debug, importing into
+    /// a file-backed store, 100,000 fixes took 7.3 s at +164 MB peak, 200,000
+    /// took 15.5 s at +745 MB. Memory binds first; 1,000,000 was the
+    /// unmeasured starting value. `WalkHistoryPerformanceTests` re-measures.
+    static let maxFixCount = 100_000
 
     /// One fix as the file carries it.
     nonisolated struct Fix: Equatable, Sendable {

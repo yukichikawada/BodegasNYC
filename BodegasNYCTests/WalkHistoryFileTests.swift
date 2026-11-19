@@ -147,7 +147,7 @@ struct WalkHistoryFileTests {
 
         #expect(WalkHistoryFile.parts(of: [], maxFixCount: 3).map(\.count) == [0])
         #expect(WalkHistoryFile.partCount(fixCount: 0, maxFixCount: 3) == 1)
-        #expect(WalkHistoryFile.maxFixCount == 1_000_000)
+        #expect(WalkHistoryFile.maxFixCount == 100_000) // set by measurement in #180 PR 2 (eng A2)
     }
 
     /// protects=the file's name: "My Bodegas Walks <yyyy-MM-dd>.mybodegas"
