@@ -32,13 +32,15 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         telemetry = Telemetry.live()
-        // Walk history files left in the Inbox by an earlier run (#180 eng
-        // A5); a file being delivered now is younger than the grace.
-        Task.detached { WalkHistoryTransfer.sweepInbox() }
         #if DEBUG
         UITestFixtures.openLaunchURL(in: sharedWalkInbox)
         UITestFixtures.openImportFixture(in: sharedWalkInbox)
         #endif
+        // Walk history files left in the Inbox by an earlier run (#180 eng
+        // A5). A file being delivered now is younger than the grace, and a
+        // file already waiting is never swept.
+        let waiting = Set([sharedWalkInbox.pendingHistoryFile?.url].compactMap(\.self))
+        Task.detached { WalkHistoryTransfer.sweepInbox(keeping: waiting) }
         setUpStreetsWalked(
             container: Self.makeStreetsWalkedContainer(),
             isBackgroundLaunch: application.applicationState == .background

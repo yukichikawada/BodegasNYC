@@ -230,20 +230,29 @@ extension WalkHistoryTransfer {
     }
 
     /// At launch: removes walk history files left in the Inbox by an earlier
-    /// run (a crash, or a file never claimed), and nothing else. A file
-    /// added in the last `inboxGrace` is kept: on a cold open it is the one
-    /// being delivered, and its import deletes it once read.
-    nonisolated static func sweepInbox(_ inbox: URL = inboxDirectory, now: Date = Date()) {
+    /// run (a crash, or a file never claimed), and nothing else. Only the
+    /// date the file was added to the Inbox decides: one added in the last
+    /// `inboxGrace` is kept (on a cold open it is the one being delivered,
+    /// and its import deletes it once read), and so is one whose added date
+    /// is unknown. A creation date is no signal, since a copy can keep the
+    /// original's. `keeping` (the waiting incoming file) is never swept.
+    nonisolated static func sweepInbox(
+        _ inbox: URL = inboxDirectory,
+        keeping: Set<URL> = [],
+        now: Date = Date(),
+        addedDate: (URL) -> Date? = { try? $0.resourceValues(forKeys: [.addedToDirectoryDateKey]).addedToDirectoryDate }
+    ) {
         let manager = FileManager.default
-        let keys: [URLResourceKey] = [.addedToDirectoryDateKey, .creationDateKey, .isDirectoryKey]
+        let keys: [URLResourceKey] = [.isDirectoryKey]
         guard let files = try? manager.contentsOfDirectory(at: inbox, includingPropertiesForKeys: keys) else { return }
+        let kept = Set(keeping.map { $0.resolvingSymlinksInPath().path })
         for file in files where file.pathExtension.lowercased() == WalkHistoryFile.fileExtension {
-            let values = try? file.resourceValues(forKeys: Set(keys))
-            guard values?.isDirectory != true else { continue }
-            let added = values?.addedToDirectoryDate ?? values?.creationDate ?? .distantPast
-            if now.timeIntervalSince(added) > inboxGrace {
-                try? manager.removeItem(at: file)
-            }
+            guard !kept.contains(file.resolvingSymlinksInPath().path),
+                  (try? file.resourceValues(forKeys: Set(keys)).isDirectory) != true,
+                  let added = addedDate(file),
+                  now.timeIntervalSince(added) > inboxGrace
+            else { continue }
+            try? manager.removeItem(at: file)
         }
     }
 

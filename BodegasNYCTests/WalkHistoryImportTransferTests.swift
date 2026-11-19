@@ -358,27 +358,40 @@ struct WalkHistoryImportTransferTests {
         #expect(!WalkHistoryTransfer.isInboxCopy(URL(string: "https://example.com/a.mybodegas")!))
     }
 
-    /// protects=eng A5's launch sweep: walk history files older than the
-    /// grace are removed from the Inbox, and a young one (a cold open being
-    /// delivered) and every other file are kept; fails_when=the sweep
-    /// deletes the file a cold launch is opening, or anything that is not a
-    /// walk history file; no_claim=the system's own Inbox housekeeping.
+    /// protects=eng A5's launch sweep, and QA item 3: a walk history file
+    /// added to the Inbox longer than the grace ago is removed; one added
+    /// within the grace (a cold open being delivered), one whose added date
+    /// is unknown (creation date is no signal), the waiting incoming file
+    /// even when old, and every other file are kept; on this file system,
+    /// a file just written reads as added now; fails_when=the sweep deletes
+    /// the file a cold launch is opening, falls back to a creation date, or
+    /// removes anything that is not a walk history file; no_claim=the
+    /// system's own Inbox housekeeping, or the added date iOS gives a copy
+    /// on a device (A12).
     @Test func theInboxSweepRemovesOnlyOldWalkFiles() throws {
         let inbox = try Self.makeDirectory()
         defer { try? FileManager.default.removeItem(at: inbox) }
+        let now = Date()
+        let longAgo = now.addingTimeInterval(-WalkHistoryTransfer.inboxGrace - 60)
         let old = inbox.appending(path: "old.mybodegas")
         let young = inbox.appending(path: "young.mybodegas")
+        let unknown = inbox.appending(path: "unknown.mybodegas")
+        let waiting = inbox.appending(path: "waiting.mybodegas")
         let other = inbox.appending(path: "photo.jpg")
-        for url in [old, young, other] { try Data("x".utf8).write(to: url) }
-        // Just added: inside the grace, so a cold open's file survives.
-        WalkHistoryTransfer.sweepInbox(inbox, now: Date())
-        #expect(FileManager.default.fileExists(atPath: old.path), "a file added just now was swept")
+        for url in [old, young, unknown, waiting, other] { try Data("x".utf8).write(to: url) }
+        let added: [String: Date] = [
+            "old.mybodegas": longAgo, "young.mybodegas": now, "waiting.mybodegas": longAgo, "photo.jpg": longAgo
+        ]
+        WalkHistoryTransfer.sweepInbox(inbox, keeping: [waiting], now: now) { added[$0.lastPathComponent] }
+        #expect(!FileManager.default.fileExists(atPath: old.path), "an old walk file stayed")
         #expect(FileManager.default.fileExists(atPath: young.path), "a file added just now was swept")
-        // Seen from past the grace, both walk files are left over.
-        WalkHistoryTransfer.sweepInbox(inbox, now: Date().addingTimeInterval(WalkHistoryTransfer.inboxGrace + 60))
-        #expect(!FileManager.default.fileExists(atPath: old.path))
-        #expect(!FileManager.default.fileExists(atPath: young.path))
-        #expect(FileManager.default.fileExists(atPath: other.path))
+        #expect(FileManager.default.fileExists(atPath: unknown.path), "a file with no added date was swept")
+        #expect(FileManager.default.fileExists(atPath: waiting.path), "the waiting incoming file was swept")
+        #expect(FileManager.default.fileExists(atPath: other.path), "a file that is not a walk file was swept")
+
+        // The real lookup: a file written now is inside the grace.
+        WalkHistoryTransfer.sweepInbox(inbox, now: now)
+        #expect(FileManager.default.fileExists(atPath: young.path), "the real added date swept a new file")
     }
 }
 
