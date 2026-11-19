@@ -53,7 +53,33 @@ final class PostHogSink: TelemetrySink {
         config.sessionReplay = false
         config.disableGeoIp = true
         config.optOut = true
+        // #177 PR 2: a walk link's fragment is the walk itself.
+        config.setBeforeSend(beforeSend())
         return config
+    }
+
+    /// Built off the main actor, like `SentrySink.configure`: the SDK runs
+    /// it on its own queue.
+    nonisolated static func beforeSend() -> BeforeSendBlock {
+        { event in
+            guard let properties = scrubbed(event: event.event, properties: event.properties) else { return nil }
+            event.properties = properties
+            return event
+        }
+    }
+
+    /// The SDK's own deep-link event, built from the full opened URL,
+    /// fragment included (`PostHogDeepLinkHelper` in posthog-ios 3.93.1).
+    nonisolated static let deepLinkEvent = "Deep Link Opened"
+    /// URL properties the SDK may put on its own events.
+    nonisolated static let urlPropertyKeys: Set<String> = ["url", "$current_url"]
+
+    /// What `beforeSend` lets out (#177 PR 2, AC 15): `Deep Link Opened` is
+    /// dropped whole (`nil`), and any other event loses a URL property, so
+    /// no walk link's fragment reaches PostHog however the SDK is triggered.
+    nonisolated static func scrubbed(event: String, properties: [String: Any]) -> [String: Any]? {
+        guard event != deepLinkEvent else { return nil }
+        return properties.filter { !urlPropertyKeys.contains($0.key) }
     }
 
     func start() {

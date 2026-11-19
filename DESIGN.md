@@ -167,8 +167,11 @@ a New Yorker." Every decision below serves that: the data and the words carry th
 
 **Key characteristics:**
 - The map is always on screen; everything else floats over it or slides over it.
-- Only four saturated colors exist on the map and all four are data: pin green, cat orange,
-  star yellow, walked cyan. Red is errors only (#154).
+- Only five saturated colors exist on the map and all five are data: pin green, cat orange,
+  star yellow, walked cyan, shared-walk violet (#177 DS1). Red is errors only (#154).
+- Violet is a walk someone sent you and nothing else. Where it ever shares a map with cyan, the
+  two also differ in shape: yours breadcrumbs, theirs a solid line at every band. No violet
+  controls, washes or badges.
 - One tint, Deli Green, for every control and every bodega pin: it means tappable, and it is
   the brand green. It never means status or success.
 - System face everywhere; one display register (heavy, condensed) on four surfaces in the app,
@@ -196,7 +199,10 @@ never on text (#95 D7); it is for non-text decoration only (the duplicate chevro
 `.primary` (#95 D8). Two asset-catalog colors, `pin` (Deli Green, the tint's own values, #154) and `catPin`
 (systemOrange), are the data colors and the brand; stars are `systemYellow`; cluster badges are
 `pin` green. The app tint (`AccentColor` asset) is Deli Green, #0A7A43 light and #34C77B dark.
-Contrast: 5.4:1 on white, 9.6:1 on black.
+Contrast: 5.4:1 on white, 9.6:1 on black. A walk someone sent you (#177 DS1) is the `sharedWalk`
+asset, #7E22CE light and #CF8AFF dark, Increase Contrast #5A0FA3 / #DDB0FF (6.1:1 on light land,
+7.1:1 on dark land, 4.7:1 on dark road grey, computed, not measured on tiles), drawn only as that
+walk's trail.
 
 **Light or dark:** both, decided by the system. The use scene is the sidewalk in daylight and the
 corner at night; the map tiles already switch, so the chrome follows the system appearance.
@@ -722,10 +728,10 @@ shown is what is sent), an inset-grouped section of compact From and To date row
 days, the first walked day through today; From past To drags To along; label over picker at
 accessibility sizes) with "Blocks count once across these days. Miles include repeats." and, when
 a day in range is an estimate, "Some of this is an estimate. Rides may be counted." in `.footnote`
-`textMuted` under it, then the three consequence lines in `.subheadline` `.primary` (PR 1: "This
-sends a picture of the blocks you walked on these days, with the dates, counts and distance. No
-times of day.", "The map can show where your walks start and end.", "Anyone who gets it can pass
-it on. It can't be taken back."). Share is `.borderedProminent`, `.controlSize(.large)`, full width,
+`textMuted` under it, then the three consequence lines in `.subheadline` `.primary` (PR 2: "This
+sends a picture and a link with the blocks you walked on these days, the dates, counts and
+distance. No times of day.", "The map can show where your walks start and end.", "Anyone who gets
+it can pass it on. It can't be taken back."). Share is `.borderedProminent`, `.controlSize(.large)`, full width,
 in a bottom `safeAreaInset` on the same ground, moving to the end of the scroll when the pinned bar
 would leave under 200pt to read (the intro sheet's rule). States: making the picture (first open,
 each date change, a history change; 0.3 s after the last change) shows the last picture at 40%
@@ -733,12 +739,14 @@ under a spinner and "Making the picture…", Share disabled, dates and Cancel li
 Share; a snapshot that fails or takes over 5 s shows "The picture didn't come out. Try again."
 `.primary` and a `.bordered` Retry in the picture's place; no walked block in range shows no
 picture (the panel collapses, so the dates and the reason line lead) and "No blocks counted on these
-days."; over 5,000 blocks the same, with "Too many blocks to share at once. Pick fewer days."; the reason line sits directly above the disabled Share (`.footnote`
+days."; over 5,000 blocks, or a link over 2,000 characters (PR 2), the same, with "Too many blocks to share at once. Pick fewer days."; the reason line sits directly above the disabled Share (`.footnote`
 `.primary`) and is its VoiceOver hint. The walk is frozen when its picture is made, and Share is
 enabled only while the picture on show is for the current dates and history. Clear History closes
 the form; a completed share closes it with no toast; a cancelled one leaves it as it was. Share
-opens the system share sheet with two items, the picture (link metadata titled "Walk, Nov 3–9,
-2026") and the text "38 blocks, 6 new, 2.1 miles. Nov 3–9, 2026." ("new" left out at zero);
+opens the system share sheet with three items, the picture (link metadata titled "Walk, Nov 3–9,
+2026"), the text "38 blocks, 6 new, 2.1 miles. Nov 3–9, 2026." ("new" left out at zero) and the
+walk's link (PR 2), all three from the picture's frozen walk; no picture means nothing is shared,
+never the link alone;
 `walk_shared` is recorded only when the sheet completes. VoiceOver: the picture is one image, "Map
 of the walk you're sharing.", valued "November 3 to November 9, 2026, 38 blocks, 6 new, 2.1
 miles." with "estimate" when it applies; a failure and a disabled reason are announced; a ready
@@ -746,6 +754,39 @@ picture is announced (its value) only when it ends a making state while VoiceOve
 otherwise a new picture is not; after a completed share the form closes and focus returns to the
 entry button that opened it, after a cancelled one to the form's Share; escape is Cancel. The picture's opacity swap is 0.25 s, the same under Reduce
 Motion.
+
+**Shared Walk sheet** (`SharedWalkSheet`, `SharedWalkScreen`, #177 PR 2): a walk link someone sent
+you, opened from `RootView` only when nothing else is presented (it waits for onboarding, for any
+open sheet, cover or alert, and then 0.5 s more; it comes before the Streets Walked intro, whose
+1.5 s clock restarts after it closes; a second link replaces the content in place and refits the
+map). `.large` only, opaque `systemGroupedBackground`, `NavigationStack`, inline title "Shared
+Walk" with the dates as its subtitle ("Nov 3–9, 2026"), Done. The map is `WalkRunsMap` with the
+`sharedWalk` violet as a solid line at every band and no user-location dot; past the run cap it
+says "Zoom in to see the blocks.". Under it the day view's bar with the sender's counts from the
+link: "38 blocks" with "6 new to them" in `textMuted` (omitted at zero) over "2.1 miles", then
+`.footnote` `textMuted` lines 4pt apart: the estimate line, the coverage line ("32 of 38 blocks
+shown. Update the app to see the rest." when this street file knows fewer blocks), and "This walk
+isn't saved. Open the link to see it again.". States: street data loading shows the subtitle and
+counts at once and "Loading the map…" on the map ground; failed keeps the counts and shows "The
+street map didn't load. Try again." with Retry; offline draws the trail on the ground with no
+failure copy; no block drawable, a newer link format and a damaged link show no map but Your
+Walks' state list: one inset-grouped section with the line in `.body` `.primary` ("None of these
+blocks can be shown yet. Update the app, then tap the link again.", "This walk needs a newer
+version of the app. Update, then tap the link again.", "This link couldn't be opened. Ask them to
+send it again."), and for the two update states a second section with one "Update" row in the
+tint that opens the App Store page. VoiceOver: the map is one element, "Map of a shared walk.",
+valued "November 3 to November 9, 2026, 38 blocks, 6 new to them, 2.1 miles." plus "estimate" and
+"some blocks not shown" when they apply; a held sheet posts a screen change so VoiceOver starts at
+the title; escape is Done. Nothing is saved and no location is asked for.
+
+**Walk link fallback page** (`docs/walk/index.html`, #177 PR 2): what a phone without the app, or
+on 1.0.0, opens. One column, max-width 560px, 24px inset, system font stack, `color-scheme: light
+dark`, colours as CSS custom properties: the icon at 64px, "Someone shared a walk with you." at
+28px weight 800, "It opens in My Bodegas on an iPhone." in #636366 / #98989F, a "Get My Bodegas"
+capsule (#0A7A43 with white, dark #34C77B with black), a separator, "Already have it?" at 17px
+weight 600, then "Update to the latest version." and "Then go back to the message and tap the link
+again. If this opened inside another app, open the link in Safari.". No script, no motion, no walk
+data. It may name the app; it is outside `AppCopy`.
 
 **Shared picture** (`SharedWalkCard`, #177 PR 1, DS2, DS3): the one artifact strangers see, always
 dark whatever the sender's appearance, Dynamic Type or Increase Contrast. 1080 x 1350 px PNG (360 x
@@ -988,3 +1029,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-18 | #170 PR 2 Your Walks Progress (design DS6, DS8.5 to DS8.7, eng E6): a Calendar / Progress switch under the title; the chart is a 2pt step line of cumulative walked blocks citywide in the `walked` cyan with no fill, a point for a single day, the y-axis fitted to the range (from zero for All); the header is "312 blocks" in `.title2` over the range's gain or "Since Mar 2024.", swapped to the scrubbed day at a fixed height with no haptic; ranges 1W to All under the chart, read as words; one adjustable VoiceOver element stepping a day at a time, with an Audio Graph. The headline is Your Blocks' count and the line is never shifted to meet it. The per-borough series is in TODOS | "Up 40 this month" was wrong for four of five ranges; a zero-based axis flattens a long-time walker's month; DESIGN.md keeps the one authored haptic for the first add; cyan is a mark, never a wash; topping the line up to the total would date blocks to days they were not walked on |
 | 2026-11-19 | #119 no culling under the cap: a walked history at or under the settled band's run cap (500 runs for breadcrumbs, 1,000 for the line) hands MapKit every run once, whatever the view, so a pan settle leaves the drawn set unchanged; over the cap the layer culls to the view + 25% and hides past the cap as before, with the same runs, styles and width bands. Per-tile pieces stay shelved (2026-11-11: retraced polylines drew stray curves on SwiftUI Map) | Device A/B on the iPhone 17 Pro Max (593-run seed, scripted pans at 5.2 km): main had 10 and 12 hitches of 50 ms or more per 30 s, longest 133 ms; no-cull had 0 and 0, longest 16.7 ms. The full rewrite at a band change hitched no more than one frame. At the breadcrumb band the seed is over 500, so both builds cull alike there. Not measured: a history near 1,000 runs at the line bands, or a slower phone |
 | 2026-11-19 | #177 PR 1 Share a Walk (eng E1, E4, E6, E7; design DS2 to DS7): a Share a Walk form from Your Walks (most recent walked day) and from a walked day (that day), whose preview is the exported picture itself and whose Share sends exactly that image plus one line of text through the system share sheet; the picture is always dark, in the sender's `walked` cyan as a solid line, with the count in the display register (a fifth surface, for the exported image only) and "My Bodegas" in its band (an exception for the exported image only; #154 DS11's no-wordmark rule for the app's map stands); its type is fixed, a named exception in the Typography scale; `WalkRunsMap` extracted from the day view with Zoom In, Zoom Out and Show Whole Walk for VoiceOver; every promise that walks stay on the phone gains the sharing exception, except the Account sheet's deletion line ("Walked blocks stay on this phone.") and the privacy policy's account-deletion paragraph, which are kept because they describe what deleting an account leaves alone (owner decision). The link, the Shared Walk sheet, the violet and the five-colour rule are PR 2 | Design review DS1 to DS7 and eng review E1 to E9, owner accepted all. A picture alone reads in the thread with no link; a live map preview differed in colour, framing and shape from what was sent; the picture is the one artifact strangers see, so it has one look and carries the app's name |
+| 2026-11-19 | #177 PR 2 walk links (eng E2, E3, E5, E7, E8; design DS1, DS5, DS7): a share also carries a link, `https://yukichikawada.github.io/BodegasNYC/walk/#1.<payload>.w`, whose fragment holds the walk (dates, counts, the estimate flag, at most 5,000 block ids) and nothing else; it opens the Shared Walk sheet, which waits for anything presented and comes before the Streets Walked intro, draws the sender's walk in a fifth data colour, `sharedWalk` violet (#7E22CE / #CF8AFF, contrast #5A0FA3 / #DDB0FF), as a solid line at every band, shows the sender's counts with a coverage line when this street file knows fewer blocks, and saves nothing; a phone without the app, or on 1.0.0, gets the static fallback page. The share sheet's items are picture, text, link, all from one frozen walk | Design review DS1 (violet holds against cyan, Deli Green and red under colour-blind simulation; the solid line is the cue that does not rely on colour) and eng review E2, E3, E5, E7, E8, owner accepted all; the night capture of the violet at the four bands was taken before the build continued |

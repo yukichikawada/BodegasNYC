@@ -66,9 +66,9 @@ struct MapScreenView: View {
     /// The Streets Walked intro (#126, `MapScreenView+StreetsWalkedIntro.swift`).
     @State var showingStreetsWalkedIntro = false
     @State var introStartsRecording = false
+    @Environment(SharedWalkInbox.self) var sharedWalkInbox: SharedWalkInbox? // presents before the intro (#177)
     @AccessibilityFocusState var isStreetsWalkedMenuFocused: Bool
-    /// This window's identity for the shared Streets Walked view model's
-    /// scene count (#123 eng R5).
+    /// This window's identity for the view model's scene count (#123 eng R5).
     @State var streetsSceneToken = StreetsWalkedViewModel.SceneToken.make()
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.accessibilityReduceMotion) var reduceMotion

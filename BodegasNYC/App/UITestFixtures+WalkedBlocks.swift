@@ -28,7 +28,7 @@ nonisolated extension UITestFixtures {
     /// nil if the bundled street data or the store fails.
     @MainActor
     static func makeWalkedBlocksContainer(now: Date = Date()) -> ModelContainer? {
-        guard let grid = try? StreetGrid.loadBundled(),
+        guard let grid = try? StreetGridLoader.shared.grid(),
               let container = try? ModelContainer(
                   for: Schema(StreetsWalkedSchema.models),
                   configurations: ModelConfiguration(isStoredInMemoryOnly: true)

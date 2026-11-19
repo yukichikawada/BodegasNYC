@@ -29,7 +29,8 @@ struct ShareWalkForm {
         case failed
         /// No walked block in range: no picture, Share disabled.
         case noBlocks
-        /// Over `maxBlocks`: no picture, Share disabled.
+        /// Over `maxBlocks`, or a link over 2,000 characters: no picture,
+        /// Share disabled.
         case tooManyBlocks
     }
 
@@ -43,6 +44,8 @@ struct ShareWalkForm {
     private(set) var end: WalkedDayKey
     /// The current dates' walk, recomputed on every change.
     private(set) var walk: SharedWalk
+    /// The current walk's link (#177 PR 2), `nil` when it cannot be made.
+    private(set) var link: URL?
     /// The last picture made and what it was made for; kept, dimmed, while
     /// the next one is made.
     private(set) var picture: SharedWalkPicture?
@@ -62,6 +65,7 @@ struct ShareWalkForm {
         start = preset
         end = preset
         walk = history.shareSummary(from: preset, to: preset)
+        link = Self.link(for: walk)
     }
 
     /// The first walked day: the earliest either date can be.
@@ -73,7 +77,8 @@ struct ShareWalkForm {
 
     var phase: Phase {
         if walk.blockIDs.isEmpty { return .noBlocks }
-        if walk.blockCount > Self.maxBlocks { return .tooManyBlocks }
+        // Over 5,000 blocks, or a link past 2,000 characters (#177 PR 2).
+        if walk.blockCount > Self.maxBlocks || link == nil { return .tooManyBlocks }
         if pictureRequest == request, picture != nil { return .ready }
         if failedRequest == request { return .failed }
         return .making
@@ -173,5 +178,13 @@ struct ShareWalkForm {
 
     private mutating func recompute() {
         walk = history.shareSummary(from: start, to: end)
+        link = Self.link(for: walk)
+    }
+
+    /// The link for `walk`, `nil` when it has no blocks or encodes
+    /// `.tooLong` (#177 PR 2).
+    static func link(for walk: SharedWalk) -> URL? {
+        guard case .url(let url) = SharedWalkLink.encode(walk) else { return nil }
+        return url
     }
 }

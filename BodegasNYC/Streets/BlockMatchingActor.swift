@@ -57,7 +57,8 @@ actor BlockMatchingActor {
     init(
         container: ModelContainer,
         activityProvider: any MotionActivityProviding = CoreMotionActivityProvider(),
-        loadGrid: @escaping @Sendable () throws -> StreetGrid = { try StreetGrid.loadBundled() },
+        // The process's one parse, shared with the Shared Walk sheet (#177).
+        loadGrid: @escaping @Sendable () throws -> StreetGrid = { try StreetGridLoader.shared.grid() },
         onGridLoadFailure: @escaping @Sendable (Error) -> Void = { error in
             assertionFailure("nyc-streets.bin did not load: \(error)")
         },

@@ -214,25 +214,64 @@ struct ShareWalkFormTests {
         #expect(recorded == 1)
     }
 
-    /// protects=DS5's share items, in order: the picture first, as an item
-    /// source whose image is the picture shown and whose link metadata is
-    /// titled "Walk, Nov 3–5, 2026", then the text line "3 blocks, 3 new,
-    /// 0.5 miles. Nov 3–5, 2026."; fails_when=the order flips, the image is
-    /// not the one previewed, the header reads anything else, or the text
-    /// drifts; no_claim=what each destination (Messages, Mail, Photos) does
-    /// with the items, which only a device share shows.
-    @Test func shareItemsArePictureThenText() throws {
+    /// protects=DS5's share items with #177 PR 2's link, in order: the
+    /// picture first, as an item source whose image is the picture shown
+    /// and whose link metadata is titled "Walk, Nov 3–5, 2026", then the
+    /// text line "3 blocks, 3 new, 0.5 miles. Nov 3–5, 2026.", then the
+    /// walk link, which decodes back to exactly the `SharedWalk` the
+    /// picture was made from; fails_when=the order flips, the image is not
+    /// the one previewed, the header or text drifts, the link is missing,
+    /// or it decodes to anything but the picture's walk; no_claim=what each
+    /// destination (Messages, Mail, Photos) does with the items, which only
+    /// a device share shows.
+    @Test func shareItemsArePictureTextThenLink() throws {
         var form = try #require(ShareWalkForm(history: Self.walked, preset: Self.day2, today: Self.today))
         form.setTo(Self.day3)
         let image = UIImage(systemName: "square.and.arrow.up") ?? UIImage()
         let made = SharedWalkPicture(walk: form.walk, png: Data([1]), image: image)
-        let items = ShareSheetPresenter.items(for: made)
-        #expect(items.count == 2)
+        let items = try #require(ShareSheetPresenter.items(for: made))
+        #expect(items.count == 3)
         let picture = try #require(items.first as? SharedWalkImageItem)
         let sheet = UIActivityViewController(activityItems: [], applicationActivities: nil)
         #expect(picture.activityViewController(sheet, itemForActivityType: nil) as? UIImage === image)
         #expect(picture.activityViewControllerPlaceholderItem(sheet) as? UIImage === image)
         #expect(picture.activityViewControllerLinkMetadata(sheet)?.title == "Walk, Nov 3\u{2013}5, 2026")
-        #expect(items.last as? String == "3 blocks, 3 new, 0.5 miles. Nov 3\u{2013}5, 2026.")
+        #expect(items[1] as? String == "3 blocks, 3 new, 0.5 miles. Nov 3\u{2013}5, 2026.")
+        let link = try #require(items[2] as? URL)
+        #expect(link.absoluteString.hasPrefix("https://yukichikawada.github.io/BodegasNYC/walk/#1."))
+        #expect(SharedWalkLink.decode(link) == .walk(made.walk))
+    }
+
+    /// protects=#177 PR 2: the link is made from the picture's frozen walk,
+    /// not the form's current one, so a history change between the picture
+    /// and Share cannot make the link disagree with the picture (AC 14);
+    /// fails_when=the items read the form's newer walk; no_claim=the view's
+    /// own wiring of `sharing` to the shown picture (UI tests open the form).
+    @Test func theLinkComesFromThePicturesWalk() throws {
+        let form = try #require(ShareWalkForm(history: Self.walked, preset: Self.day2, today: Self.today))
+        let made = SharedWalkPicture(walk: form.walk, png: Data([1]), image: UIImage())
+        var later = form
+        let stillOpen = later.historyChanged(Self.history([(Self.day1, [1]), (Self.day2, [2, 3, 9])], version: 2))
+        #expect(stillOpen)
+        #expect(later.walk != made.walk)
+        let link = try #require(ShareSheetPresenter.items(for: made)?.last as? URL)
+        #expect(SharedWalkLink.decode(link) == .walk(made.walk))
+    }
+
+    /// protects=#177 PR 2's disabled reason: a walk under 5,000 blocks
+    /// whose link would pass 2,000 characters reads "Too many blocks to
+    /// share at once. Pick fewer days." with Share disabled, and its items
+    /// are refused (nothing shared, no link alone); fails_when=a too-long
+    /// link can be shared or reads another reason; no_claim=where the line
+    /// sits (the view).
+    @Test func aLinkPastTheCapIsTooManyBlocks() throws {
+        // 4,000 scattered ids: under the block cap, far over 2,000 characters.
+        let ids = scatteredIDs(count: 4_000, seed: 7)
+        let form = try #require(ShareWalkForm(history: Self.history([(Self.day2, ids)]), preset: Self.day2, today: Self.today))
+        #expect(form.walk.blockCount == 4_000)
+        #expect(form.link == nil)
+        #expect(form.phase == .tooManyBlocks && form.disabledReason == .tooManyBlocks && !form.canShare)
+        let made = SharedWalkPicture(walk: form.walk, png: Data([1]), image: UIImage())
+        #expect(ShareSheetPresenter.items(for: made) == nil)
     }
 }

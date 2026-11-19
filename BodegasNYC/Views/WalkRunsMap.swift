@@ -18,6 +18,11 @@ struct WalkRunsMap: View {
     @Binding var position: MapCameraPosition
     let accessibilityLabel: String
     let accessibilityValue: String
+    /// Yours in cyan breadcrumbs, or a shared walk's violet line (#177 DS1).
+    var trail: WalkedTrail.Style = .walked
+    /// The line past the run cap: "Zoom in to see your blocks.", or for a
+    /// shared walk "Zoom in to see the blocks.".
+    var overCapText = AppCopy.zoomInForBlocksTitle.copy.text
     @State private var index: WalkedRunIndex?
     @State private var display = WalkedOverlayDisplay(visible: .runs([]), lineWidth: WalkedOverlay.widthBands[0].width)
     /// The last settled camera region, for a reload's redraw and the zoom
@@ -39,7 +44,8 @@ struct WalkRunsMap: View {
                         WalkedTrail(
                             runs: runs,
                             lineWidth: display.lineWidth,
-                            isContrastIncreased: colorSchemeContrast == .increased
+                            isContrastIncreased: colorSchemeContrast == .increased,
+                            style: trail
                         )
                     }
                 }
@@ -52,7 +58,7 @@ struct WalkRunsMap: View {
         }
         .overlay(alignment: .bottom) {
             if display.visible == .overCap {
-                Text(AppCopy.zoomInForBlocksTitle.copy.text)
+                Text(overCapText)
                     .font(.subheadline)
                     .foregroundStyle(.primary)
                     .padding(12)
