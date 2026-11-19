@@ -37,7 +37,7 @@ nonisolated extension AppCopy {
                 CopyString(
                     kind: .body,
                     text: "Recording is off by default. Walk most of a block with recording on, "
-                        + "and it appears on your map. Your walks stay on this phone."
+                        + "and it appears on your map. Your walks stay on this phone unless you share one."
                 )
             case .permissionHeading: CopyString(kind: .title, text: "Recording needs location set to Always.")
             case .permissionNotDetermined:

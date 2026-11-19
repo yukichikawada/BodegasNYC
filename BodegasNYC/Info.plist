@@ -56,7 +56,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>To show bodegas near you.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
-	<string>My Bodegas can track the streets you've walked, even when the app isn't open, so you can see them highlighted on your own map. This is completely optional, off by default, and your walking history stays on this device only.</string>
+	<string>My Bodegas can track the streets you've walked, even when the app isn't open, so you can see them highlighted on your own map. This is completely optional, off by default, and your walking history stays on this device unless you choose to share a walk.</string>
 	<key>NSLocationTemporaryUsageDescriptionDictionary</key>
 	<dict>
 		<key>StreetsWalkedTracking</key>

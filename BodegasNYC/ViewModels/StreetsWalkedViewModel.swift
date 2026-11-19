@@ -204,6 +204,12 @@ final class StreetsWalkedViewModel {
         telemetry.capture(.walkStopped)
     }
 
+    /// The share sheet finished with a destination picked (#177): one
+    /// `walk_shared`, no properties. A cancel records nothing.
+    func walkShared() {
+        telemetry.capture(.walkShared)
+    }
+
     /// Re-reads Motion & Fitness; writes only on a change. The asks are in
     /// `StreetsWalkedViewModel+YourBlocks.swift`.
     func refreshMotionAuthorization() {

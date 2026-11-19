@@ -23,9 +23,9 @@ App Store: <https://apps.apple.com/us/app/my-bodegas/id6830464647> (released 202
   streets you walk, including in the background, and highlights them on your
   own map. Raw GPS fixes are map-matched on device to the city's street
   centerlines, so a block counts as walked only when most of it was. Rides
-  are filtered out using Motion & Fitness. The history never leaves the
-  phone, and a "Your Blocks" sheet shows what share of the city, and of each
-  borough, you have walked.
+  are filtered out using Motion & Fitness. The history stays on your phone
+  unless you choose to share a walk, and a "Your Blocks" sheet shows what
+  share of the city, and of each borough, you have walked.
 - **Sign in with Apple** for contributing; browsing works signed out.
 - Onboarding, a learn-by-doing first-run tutorial, custom map-to-detail
   transitions, and empty states with some personality. The design system is

@@ -5,7 +5,7 @@ permalink: /privacy/
 
 # My Bodegas Privacy Policy
 
-_Last updated: November 1, 2026_
+_Last updated: November 19, 2026_
 
 My Bodegas is a free iOS app for finding and sharing bodegas in New York
 City. It is made by one person, has no ads, and does not sell personal data.
@@ -20,9 +20,10 @@ query and are not stored.
 
 **Streets Walked (optional).** If you turn this feature on, the app records
 the streets you walk, including while it is in the background, so it can
-highlight them on your own map. This history is kept only on your device and
-is never uploaded. Turning the feature off stops recording; deleting the app
-deletes the history. The feature is off by default.
+highlight them on your own map. This history is kept on your device and is
+never uploaded to us. Nothing leaves your phone unless you share a walk
+yourself. Turning the feature off stops recording; deleting the app deletes
+the history. The feature is off by default.
 
 **Motion (optional).** With your permission the app uses motion activity to
 tell walking from riding so that cab and subway trips are not counted as
@@ -39,6 +40,14 @@ problems you flag are stored on our server and linked to your account.
 Photos are resized and re-encoded before upload, which removes location and
 camera metadata. Posted bodegas, photos and reviews are public to other users
 of the app.
+
+## Sharing a walk (optional)
+
+You can share a picture of the streets you walked on days you choose, with
+the dates, block counts and distance. You pick who gets it through your
+phone's share sheet. It is not sent to us and we never see it. A shared
+picture can show where your walks start and end, anyone who has it can pass
+it on, and it cannot be recalled once sent.
 
 ## Usage and crash reports
 
@@ -79,7 +88,7 @@ Deleting your account removes your email, user identifier, photos, reviews
 and flags from our server for good. Bodegas you added stay in the shared map
 without any link to you. Your Streets Walked history is kept only on your
 device and is not touched; clear it from the Streets Walked menu or by
-deleting the app.
+deleting the app. Pictures you already shared are not affected.
 
 If you can't use the app, email the address below from the account you
 signed in with and we will delete the account for you.

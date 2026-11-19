@@ -5,31 +5,24 @@ import SwiftUI
 /// bottom bar on the opaque ground, "14 blocks" with "9 new" in `textMuted`
 /// over "1.4 miles". Title "Nov 3, 2025", inline.
 ///
-/// The map is level and north-up in the app's muted style, fitted to the
-/// day's runs with 15% padding and a 300 m floor (the detail preview's
-/// minimum), pan and zoom only, no pins, drawing the shared trail
-/// (`WalkedTrail`) at the main map's width bands. Past the run cap it draws
-/// nothing and says "Zoom in to see your blocks.". It keeps a 200 pt
-/// minimum height; when the bar leaves less than that (landscape, large
-/// type) the page scrolls. VoiceOver reads the map as one element, "Map of
-/// this day's walk.", with the counts as its value.
+/// The map is `WalkRunsMap` (#177: level, north-up, fitted to the day's
+/// runs, the shared trail, the run cap, its VoiceOver actions). It keeps a
+/// 200 pt minimum height; when the bar leaves less than that (landscape,
+/// large type) the page scrolls. VoiceOver reads the map as one element,
+/// "Map of this day's walk.", with the counts as its value.
+///
+/// Share a Walk (#177 DS4) sits trailing in the bar, opening the form on
+/// this day; it hides while the history has no walked day.
 struct WalkDayView: View {
     let day: WalkedDayKey
     let viewModel: StreetsWalkedViewModel
-    @State private var index: WalkedRunIndex?
+    @State private var runs: [WalkedRun]?
     @State private var position: MapCameraPosition = .automatic
-    @State private var display = WalkedOverlayDisplay(visible: .runs([]), lineWidth: WalkedOverlay.widthBands[0].width)
     @State private var barHeight: CGFloat = 0
-    /// The last settled camera region, for a reload's redraw.
-    @State private var settledRegion: MKCoordinateRegion?
-    @Environment(\.colorSchemeContrast) private var colorSchemeContrast
+    @State private var isSharing = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     static let minimumMapHeight: CGFloat = 200
-    /// The detail preview's camera floor (#150 DS1), as the fitted span.
-    static let minimumSpanMeters = BodegaDetailMapPreview.cameraDistance
-    /// 15% of the runs' extent on each side.
-    static let padding = 0.15
 
     var body: some View {
         let summary = viewModel.walksHistory?.summary(for: day)
@@ -38,8 +31,13 @@ struct WalkDayView: View {
             let roomForMap = geometry.size.height - barHeight
             ScrollView {
                 VStack(spacing: 0) {
-                    map(summary)
-                        .frame(height: max(Self.minimumMapHeight, roomForMap))
+                    WalkRunsMap(
+                        runs: runs,
+                        position: $position,
+                        accessibilityLabel: AppCopy.YourWalks.dayMapLabel.copy.text,
+                        accessibilityValue: summary.map { AppCopy.walkDaySummary($0).text } ?? ""
+                    )
+                    .frame(height: max(Self.minimumMapHeight, roomForMap))
                     summaryBar(summary, isEstimate: isEstimate)
                         .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
                 }
@@ -50,18 +48,22 @@ struct WalkDayView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle(AppCopy.walkDayTitle(day).text)
         .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if summary?.isWalked == true {
+                ToolbarItem(placement: .topBarTrailing) {
+                    ShareWalkEntryButton { isSharing = true }
+                }
+            }
+        }
+        .sheet(isPresented: $isSharing) {
+            ShareWalkSheet(viewModel: viewModel, preset: day)
+        }
         // Keyed on the history's version too, so a pass that adds to this
         // day while it is open redraws the trail with the counts. Only the
-        // first load fits the camera; a reload keeps where the person panned.
+        // first load fits the camera (`WalkRunsMap`); a reload keeps where
+        // the person panned.
         .task(id: RunsKey(day: day, version: viewModel.walksHistory?.version)) {
-            let runs = await viewModel.walkDayRuns(day)
-            let reloaded = WalkedRunIndex(runs: runs)
-            if index == nil {
-                position = .region(Self.fittedRegion(runs))
-            } else if let settledRegion {
-                settle(index: reloaded, region: settledRegion)
-            }
-            index = reloaded
+            runs = await viewModel.walkDayRuns(day)
         }
     }
 
@@ -69,41 +71,6 @@ struct WalkDayView: View {
     private struct RunsKey: Hashable {
         let day: WalkedDayKey
         let version: Int?
-    }
-
-    private func map(_ summary: WalkedDaySummary?) -> some View {
-        ZStack {
-            Color(.secondarySystemBackground)
-            if let index {
-                Map(position: $position, interactionModes: [.pan, .zoom]) {
-                    if case .runs(let runs) = display.visible {
-                        WalkedTrail(
-                            runs: runs,
-                            lineWidth: display.lineWidth,
-                            isContrastIncreased: colorSchemeContrast == .increased
-                        )
-                    }
-                }
-                .mapStyle(POIFilter.wayfindingOnly.mapStyle(elevation: .flat))
-                .onMapCameraChange(frequency: .onEnd) { context in
-                    settledRegion = context.region
-                    settle(index: index, region: context.region)
-                }
-            }
-        }
-        .overlay(alignment: .bottom) {
-            if display.visible == .overCap {
-                Text(AppCopy.zoomInForBlocksTitle.copy.text)
-                    .font(.subheadline)
-                    .foregroundStyle(.primary)
-                    .padding(12)
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-                    .padding(16)
-            }
-        }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(AppCopy.YourWalks.dayMapLabel.copy.text)
-        .accessibilityValue(summary.map { AppCopy.walkDaySummary($0).text } ?? "")
     }
 
     /// Two lines (DS4), stacking at accessibility sizes, and the estimate
@@ -139,46 +106,20 @@ struct WalkDayView: View {
         .padding(16)
         .background(Color(.systemGroupedBackground))
     }
+}
 
-    /// Width band and run cap for the settled camera, as the main map does.
-    private func settle(index: WalkedRunIndex, region: MKCoordinateRegion) {
-        var next = display
-        let changed = next.refresh(
-            index: index,
-            showsOverlay: true,
-            region: WalkedRegion(region),
-            visibleHeightMeters: region.span.latitudeDelta * StreetGrid.metersPerDegreeLatitude,
-            isCameraMoving: false
-        )
-        if changed { display = next }
-    }
+/// The Share a Walk entry (#177 DS4): `square.and.arrow.up` in the label
+/// colour on the bar's glass, "Share a Walk" with the hint "Picks days to
+/// send." for VoiceOver.
+struct ShareWalkEntryButton: View {
+    let action: () -> Void
 
-    /// The region around every run, padded 15% a side, never under 300 m
-    /// across either way. New York's centre when there are no runs.
-    static func fittedRegion(_ runs: [WalkedRun]) -> MKCoordinateRegion {
-        guard let first = runs.first else { return MapScreenView.newYorkCityDefault }
-        var minLatitude = first.minLatitude, maxLatitude = first.maxLatitude
-        var minLongitude = first.minLongitude, maxLongitude = first.maxLongitude
-        for run in runs.dropFirst() {
-            minLatitude = min(minLatitude, run.minLatitude)
-            maxLatitude = max(maxLatitude, run.maxLatitude)
-            minLongitude = min(minLongitude, run.minLongitude)
-            maxLongitude = max(maxLongitude, run.maxLongitude)
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "square.and.arrow.up")
         }
-        let center = CLLocationCoordinate2D(
-            latitude: (minLatitude + maxLatitude) / 2,
-            longitude: (minLongitude + maxLongitude) / 2
-        )
-        let metersPerDegreeLongitude = cos(center.latitude * .pi / 180) * StreetGrid.metersPerDegreeLongitudeAtEquator
-        let scale = 1 + 2 * padding
-        let floorLatitude = minimumSpanMeters / StreetGrid.metersPerDegreeLatitude
-        let floorLongitude = minimumSpanMeters / metersPerDegreeLongitude
-        return MKCoordinateRegion(
-            center: center,
-            span: MKCoordinateSpan(
-                latitudeDelta: max((maxLatitude - minLatitude) * scale, floorLatitude),
-                longitudeDelta: max((maxLongitude - minLongitude) * scale, floorLongitude)
-            )
-        )
+        .accessibilityLabel(AppCopy.ShareWalk.title.copy.text)
+        .accessibilityHint(AppCopy.ShareWalk.entryHint.copy.text)
+        .accessibilityIdentifier("shareWalk.entry")
     }
 }

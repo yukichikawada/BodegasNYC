@@ -36,7 +36,8 @@ struct TelemetryEventTests {
         .signedOut,
         .accountDeleted,
         .directionsOpened,
-        .showOnMap(fromMap: false)
+        .showOnMap(fromMap: false),
+        .walkShared
     ]
 
     private static func expected(for event: TelemetryEvent) -> (name: String, keys: Set<String>) {
@@ -59,19 +60,21 @@ struct TelemetryEventTests {
         case .accountDeleted: ("account_deleted", [])
         case .directionsOpened: ("directions_opened", [])
         case .showOnMap: ("show_on_map", ["from_map"])
+        case .walkShared: ("walk_shared", [])
         }
     }
 
-    /// protects=the declared contract: 18 events (no `telemetry_disabled`,
-    /// DS3; #150 R4 added `directions_opened` and `show_on_map`), each with
+    /// protects=the declared contract: 19 events (no `telemetry_disabled`,
+    /// DS3; #150 R4 added `directions_opened` and `show_on_map`, #177
+    /// `walk_shared`), each with
     /// its table name and exactly its table keys, and no `bodega_id` on the
     /// authorship events (E4); fails_when=a case is renamed, gains or loses a
-    /// key, or a 19th event appears without a row;
+    /// key, or a 20th event appears without a row;
     /// no_claim=what the SDK adds on its own (lifecycle events, default
     /// properties), which only the live dashboard shows.
     @Test func everyEventMatchesTheTable() {
-        #expect(Self.fixtures.count == 18)
-        #expect(Set(Self.fixtures.map(\.name)).count == 18)
+        #expect(Self.fixtures.count == 19)
+        #expect(Set(Self.fixtures.map(\.name)).count == 19)
         for event in Self.fixtures {
             let expected = Self.expected(for: event)
             #expect(event.name == expected.name)

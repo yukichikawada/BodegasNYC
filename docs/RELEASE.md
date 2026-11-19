@@ -93,7 +93,9 @@ Status as of 2026-11-03 is in brackets.
       > that records the streets the user walks so they can see them
       > highlighted on their own map. It is the only thing that asks for
       > Always location and the background `location` mode. The walk history
-      > stays on the device (SwiftData) and is never uploaded. To try it: on
+      > stays on the device and is never uploaded. A user can share a
+      > picture of a walk through the system share sheet; nothing is sent to
+      > our servers. To try it: on
       > the map, tap the walking-figure "Streets Walked" button in the top bar
       > → Start Recording, grant Always, walk or simulate a route (Features →
       > Location → Freeway Drive on a simulator), then reopen the app.

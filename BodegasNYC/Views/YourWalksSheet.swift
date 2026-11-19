@@ -29,6 +29,8 @@ struct YourWalksSheet: View {
     @State private var tab = Tab.calendar
     /// Kept across tab switches while the sheet is open; opens on 1 month.
     @State private var range = WalkProgressRange.initial
+    /// The Share a Walk form is up (#177).
+    @State private var isSharing = false
 
     enum Tab: Hashable { case calendar, progress }
 
@@ -54,10 +56,23 @@ struct YourWalksSheet: View {
                     ToolbarItem(placement: .confirmationAction) {
                         Button(AppCopy.doneAction.copy.text) { dismiss() }
                     }
+                    // Share a Walk (#177 DS4), on both tabs; hidden while
+                    // the history loads or has no walked day.
+                    if content.phase == .ready, !content.walkedDays.isEmpty {
+                        ToolbarItem(placement: .topBarLeading) {
+                            ShareWalkEntryButton { isSharing = true }
+                        }
+                    }
                 }
                 .navigationDestination(for: WalkedDayKey.self) { day in
                     WalkDayView(day: day, viewModel: viewModel)
                 }
+        }
+        .sheet(isPresented: $isSharing) {
+            // Opened from Your Walks: the most recent walked day (eng E4).
+            if let latest = viewModel.walksHistory?.walkedDays.last?.day {
+                ShareWalkSheet(viewModel: viewModel, preset: latest)
+            }
         }
         .presentationDetents([.large])
         .presentationBackground(Color(.systemGroupedBackground))

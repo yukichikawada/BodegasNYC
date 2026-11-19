@@ -122,6 +122,8 @@ struct AppCopyVoiceTests {
         + AppCopy.YourWalks.allCases.map(\.copy)
         + yourWalksCopy
         + walkProgressCopy
+        + AppCopy.ShareWalk.allCases.map(\.copy)
+        + sharedWalkCopy
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),
@@ -189,6 +191,42 @@ struct AppCopyVoiceTests {
         + styles.map { AppCopy.walkChartAxisLabel(today, style: $0) }
     }()
 
+    /// Share a Walk's walks (#177): one day, a week, across a month and
+    /// across a year; zero, one and many blocks, new or not, estimated or not.
+    static let sharedWalks: [SharedWalk] = [
+        (20261103, 20261103, 1, 0, 60, false),
+        (20261103, 20261109, 38, 6, 3_380, true),
+        (20261128, 20261202, 1_204, 1_204, 160_934, false),
+        (20261230, 20270102, 5_000, 1, 1_609, true)
+    ].map { first, last, blocks, new, meters, estimate in
+        SharedWalk(
+            firstDay: WalkedDayKey(value: first),
+            lastDay: WalkedDayKey(value: last),
+            blockIDs: Set(1 ... UInt32(blocks)),
+            meters: meters,
+            newCount: new,
+            isEstimate: estimate
+        )
+    }
+
+    /// Share a Walk's templates (#177 DS7) that hold every rule: the text
+    /// item and the picture's VoiceOver value over every range shape, and
+    /// the one-day and same-month dates and titles (four words or fewer).
+    static let sharedWalkCopy: [CopyString] = sharedWalks.flatMap { walk in
+        [AppCopy.sharedWalkText(walk), AppCopy.sharedWalkPictureValue(walk)]
+    } + sharedWalks.prefix(2).flatMap { walk in
+        [AppCopy.sharedWalkDates(first: walk.firstDay, last: walk.lastDay), AppCopy.sharedWalkLinkTitle(walk)]
+    }
+
+    /// The cross-month and cross-year dates and titles ("Nov 28–Dec 2,
+    /// 2026", "Walk, Dec 30, 2026–Jan 2, 2027"): data the design review set
+    /// as `.value` (DS7) that runs to five or six words, past a value's
+    /// four. Held to every other rule, and to the value shape's other
+    /// parts, in `sharedWalkDatesPassEveryRuleButLength`.
+    static let sharedWalkDateCopy: [CopyString] = sharedWalks.suffix(2).flatMap { walk in
+        [AppCopy.sharedWalkDates(first: walk.firstDay, last: walk.lastDay), AppCopy.sharedWalkLinkTitle(walk)]
+    }
+
     /// (walked, total) for Your Blocks (#108 PR 2): zero, one, the "<1%"
     /// band, a whole percent, grouped thousands, a full borough.
     static let yourBlocksFixtures: [(Int, Int)] = [
@@ -218,6 +256,72 @@ struct AppCopyVoiceTests {
         for copy in Self.shippedCopy {
             #expect(rule.passes(copy), "\(rule) fails for \(copy.kind) \"\(copy.text)\"")
         }
+    }
+
+    /// protects=#177 DS7's long date ranges keep the voice rules (no
+    /// exclamation, emoji, "we", app name or em dash; no period, no
+    /// lowercase start) though they pass a value's four words, and nothing
+    /// else gets that allowance; fails_when=a range gains a period, an em
+    /// dash or the app's name, or the list grows past the two long shapes;
+    /// no_claim=readability at that length (the design review chose it).
+    @Test func sharedWalkDatesPassEveryRuleButLength() {
+        #expect(Self.sharedWalkDateCopy.count == 4)
+        for copy in Self.sharedWalkDateCopy {
+            for rule in VoiceRule.allCases where rule != .valueShape {
+                #expect(rule.passes(copy), "\(rule) fails for \"\(copy.text)\"")
+            }
+            #expect(copy.kind == .value)
+            #expect(copy.text.last?.isNumber == true && copy.text.first?.isLowercase == false)
+            #expect(copy.text.split(whereSeparator: \.isWhitespace).count <= 6)
+        }
+    }
+
+    /// protects=Share a Walk's fixed strings are the design review's copy
+    /// table (DS7, PR 1's consequence line) with their kinds; fails_when=a
+    /// string drifts, the PR 2 wording (a link) ships in PR 1, or a kind
+    /// changes; no_claim=where each is shown (the views, UI tests).
+    @Test func shareWalkCopyMatchesTheDesignTable() {
+        typealias Share = AppCopy.ShareWalk
+        let table: [(Share, CopyString.Kind, String)] = [
+            (.title, .label, "Share a Walk"),
+            (.entryHint, .body, "Picks days to send."),
+            (.fromLabel, .label, "From"),
+            (.toLabel, .label, "To"),
+            (.shareAction, .label, "Share"),
+            (.definition, .body, "Blocks count once across these days. Miles include repeats."),
+            (.consequenceWhatGoes, .body,
+             "This sends a picture of the blocks you walked on these days, with the dates, counts and distance. "
+                + "No times of day."),
+            (.consequenceStartAndEnd, .body, "The map can show where your walks start and end."),
+            (.consequencePassedOn, .body, "Anyone who gets it can pass it on. It can't be taken back."),
+            (.noBlocks, .body, "No blocks counted on these days."),
+            (.tooManyBlocks, .body, "Too many blocks to share at once. Pick fewer days."),
+            (.makingPicture, .value, "Making the picture"),
+            (.pictureFailed, .body, "The picture didn't come out. Try again."),
+            (.estimate, .body, "Some of this is an estimate. Rides may be counted."),
+            (.pictureLabel, .body, "Map of the walk you're sharing."),
+            (.zoomIn, .label, "Zoom In"),
+            (.zoomOut, .label, "Zoom Out"),
+            (.showWholeWalk, .label, "Show Whole Walk")
+        ]
+        #expect(table.count == Share.allCases.count)
+        for (copy, kind, text) in table {
+            #expect(copy.copy == CopyString(kind: kind, text: text))
+        }
+        #expect(Share.makingPicture.withTrailingEllipsis == "Making the picture\u{2026}")
+    }
+
+    /// protects=#177 PR 1's privacy wording: Streets Walked's intro and Your
+    /// Blocks' footer carry the sharing exception, and the account line is
+    /// unchanged; fails_when=either still promises walks never leave, or the
+    /// account line changes; no_claim=the docs (PrivacyWordingTests).
+    @Test func walksStayUnlessShared() {
+        #expect(AppCopy.StreetsWalkedIntro.whatItDoes.copy.text.hasSuffix(
+            "Your walks stay on this phone unless you share one."
+        ))
+        #expect(AppCopy.YourBlocks.footer.copy.text
+            == "A block counts once you've walked most of it. Your walks stay on this phone unless you share one.")
+        #expect(AppCopy.Account.consequences.copy.text.hasSuffix("Walked blocks stay on this phone."))
     }
 
     @Test func shippedCopyIsNotEmpty() {
