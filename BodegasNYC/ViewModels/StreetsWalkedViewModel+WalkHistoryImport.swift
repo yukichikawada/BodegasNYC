@@ -177,8 +177,11 @@ extension StreetsWalkedViewModel {
         }
         historyTransferState = .idle
         switch outcome {
-        case .committed(let inserted, _):
-            if inserted > 0 { telemetry.capture(.walkHistoryImported) }
+        case .committed(0, _):
+            // Every fix reached the store meanwhile: nothing was added (D6).
+            setImportPhase(.nothingNew(hasSkipped: preview.skippedFixCount > 0), for: request)
+        case .committed:
+            telemetry.capture(.walkHistoryImported)
             importDidSave()
             setImportPhase(.counting, for: request)
             await refreshWalkedBlocks()

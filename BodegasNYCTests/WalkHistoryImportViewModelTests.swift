@@ -257,6 +257,30 @@ struct WalkHistoryImportViewModelTests {
         #expect(try ModelContext(harness.container).fetchCount(FetchDescriptor<WalkedPoint>()) == Self.walkFixes.count)
     }
 
+    /// protects=QA item 4 and D6: when every fix of the preview reached the
+    /// store between the preview and Add Walks, the commit adds nothing and
+    /// the sheet shows "Nothing new in this file." rather than "Your walks
+    /// are in.", with no `walk_history_imported` and no recount;
+    /// fails_when=a commit of zero fixes claims success or records the
+    /// event; no_claim=how the fixes arrived (here, saved directly).
+    @Test func aCommitThatAddsNothingShowsNothingNew() async throws {
+        let harness = try Self.makeHarness()
+        defer { try? FileManager.default.removeItem(at: harness.directory) }
+        let viewModel = harness.viewModel
+        viewModel.openHistoryFile(try Self.write(Self.walkFixes, in: harness.directory), owner: .main, now: Self.now)
+        #expect(await Self.waitUntil { Self.isPreview(viewModel.historyImport?.phase) })
+        let context = harness.container.mainContext
+        for fix in Self.walkFixes {
+            context.insert(WalkedPoint(id: fix.id, latitude: fix.latitude, longitude: fix.longitude, recordedAt: fix.recordedAt))
+        }
+        try context.save()
+        await viewModel.commitHistoryImport()
+        #expect(viewModel.historyImport?.phase == .nothingNew(hasSkipped: false))
+        #expect(viewModel.historyTransferState == .idle)
+        #expect(harness.sink.events.isEmpty)
+        #expect(try ModelContext(harness.container).fetchCount(FetchDescriptor<WalkedPoint>()) == Self.walkFixes.count)
+    }
+
     /// protects=Cancel before the save: closing the sheet drops the held
     /// fixes and frees the menu; fails_when=a cancelled preview can still
     /// be committed, or the menu stays disabled; no_claim=swipe-down (the
