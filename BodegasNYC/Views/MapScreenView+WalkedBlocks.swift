@@ -58,8 +58,10 @@ extension MapScreenView {
     /// Recomputes what the walked layer draws for the settled region; a
     /// no-op while the camera moves (`WalkedOverlayDisplay.refresh`), so the
     /// Map's content is untouched mid-gesture, and no state write at all
-    /// when nothing it draws changed. Culling reads the spatial index, so a
-    /// settle costs what is in view, not the whole history. The write is
+    /// when nothing it draws changed. A history under the band's run cap
+    /// draws whole, so a pan settle changes nothing (#119); a larger one is
+    /// culled through the spatial index, so a settle costs what is in view,
+    /// not the whole history. The write is
     /// plain, never in an animated transaction: MapKit applies `MapPolyline`
     /// changes within a frame either way (design D10, #113).
     func refreshWalkedOverlay(_ proxy: MapProxy) {
