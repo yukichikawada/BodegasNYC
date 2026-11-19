@@ -19,12 +19,16 @@ extension MapScreenView {
                 dropState: addCompletion?.dropState ?? .none,
                 hasFirstAddCard: addCompletion?.firstAddCard != nil
             ),
-            isOwnSheetUp: streetsSheet != nil || showingClearConfirmation || historyExport.isPresenting,
+            isOwnSheetUp: streetsSheet != nil || showingClearConfirmation || historyExport.isPresenting
+                || historyImportUI.isPicking,
             isAwaitingLocationPrompt: locationPermissionClient.hasPendingAuthorizationRequest,
             isCameraMoving: isCameraMoving,
             recordingState: streetsWalkedViewModel.recordingState,
             hasHistory: streetsWalkedViewModel.hasHistory,
-            isSharedWalkPending: sharedWalkInbox?.pending != nil
+            isSharedWalkPending: sharedWalkInbox?.pending != nil,
+            // An opened walk history file outranks the intro (#180 D8).
+            isHistoryFilePending: sharedWalkInbox?.pendingHistoryFile != nil
+                || streetsWalkedViewModel.historyImport != nil
         )
     }
 

@@ -33,11 +33,15 @@ enum StreetsWalkedIntro {
         /// A shared walk is waiting or on screen (#177): it presents first,
         /// and the delay restarts once its sheet closes.
         var isSharedWalkPending = false
+        /// A walk history file is waiting or importing (#180 design D8): the
+        /// import sheet outranks the intro.
+        var isHistoryFilePending = false
     }
 
     /// The map is quiet and the person has never met the feature.
     static func shouldOffer(_ inputs: Inputs) -> Bool {
-        !inputs.hasSeenIntro && !inputs.isSharedWalkPending && inputs.isForeground && inputs.isSceneActive
+        !inputs.hasSeenIntro && !inputs.isSharedWalkPending && !inputs.isHistoryFilePending
+            && inputs.isForeground && inputs.isSceneActive
             && !inputs.isPlacingBodega
             && !inputs.isFirstAddInProgress && !inputs.isOwnSheetUp && !inputs.isAwaitingLocationPrompt
             && !inputs.isCameraMoving && inputs.recordingState == .off && !inputs.hasHistory

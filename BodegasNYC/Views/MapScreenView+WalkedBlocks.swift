@@ -38,17 +38,18 @@ extension MapScreenView {
         // the intro's gate, so the two never compete for one presentation
         // (#126 eng).
         streetsWalkedIntro(
-            historyFileDialogs(content)
+            historyImportHooks(historyFileDialogs(content))
                 .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
                 .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
                 .onChange(of: scenePhase, initial: true) { _, phase in
                     streetsWalkedViewModel?.sceneActivityChanged(isActive: phase == .active, scene: streetsSceneToken)
                 }
-                .sheet(item: $streetsSheet) { sheet in
+                .sheet(item: $streetsSheet, onDismiss: streetsSheetDidDismiss) { sheet in
                     if let streetsWalkedViewModel {
                         switch sheet {
                         case .yourBlocks: YourBlocksSheet(viewModel: streetsWalkedViewModel)
                         case .yourWalks: YourWalksSheet(viewModel: streetsWalkedViewModel)
+                        case .importHistory: historyImportSheet(streetsWalkedViewModel)
                         }
                     }
                 }
@@ -87,8 +88,8 @@ extension MapScreenView {
 
     /// The Streets Walked toolbar menu (design D5): Your Blocks, Your Walks
     /// (#170) and How Streets Walked Works (#126), Show on Map, Start/Stop
-    /// Recording, Export History… (#180), Clear History…, each in its own
-    /// section. VoiceOver returns here after the intro closes (#126 design D8).
+    /// Recording, Export History… and Import History… (#180), Clear
+    /// History…, each in its own section. VoiceOver returns here after the intro closes (#126 design D8).
     @ToolbarContentBuilder
     var streetsWalkedToolbarItem: some ToolbarContent {
         if let streetsWalkedViewModel {
@@ -200,10 +201,12 @@ extension MapScreenView {
 }
 
 /// The Streets Walked menu's sheets (#170): one presentation, so Your Blocks
-/// and Your Walks never compete, and the intro's gate reads one flag.
+/// and Your Walks never compete, and the intro's gate reads one flag. An
+/// import (#180 design D1) takes the same slot, replacing either (D8).
 enum StreetsSheet: Identifiable {
     case yourBlocks
     case yourWalks
+    case importHistory
 
     var id: Self { self }
 }

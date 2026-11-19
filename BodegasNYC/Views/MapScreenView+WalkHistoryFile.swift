@@ -28,14 +28,15 @@ struct HistoryExportPresentation {
 // `MapScreenView.swift`, which is at its length limit.
 extension MapScreenView {
     /// The menu's walk history section, directly above Clear History
-    /// (design D11): no icon, the label with an ellipsis, disabled with no
-    /// history and while a transfer or a Clear runs. PR 2 adds Import
-    /// History under it.
+    /// (design D11): no icons, the labels with an ellipsis. Export History
+    /// is disabled with no history and while a transfer or a Clear runs;
+    /// Import History (`MapScreenView+WalkHistoryImport.swift`) under it.
     func historyFileSection(_ viewModel: StreetsWalkedViewModel) -> some View {
         Section {
             Button(AppCopy.HistoryFile.exportMenuItem.menuItemWithEllipsis) { requestHistoryExport() }
                 .accessibilityHint(AppCopy.HistoryFile.exportMenuHint.copy.text)
                 .disabled(!viewModel.canExportHistory)
+            historyImportMenuItem(viewModel)
         }
     }
 

@@ -105,6 +105,9 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
     /// its completion handler only when `completed` is true. No properties:
     /// no count, date, size or destination.
     case walkHistoryExported
+    /// An import saved at least one fix (#180 PR 2). No properties: no
+    /// count, date, size or source.
+    case walkHistoryImported
 
     var name: String {
         switch self {
@@ -129,6 +132,7 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
         case .walkShared: "walk_shared"
         case .sharedWalkOpened: "shared_walk_opened"
         case .walkHistoryExported: "walk_history_exported"
+        case .walkHistoryImported: "walk_history_imported"
         }
     }
 
@@ -155,7 +159,8 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
         case .sharedWalkOpened(let result):
             ["result": .string(result.rawValue)]
         case .locateMeTapped, .duplicateChosen, .reviewAdded, .walkStarted, .walkStopped,
-             .signedIn, .signedOut, .accountDeleted, .directionsOpened, .walkShared, .walkHistoryExported:
+             .signedIn, .signedOut, .accountDeleted, .directionsOpened, .walkShared, .walkHistoryExported,
+             .walkHistoryImported:
             [:]
         }
     }

@@ -39,7 +39,8 @@ struct TelemetryEventTests {
         .showOnMap(fromMap: false),
         .walkShared,
         .sharedWalkOpened(result: .needsUpdate),
-        .walkHistoryExported
+        .walkHistoryExported,
+        .walkHistoryImported
     ]
 
     private static func expected(for event: TelemetryEvent) -> (name: String, keys: Set<String>) {
@@ -65,6 +66,7 @@ struct TelemetryEventTests {
         case .walkShared: ("walk_shared", [])
         case .sharedWalkOpened: ("shared_walk_opened", ["result"])
         case .walkHistoryExported: ("walk_history_exported", [])
+        case .walkHistoryImported: ("walk_history_imported", [])
         }
     }
 
@@ -73,12 +75,12 @@ struct TelemetryEventTests {
     /// `walk_shared` and `shared_walk_opened`, #180 `walk_history_exported`), each with
     /// its table name and exactly its table keys, and no `bodega_id` on the
     /// authorship events (E4); fails_when=a case is renamed, gains or loses a
-    /// key, or a 22nd event appears without a row;
+    /// key, or a 23rd event appears without a row;
     /// no_claim=what the SDK adds on its own (lifecycle events, default
     /// properties), which only the live dashboard shows.
     @Test func everyEventMatchesTheTable() {
-        #expect(Self.fixtures.count == 21)
-        #expect(Set(Self.fixtures.map(\.name)).count == 21)
+        #expect(Self.fixtures.count == 22)
+        #expect(Set(Self.fixtures.map(\.name)).count == 22)
         for event in Self.fixtures {
             let expected = Self.expected(for: event)
             #expect(event.name == expected.name)

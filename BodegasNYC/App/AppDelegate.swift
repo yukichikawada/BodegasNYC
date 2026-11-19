@@ -32,8 +32,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         telemetry = Telemetry.live()
+        // Walk history files left in the Inbox by an earlier run (#180 eng
+        // A5); a file being delivered now is younger than the grace.
+        Task.detached { WalkHistoryTransfer.sweepInbox() }
         #if DEBUG
         UITestFixtures.openLaunchURL(in: sharedWalkInbox)
+        UITestFixtures.openImportFixture(in: sharedWalkInbox)
         #endif
         setUpStreetsWalked(
             container: Self.makeStreetsWalkedContainer(),
@@ -91,11 +95,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     }
 
     /// The on-disk store, except in a DEBUG build launched with
-    /// `-UITestFixtures -UITestWalkedBlocks`, where it is an in-memory store
-    /// holding the fixture walk (#108 PR 2).
+    /// `-UITestFixtures -UITestWalkedBlocks` (or `-UITestWalkedDays`), where
+    /// it is an in-memory store holding the fixture walk (#108 PR 2), or with
+    /// `-UITestImportFixture`, an empty in-memory one (#180 PR 2).
     private static func makeStreetsWalkedContainer() -> ModelContainer? {
         #if DEBUG
-        if UITestFixtures.seedsWalkedBlocks || UITestFixtures.seedsWalkedDays {
+        if UITestFixtures.seedsWalkedBlocks || UITestFixtures.seedsWalkedDays || UITestFixtures.importsFixtureFile {
             return UITestFixtures.makeWalkedBlocksContainer()
         }
         #endif

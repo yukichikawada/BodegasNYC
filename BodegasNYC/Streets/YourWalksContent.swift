@@ -37,7 +37,7 @@ struct WalkMonth: Equatable, Identifiable {
     var walkedDays: [WalkCalendarDay] { days.filter(\.isWalked) }
     var walkedDayCount: Int { walkedDays.count }
     var newBlockCount: Int { walkedDays.reduce(0) { $0 + ($1.summary?.newCount ?? 0) } }
-    /// "Older days are estimates." goes under this month (DS5).
+    /// "Some days are estimates." goes under this month (DS5, #180 DS5).
     var hasEstimate: Bool { walkedDays.contains(where: \.isEstimate) }
     /// "8 days", "24 new blocks"; none for a month without walks.
     var summaryParts: [String] {
