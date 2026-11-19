@@ -17,7 +17,8 @@ nonisolated enum TelemetryValue: Equatable, Sendable {
     }
 }
 
-/// The app's only named events (16 after design DS3, 18 with #150's two). The SDK adds its own
+/// The app's only named events (16 after design DS3, 18 with #150's two, 19 with #177's
+/// `walk_shared`). The SDK adds its own
 /// lifecycle events and default properties; nothing else leaves the app.
 /// `bodega_id` (the public row UUID) appears on `bodega_opened` only: the
 /// authorship events carry no id, so no vendor can tie an account to what
@@ -93,6 +94,10 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
     /// The detail's Show on Map or its map preview (#150 R4): whether the
     /// detail had been opened from a map pin.
     case showOnMap(fromMap: Bool)
+    /// The share sheet completed a Share a Walk (#177): fired from its
+    /// completion handler only when `completed` is true. No properties: no
+    /// count, date, block or destination.
+    case walkShared
 
     var name: String {
         switch self {
@@ -114,6 +119,7 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
         case .accountDeleted: "account_deleted"
         case .directionsOpened: "directions_opened"
         case .showOnMap: "show_on_map"
+        case .walkShared: "walk_shared"
         }
     }
 
@@ -138,7 +144,7 @@ nonisolated enum TelemetryEvent: Equatable, Sendable {
         case .showOnMap(let fromMap):
             ["from_map": .bool(fromMap)]
         case .locateMeTapped, .duplicateChosen, .reviewAdded, .walkStarted, .walkStopped,
-             .signedIn, .signedOut, .accountDeleted, .directionsOpened:
+             .signedIn, .signedOut, .accountDeleted, .directionsOpened, .walkShared:
             [:]
         }
     }

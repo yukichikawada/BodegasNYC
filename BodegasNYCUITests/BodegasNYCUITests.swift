@@ -484,6 +484,115 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(yesterday.waitForNonExistence(timeout: 5), "Done left the sheet up")
     }
 
+    /// A walk day (`yyyymmdd`) as the Share a Walk picture's VoiceOver value starts: "November 17, 2026".
+    private static func spokenDay(_ day: Int) -> String {
+        let months = DateFormatter()
+        months.locale = Locale(identifier: "en_US")
+        return "\(months.monthSymbols[day / 100 % 100 - 1]) \(day % 100), \(day / 10_000)"
+    }
+
+    /// Streets Walked → Your Walks, on the `-UITestWalkedDays` fixture, waiting for yesterday's walked day.
+    @MainActor
+    private func openYourWalks(_ app: XCUIApplication) -> XCUIElement {
+        let menu = app.buttons["Streets Walked"].firstMatch
+        XCTAssertTrue(menu.waitForExistence(timeout: 20), "Streets Walked menu never appeared")
+        menu.tap()
+        let yourWalks = app.buttons["Your Walks"].firstMatch
+        XCTAssertTrue(yourWalks.waitForExistence(timeout: 5), "the menu has no Your Walks")
+        yourWalks.tap()
+        let yesterday = app.buttons["yourWalks.day.\(Self.walkDay(daysBefore: 1))"]
+        XCTAssertTrue(yesterday.waitForExistence(timeout: 20), "yesterday never became a walked day")
+        return yesterday
+    }
+
+    /// protects: #177 AC 12 (amended by eng E4): from a walked day, Share a Walk opens the form on that day; the
+    /// picture is made and is one element whose value starts with the day and its counts (3 days back walks a
+    /// repeat and a new block: "2 blocks, 1 new"); Share is enabled; Cancel closes the form back to the day.
+    /// fails_when: the walked day has no Share a Walk button, the form opens on another day or a week, the
+    /// picture never becomes ready, Share stays disabled, or Cancel leaves the form up.
+    /// no_claim: the picture's look and MapKit's tiles: under `-UITestFixtures` (no network) the snapshot is
+    /// the DEBUG stub `UITestFixtures.FlatWalkSnapshotter`; the share sheet itself (out of process).
+    @MainActor
+    func testShareFromAWalkedDayOpensOnThatDay() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+        _ = openYourWalks(app)
+        let day = Self.walkDay(daysBefore: 3)
+        app.buttons["yourWalks.day.\(day)"].tap()
+        XCTAssertTrue(
+            app.descendants(matching: .any)["Map of this day's walk."].firstMatch.waitForExistence(timeout: 10),
+            "the day never showed its map"
+        )
+        let entry = app.buttons["shareWalk.entry"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "the walked day has no Share a Walk button")
+        XCTAssertEqual(entry.label, "Share a Walk")
+        entry.tap()
+
+        let picture = app.descendants(matching: .any)["shareWalk.picture"].firstMatch
+        XCTAssertTrue(picture.waitForExistence(timeout: 15), "the form never showed its picture")
+        let expected = "\(Self.spokenDay(day)), 2 blocks, 1 new, "
+        XCTAssertTrue((picture.value as? String)?.hasPrefix(expected) == true, "the picture's value is \(String(describing: picture.value))")
+        let share = app.buttons["shareWalk.share"]
+        XCTAssertTrue(share.waitForExistence(timeout: 5) && share.isEnabled, "Share is not enabled with a picture")
+
+        app.buttons["Cancel"].tap()
+        XCTAssertTrue(picture.waitForNonExistence(timeout: 5), "Cancel left the form up")
+        XCTAssertTrue(entry.exists, "Cancel did not return to the day")
+    }
+
+    /// protects: #177 eng E4: from Your Walks' root, Share a Walk (leading) opens the form on the most recent walked
+    /// day (yesterday in the fixture, "1 block, 1 new"), with Share enabled once the picture is made.
+    /// fails_when: Your Walks has no Share a Walk button, or the form opens on another day or a range.
+    /// no_claim: the Progress tab's copy of the button (the same toolbar item); the picture's look (the DEBUG stub
+    /// snapshotter `UITestFixtures.FlatWalkSnapshotter` stands in for MapKit under `-UITestFixtures`).
+    @MainActor
+    func testShareFromYourWalksOpensOnTheLatestWalkedDay() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+        _ = openYourWalks(app)
+        let entry = app.buttons["shareWalk.entry"].firstMatch
+        XCTAssertTrue(entry.waitForExistence(timeout: 5), "Your Walks has no Share a Walk button")
+        entry.tap()
+
+        let picture = app.descendants(matching: .any)["shareWalk.picture"].firstMatch
+        XCTAssertTrue(picture.waitForExistence(timeout: 15), "the form never showed its picture")
+        let expected = "\(Self.spokenDay(Self.walkDay(daysBefore: 1))), 1 block, 1 new, "
+        XCTAssertTrue((picture.value as? String)?.hasPrefix(expected) == true, "the picture's value is \(String(describing: picture.value))")
+        XCTAssertTrue(app.buttons["shareWalk.share"].isEnabled, "Share is not enabled with a picture")
+    }
+
+    /// protects: #177 DS4's no-blocks state end to end: moving From to today (no walks) drags To along, the
+    /// range holds no block, "No blocks counted on these days." shows above Share, Share is disabled and no
+    /// picture is shown.
+    /// fails_when: From cannot reach today, To stays before From, an empty range can be shared, or its line is
+    /// missing.
+    /// no_claim: the over-5,000 and failed states (ShareWalkFormTests; the DEBUG stub snapshotter
+    /// `UITestFixtures.FlatWalkSnapshotter` never fails), the date picker's look.
+    @MainActor
+    func testShareARangeWithNoBlocksDisablesShare() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+        _ = openYourWalks(app)
+        app.buttons["shareWalk.entry"].firstMatch.tap()
+        let picture = app.descendants(matching: .any)["shareWalk.picture"].firstMatch
+        XCTAssertTrue(picture.waitForExistence(timeout: 15), "the form never showed its picture")
+
+        let from = app.datePickers["shareWalk.from"].firstMatch
+        XCTAssertTrue(from.waitForExistence(timeout: 5), "the form has no From row")
+        from.tap()
+        let today = Self.walkDay(daysBefore: 0)
+        let months = DateFormatter()
+        months.locale = Locale(identifier: "en_US")
+        let todayLabel = "\(months.monthSymbols[today / 100 % 100 - 1]) \(today % 100)"
+        let todayButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", todayLabel)).firstMatch
+        XCTAssertTrue(todayButton.waitForExistence(timeout: 5), "the calendar has no \(todayLabel)")
+        todayButton.tap()
+        let dismissRegion = app.buttons["PopoverDismissRegion"].firstMatch
+        if dismissRegion.waitForExistence(timeout: 2) { dismissRegion.tap() }
+
+        let reason = app.staticTexts["No blocks counted on these days."]
+        XCTAssertTrue(reason.waitForExistence(timeout: 5), "the empty range shows no reason line")
+        XCTAssertFalse(app.buttons["shareWalk.share"].isEnabled, "an empty range can be shared")
+        XCTAssertFalse(picture.exists, "an empty range still shows a picture")
+    }
+
     private func waitForValue(_ element: XCUIElement, _ value: String, timeout: TimeInterval) -> Bool {
         let predicate = NSPredicate(format: "value == %@", value)
         let expectation = XCTNSPredicateExpectation(predicate: predicate, object: element)

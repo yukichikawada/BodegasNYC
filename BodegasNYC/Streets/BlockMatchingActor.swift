@@ -121,6 +121,15 @@ actor BlockMatchingActor {
         }
     }
 
+    /// The runs for a shared walk's blocks (#177), built here, off the main
+    /// actor, from the street grid. Empty when the grid is unavailable.
+    func runs(for ids: Set<UInt32>) async -> [WalkedRun] {
+        await enqueue { actor in
+            guard let grid = actor.prepareStore()?.grid else { return [] }
+            return WalkedOverlay.runs(walkedIDs: ids, grid: grid)
+        }
+    }
+
     private func enqueue<T: Sendable>(_ job: @escaping @Sendable (isolated BlockMatchingActor) async -> T) async -> T {
         let previous = tail
         let task = Task { () -> T in

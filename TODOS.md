@@ -96,6 +96,38 @@
 **Priority:** P3
 **Depends on:** #170 merged and some use of the citywide chart
 
+### Compare a shared walk with my walks
+
+**What:** On a Shared Walk sheet (#177 PR 2), show which of the sender's blocks the recipient has walked too, and which are new to them, on the same map.
+
+**Why:** The first thing a friend asks of a shared walk is "have I been there?"; today the sheet shows the sender's walk alone.
+
+**Pros:** A link carries the block ids (#177 owner O6 kept the format open to this), and the recipient's walked set is already in memory, so the overlap is a set intersection.
+
+**Cons:** Two people's blocks on one map need a second shape and colour rule (DESIGN.md: yours breadcrumbs, theirs a solid violet line), and it reads the recipient's own history on a sheet that today needs no Streets Walked opt-in.
+
+**Context:** #177 eng review E9 (2026-11-19): out of scope for #177; the owner chose to keep it as a TODO. Start from `WalkedHistory` and the PR 2 `SharedWalkSheet`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** #177 PR 2 merged
+
+### Hide blocks near home before sharing
+
+**What:** Let a share leave out the blocks within a set distance of a chosen place (home), so the picture does not show where walks start and end.
+
+**Why:** A week of walks has the sender's home as its hub, and pictures get reposted; the form only warns ("The map can show where your walks start and end.").
+
+**Pros:** The form already freezes one `SharedWalk` for the picture, so trimming its block ids before the picture is made changes nothing downstream.
+
+**Cons:** Needs a place picker and a radius, a stored home (new personal data), and copy that does not promise more privacy than a trimmed map gives (the trail still points at the gap).
+
+**Context:** #177 eng review E4 and E9 (2026-11-19): out of scope for #177; the form opens on one day and states the risk instead. Start from `WalkedHistory.shareSummary(from:to:)` and `ShareWalkForm`.
+
+**Effort:** M
+**Priority:** P3
+**Depends on:** #177 PR 1 merged
+
 ## Completed
 
 ### Paginate `BodegaService.fetchAll` past the 1,000-row PostgREST cap (done 2026-10-21)

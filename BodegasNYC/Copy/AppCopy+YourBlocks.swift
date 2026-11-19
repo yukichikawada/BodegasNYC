@@ -43,7 +43,8 @@ nonisolated extension AppCopy {
             case .footer:
                 CopyString(
                     kind: .body,
-                    text: "A block counts once you've walked most of it. Your walks stay on this phone."
+                    text: "A block counts once you've walked most of it. "
+                        + "Your walks stay on this phone unless you share one."
                 )
             case .countingStatus: CopyString(kind: .value, text: "Counting your blocks")
             case .recordingOff: CopyString(kind: .body, text: "Recording is off. Your blocks stay.")

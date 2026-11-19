@@ -50,7 +50,7 @@ down.
 | --- | --- | --- |
 | User-generated content | **Yes** | Photos, reviews, added bodegas and flags are posted by users and visible to everyone. |
 | Does the app show user-generated content in a feed or recommend it | **No** (if asked) | Content is attached to a place on a map and to that place's detail screen; there is no feed and no ranking of people. |
-| Does the app let users share their location with others | **No** | The nearby query sends coordinates to the server and does not store them; Streets Walked history stays on the device. |
+| Does the app let users share their location with others | **No** | The nearby query sends coordinates to the server and does not store them; Streets Walked history stays on the device unless the user shares a picture of a walk. **Owner: revisit this answer at the next release (#177 lets a user share a picture of past walked streets; recommended: Yes, the rating is already 13+).** |
 | Messaging, chat, user profiles | **No** | There is no messaging and no public profile. |
 | Gambling, contests | **No** | "Lotto" is a data point about the store, not a feature. |
 | Alcohol, tobacco | **No** (reference only) | "Beer" and "Cigarettes" are yes/no facts about a store, with no sale, promotion or imagery. If the questionnaire offers "infrequent/mild references", pick that over "none". |
@@ -99,7 +99,9 @@ Everything else (Name, Phone, Contacts, Health, Financial, Browsing or Search
 History, Purchases, Sensitive Info, Coarse Location, Device ID, Advertising
 Data, Audio) → not collected. Tracking → **No, we do not track**. Streets
 Walked and Motion data stay on the device and are not "collected" in
-Apple's sense.
+Apple's sense; a picture of a walk the user shares through the system share
+sheet (#177) goes where the user sends it and never to our servers, so it
+is not collected either.
 
 Diagnostics and usage are linked because a signed-in user's Sentry and
 PostHog events carry their user id (#147). If the answers change, change the
@@ -143,7 +145,7 @@ Up to ten frames; six is plenty. App preview video: skip for 1.0.
 > Drop a pin or use your location to add a bodega. The app checks for duplicates before it saves. Sign in with Apple to add photos, write a review, or flag a listing that closed or changed. Photos are resized on your phone before upload, so no camera or location metadata leaves it.
 >
 > STREETS WALKED
-> An optional layer that records the streets you walk, including with the app in the background, and lights them up on your own map. Rides are filtered out with Motion & Fitness, so the cab home doesn't count. Your Blocks shows what share of the city, and of each borough, you've covered. The history never leaves your phone. Off by default; turn it on from the walking-figure button on the map.
+> An optional layer that records the streets you walk, including with the app in the background, and lights them up on your own map. Rides are filtered out with Motion & Fitness, so the cab home doesn't count. Your Blocks shows what share of the city, and of each borough, you've covered. The history stays on your phone unless you choose to share a walk. Off by default; turn it on from the walking-figure button on the map.
 >
 > MADE FOR NEW YORK
 > Map and list views, pins that cluster when you zoom out and label themselves at block level, directions to the door, and a map that reads at night as well as it does at noon.
@@ -182,7 +184,7 @@ bodega,deli,new york,manhattan,brooklyn,queens,bronx,cat,hot food,beer,lotto,atm
 
 > Browsing the map and list works without signing in. Adding bodegas, photos, reviews and flags uses Sign in with Apple only, so no demo account is needed; your own Apple Account works.
 >
-> Location: finding nearby bodegas uses When-In-Use location only. "Streets Walked" is an optional feature, off by default, started from its own button in the app (the walking figure in the map's top bar). It records the streets the user walks so they can see them highlighted on their own map, and it is the only thing that asks for Always location and uses the background `location` mode. The walk history stays on the device and is never uploaded. To try it: on the map, tap the walking-figure button → Start Recording, grant Always, walk or simulate a route (Features → Location → Freeway Drive on a simulator), then reopen the app. Motion & Fitness is used only to tell walking from riding.
+> Location: finding nearby bodegas uses When-In-Use location only. "Streets Walked" is an optional feature, off by default, started from its own button in the app (the walking figure in the map's top bar). It records the streets the user walks so they can see them highlighted on their own map, and it is the only thing that asks for Always location and uses the background `location` mode. The walk history stays on the device and is never uploaded. A user can share a picture of a walk through the system share sheet; nothing is sent to our servers. To try it: on the map, tap the walking-figure button → Start Recording, grant Always, walk or simulate a route (Features → Location → Freeway Drive on a simulator), then reopen the app. Motion & Fitness is used only to tell walking from riding.
 >
 > User-generated content: every bodega, review and photo has a "Flag an Issue" action. Three flags hide the item automatically, and the owner reviews flags. The privacy policy (linked in the app's Account menu and in the listing) carries the contact email. Account deletion is in the app: Account → Your Account → Delete Account. It removes the account, its data and the Sign in with Apple grant.
 >
