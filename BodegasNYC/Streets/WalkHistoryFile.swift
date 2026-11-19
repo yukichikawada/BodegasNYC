@@ -195,8 +195,7 @@ nonisolated enum WalkHistoryFile {
     /// seen twice keeps its first valid occurrence. Fixes outside New York
     /// are kept: they are raw history, and the matcher ignores them.
     static func validate(_ data: Data, now: Date, maxFixCount: Int = maxFixCount) throws -> Validated {
-        let (version, entries) = try parse(data)
-        guard entries.count <= maxFixCount else { throw DecodeError.tooLarge }
+        let (version, entries) = try parse(data, maxFixCount: maxFixCount)
         let latest = now.addingTimeInterval(futureAllowance)
         var seen = Set<UUID>()
         var fixes: [Fix] = []
@@ -212,18 +211,19 @@ nonisolated enum WalkHistoryFile {
         return Validated(version: version, fixes: fixes, skippedCount: skipped)
     }
 
-    /// The header checks, then every entry as read, in file order.
-    private static func parse(_ data: Data) throws -> (version: Int, entries: [Entry]) {
-        let header: Header
+    /// The header checks, then every entry as read, in file order, in one
+    /// pass over the JSON. With `maxFixCount`, a file with more entries is
+    /// refused as soon as that is known (the array's count, before any entry
+    /// is materialised), so a hostile file of millions of `{}` never becomes
+    /// millions of entries.
+    private static func parse(_ data: Data, maxFixCount: Int = .max) throws -> (version: Int, entries: [Entry]) {
+        let decoder = JSONDecoder()
+        decoder.userInfo[Document.maxFixCountKey] = maxFixCount
         do {
-            header = try JSONDecoder().decode(Header.self, from: data)
-        } catch {
-            throw DecodeError.notWalkHistory
-        }
-        guard header.format == format, header.version >= 1 else { throw DecodeError.notWalkHistory }
-        guard header.version <= currentVersion else { throw DecodeError.newerVersion(header.version) }
-        do {
-            return (header.version, try JSONDecoder().decode(Body.self, from: data).fixes)
+            let document = try decoder.decode(Document.self, from: data)
+            return (document.version, document.entries)
+        } catch let error as DecodeError {
+            throw error
         } catch {
             throw DecodeError.notWalkHistory
         }
@@ -300,13 +300,43 @@ nonisolated enum WalkHistoryFile {
         let fixes: [Entry]
     }
 
-    private nonisolated struct Header: Decodable {
-        let format: String
-        let version: Int
-    }
+    /// The whole file, read once: `format` and `version` first (a newer
+    /// version is refused before its fixes are looked at), then `fixes`,
+    /// whose count is checked against the cap in the decoder's `userInfo`
+    /// before a single entry is decoded. This format's refusals are thrown
+    /// as `DecodeError`; `parse` turns anything else into `notWalkHistory`.
+    private nonisolated struct Document: Decodable {
+        static let maxFixCountKey = CodingUserInfoKey(rawValue: "WalkHistoryFile.maxFixCount")!
 
-    private nonisolated struct Body: Decodable {
-        let fixes: [Entry]
+        let version: Int
+        let entries: [Entry]
+
+        private enum CodingKeys: String, CodingKey {
+            case format, version, fixes
+        }
+
+        init(from decoder: any Decoder) throws {
+            let fields = try decoder.container(keyedBy: CodingKeys.self)
+            guard let format = try? fields.decode(String.self, forKey: .format),
+                  format == WalkHistoryFile.format,
+                  let version = try? fields.decode(Int.self, forKey: .version),
+                  version >= 1
+            else { throw DecodeError.notWalkHistory }
+            guard version <= currentVersion else { throw DecodeError.newerVersion(version) }
+            guard var list = try? fields.nestedUnkeyedContainer(forKey: .fixes) else {
+                throw DecodeError.notWalkHistory
+            }
+            let cap = decoder.userInfo[Self.maxFixCountKey] as? Int ?? .max
+            if let count = list.count, count > cap { throw DecodeError.tooLarge }
+            var entries: [Entry] = []
+            entries.reserveCapacity(min(list.count ?? 0, cap))
+            while !list.isAtEnd {
+                guard entries.count < cap else { throw DecodeError.tooLarge }
+                entries.append(try list.decode(Entry.self))
+            }
+            self.version = version
+            self.entries = entries
+        }
     }
 
     /// One entry of `fixes`, read leniently: a field that is missing or of

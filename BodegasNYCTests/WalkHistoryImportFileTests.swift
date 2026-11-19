@@ -104,6 +104,29 @@ struct WalkHistoryImportFileTests {
         #expect(WalkHistoryFile.maxFileBytes() == WalkHistoryFile.maxFixCount * 160)
     }
 
+    /// protects=QA #180 PR 2 item 2: a hostile file of millions of empty
+    /// entries (here 3,000,000 `{}`, 9 MB, under the byte limit of a 100,000
+    /// cap) is refused as too large from the array's count, before its
+    /// entries are materialised: the decode's peak footprint stays far below
+    /// what 3,000,000 entries would take; fails_when=the decoder builds every
+    /// entry and then checks the count (QA measured +630 MB for 5.3 million);
+    /// no_claim=the JSON scanner's own index of the file, which any
+    /// `JSONDecoder` read builds (a streaming parser is out of scope).
+    @Test func aHugeFileOfEmptyEntriesIsRefusedBeforeItIsRead() throws {
+        let count = 3_000_000
+        var text = #"{"format":"my-bodegas-walk-history","version":1,"fixes":["#
+        text.reserveCapacity(count * 3 + 80)
+        text += String(repeating: "{},", count: count - 1) + "{}]}"
+        let data = Data(text.utf8)
+        text = ""
+        #expect(data.count < WalkHistoryFile.maxFileBytes(maxFixCount: 100_000))
+        let meter = PeakFootprint()
+        #expect(throws: DecodeError.tooLarge) { try Self.validate(data, maxFixCount: 100_000) }
+        let peak = meter.stop()
+        print("3,000,000 empty entries refused at +\(peak / 1_000_000) MB peak")
+        #expect(peak < 250_000_000, "the decode peaked at +\(peak / 1_000_000) MB")
+    }
+
     /// protects=AC 7, row "an entry that is not an object, or lacks id, lat,
     /// lon or t, or has one with the wrong JSON type": that entry is skipped
     /// and counted, and the rest import; fails_when=one bad entry refuses the
