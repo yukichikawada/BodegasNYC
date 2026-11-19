@@ -8,6 +8,7 @@
 //  MapKit: the form only compares what each was made for.
 //
 
+import LinkPresentation
 import Testing
 import UIKit
 
@@ -151,5 +152,87 @@ struct ShareWalkFormTests {
         form.setFrom(WalkedDayKey(value: 20250101))
         #expect(form.start == Self.day1 && form.end == Self.today)
         #expect(form.walk.blockIDs == [1, 2, 3, 4])
+    }
+
+    /// protects=DS4's "no picture": the picture's panel is on screen while
+    /// a picture is made, shown or failed, and gone with no blocks or too
+    /// many; fails_when=an empty grey panel stands in for no picture, or the
+    /// panel vanishes while making or after a failure (Retry lives in it);
+    /// no_claim=the layout around it (the live capture).
+    @Test func thePanelCollapsesWithNoPicture() throws {
+        var form = try #require(ShareWalkForm(history: Self.walked, preset: Self.day2, today: Self.today))
+        #expect(form.phase == .making && form.showsPicturePanel)
+        form.pictureMade(.failed, for: form.request)
+        #expect(form.phase == .failed && form.showsPicturePanel)
+        form.retry()
+        form.pictureMade(Self.picture(for: form), for: form.request)
+        #expect(form.phase == .ready && form.showsPicturePanel)
+        form.setFrom(WalkedDayKey(value: 20261108))
+        #expect(form.phase == .noBlocks && !form.showsPicturePanel)
+
+        let big = Self.history([(Self.day1, Set(1 ... 5_001))])
+        let over = try #require(ShareWalkForm(history: big, preset: Self.day1, today: Self.today))
+        #expect(over.phase == .tooManyBlocks && !over.showsPicturePanel)
+    }
+
+    /// protects=Clear History while the form is open closes it: a history
+    /// with no walked day, or no history at all, is the form's signal to
+    /// dismiss (the view dismisses on `false`); a history that still has
+    /// walked days keeps it; fails_when=the form stays up over a cleared
+    /// history and could still share a picture of deleted walks;
+    /// no_claim=the view's `dismiss()` call itself and Your Walks' own pop.
+    @Test func aClearedHistoryClosesTheForm() throws {
+        var form = try #require(ShareWalkForm(history: Self.walked, preset: Self.day2, today: Self.today))
+        let cleared = WalkedHistory.build(
+            dayMasks: [:],
+            dayMeters: [Self.day1: 300],
+            grid: StreetFixtures.cornerGrid(),
+            estimatedThroughDay: nil,
+            version: 9
+        )
+        #expect(cleared.walkedDays.isEmpty)
+        let staysOverCleared = form.historyChanged(cleared)
+        #expect(!staysOverCleared)
+        let staysOverNothing = form.historyChanged(nil)
+        #expect(!staysOverNothing)
+        let staysOverWalks = form.historyChanged(Self.history([(Self.day2, [2])], version: 10))
+        #expect(staysOverWalks)
+    }
+
+    /// protects=DS5 and #177's telemetry rule: when the share sheet reports
+    /// completed, `walk_shared` is recorded exactly once and the form
+    /// closes; when it reports cancelled, nothing is recorded and the form
+    /// stays with focus on Share; fails_when=a cancel records the event, a
+    /// completion records it twice or not at all, or a cancel closes the
+    /// form; no_claim=that UIKit calls the completion handler once per
+    /// share (the presenter forwards each call; live QA), and the SDK.
+    @Test func walkSharedOnlyOnACompletedShare() {
+        var recorded = 0
+        #expect(ShareWalkForm.shareFinished(completed: false) { recorded += 1 } == .stayOnShare)
+        #expect(recorded == 0)
+        #expect(ShareWalkForm.shareFinished(completed: true) { recorded += 1 } == .closeForm)
+        #expect(recorded == 1)
+    }
+
+    /// protects=DS5's share items, in order: the picture first, as an item
+    /// source whose image is the picture shown and whose link metadata is
+    /// titled "Walk, Nov 3–5, 2026", then the text line "3 blocks, 3 new,
+    /// 0.5 miles. Nov 3–5, 2026."; fails_when=the order flips, the image is
+    /// not the one previewed, the header reads anything else, or the text
+    /// drifts; no_claim=what each destination (Messages, Mail, Photos) does
+    /// with the items, which only a device share shows.
+    @Test func shareItemsArePictureThenText() throws {
+        var form = try #require(ShareWalkForm(history: Self.walked, preset: Self.day2, today: Self.today))
+        form.setTo(Self.day3)
+        let image = UIImage(systemName: "square.and.arrow.up") ?? UIImage()
+        let made = SharedWalkPicture(walk: form.walk, png: Data([1]), image: image)
+        let items = ShareSheetPresenter.items(for: made)
+        #expect(items.count == 2)
+        let picture = try #require(items.first as? SharedWalkImageItem)
+        let sheet = UIActivityViewController(activityItems: [], applicationActivities: nil)
+        #expect(picture.activityViewController(sheet, itemForActivityType: nil) as? UIImage === image)
+        #expect(picture.activityViewControllerPlaceholderItem(sheet) as? UIImage === image)
+        #expect(picture.activityViewControllerLinkMetadata(sheet)?.title == "Walk, Nov 3\u{2013}5, 2026")
+        #expect(items.last as? String == "3 blocks, 3 new, 0.5 miles. Nov 3\u{2013}5, 2026.")
     }
 }

@@ -37,8 +37,11 @@ struct PrivacyWordingTests {
     /// Sentences kept as they are, each with why the exception does not
     /// belong in it.
     static let keptAsIs: [String: String] = [
-        // The Account sheet's deletion consequence (#127): deleting the
-        // account does not delete the walked blocks. #177's brief keeps it.
+        // The Account sheet's deletion consequence (#127): it says what
+        // deleting an account leaves alone (the walked blocks), which is
+        // true, not whether walks can leave the phone. Kept by the owner's
+        // decision, as is the privacy policy's deletion paragraph (which
+        // passes on its own: its next sentence names shared pictures).
         "Walked blocks stay on this phone.": "account deletion leaves the blocks; not a sharing promise"
     ]
 

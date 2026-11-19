@@ -4,13 +4,14 @@ import SwiftUI
 /// that goes, and hand it to the system share sheet.
 ///
 /// `.large` only, opaque `systemGroupedBackground`, `NavigationStack`,
-/// inline title "Share a Walk", Cancel leading. One scroll: the picture
-/// (4:5, 12 pt radius, on `secondarySystemBackground`), the From and To
-/// rows in an inset-grouped section with the definition line under them,
-/// the three consequence lines in `.subheadline` `.primary`, then Share,
-/// `.borderedProminent` and full width, pinned in a bottom `safeAreaInset`
-/// on the same ground, or at the end of the scroll when the pinned bar
-/// would leave under 200 pt to read (the intro sheet's rule).
+/// inline title "Share a Walk", Cancel leading. One scroll on one 16 pt page
+/// inset: the picture (4:5, 12 pt radius, on `secondarySystemBackground`;
+/// gone with no blocks or too many), the From and To rows in an
+/// inset-grouped panel, the definition and estimate lines under it, the
+/// three consequence lines in `.subheadline` `.primary`, then the reason
+/// line and Share, `.borderedProminent` and full width, pinned in a bottom
+/// `safeAreaInset` on the same ground, or at the end of the scroll when the
+/// pinned bar would leave under 200 pt to read (the intro sheet's rule).
 ///
 /// The preview is the picture itself (DS4), made 0.3 s after the last date
 /// change; Share sends that same image, and is disabled whenever the
@@ -37,6 +38,8 @@ struct ShareWalkSheet: View {
 
     /// The wait after the last date change before a picture is made.
     static let debounce: Duration = .milliseconds(300)
+    /// The page inset every block of the form shares (DESIGN.md Layout).
+    static let pageInset: CGFloat = 16
 
     init(
         viewModel: StreetsWalkedViewModel,
@@ -58,22 +61,30 @@ struct ShareWalkSheet: View {
                     availableHeight: proxy.size.height,
                     barHeight: barHeight
                 )
-                List {
+                ScrollView {
                     if let form {
-                        content(form)
-                        if !pinsBar {
-                            Section { shareBar(form) }
-                                .listRowInsets(EdgeInsets())
-                                .listRowBackground(Color.clear)
+                        VStack(alignment: .leading, spacing: 0) {
+                            content(form)
+                            if !pinsBar {
+                                shareControls(form)
+                                    .padding(.top, 24)
+                            }
                         }
+                        .padding(.horizontal, Self.pageInset)
+                        .padding(.vertical, 16)
                     }
                 }
-                .listStyle(.insetGrouped)
-                .scrollContentBackground(.hidden)
+                .scrollBounceBehavior(.basedOnSize)
                 .background(Color(.systemGroupedBackground))
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     if pinsBar, let form {
-                        shareBar(form)
+                        shareControls(form)
+                            .padding(.horizontal, Self.pageInset)
+                            .padding(.top, 12)
+                            .padding(.bottom, 16)
+                            .frame(maxWidth: .infinity)
+                            .background(Color(.systemGroupedBackground))
+                            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
                     }
                 }
             }
@@ -93,10 +104,7 @@ struct ShareWalkSheet: View {
             await makePicture()
         }
         .onChange(of: viewModel.walksHistory?.version) { _, _ in
-            guard let history = viewModel.walksHistory, form?.historyChanged(history) == true else {
-                dismiss()
-                return
-            }
+            if form?.historyChanged(viewModel.walksHistory) != true { dismiss() }
         }
         .onChange(of: form?.phase) { old, new in
             announce(from: old, to: new)
@@ -112,47 +120,50 @@ struct ShareWalkSheet: View {
         let attempt: Int
     }
 
+    /// The picture (only while there is one to make or show), the dates,
+    /// the definition and estimate lines, and the consequence lines, all on
+    /// the page inset.
     @ViewBuilder
     private func content(_ form: ShareWalkForm) -> some View {
-        Section {
+        if form.showsPicturePanel {
             ShareWalkPicturePanel(form: form) { self.form?.retry() }
-                .listRowInsets(EdgeInsets())
-                .listRowBackground(Color.clear)
+                .padding(.bottom, 24)
         }
-        Section {
+        VStack(spacing: 0) {
             dateRow(.fromLabel, day: form.start, range: form.firstDay ... form.today, id: "shareWalk.from") {
                 self.form?.setFrom($0)
             }
+            Divider().padding(.leading, Self.pageInset)
             dateRow(.toLabel, day: form.end, range: form.start ... form.today, id: "shareWalk.to") {
                 self.form?.setTo($0)
             }
-        } footer: {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(AppCopy.ShareWalk.definition.copy.text)
-                if form.walk.isEstimate {
-                    Text(AppCopy.ShareWalk.estimate.copy.text)
-                }
-            }
-            .font(.footnote)
-            .foregroundStyle(Color.textMuted)
         }
-        Section {
-            VStack(alignment: .leading, spacing: 12) {
-                ForEach(Self.consequences, id: \.self) {
-                    Text($0.copy.text)
-                        .font(.subheadline)
-                        .foregroundStyle(.primary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 12))
+        VStack(alignment: .leading, spacing: 4) {
+            Text(AppCopy.ShareWalk.definition.copy.text)
+            if form.walk.isEstimate {
+                Text(AppCopy.ShareWalk.estimate.copy.text)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
-            .listRowBackground(Color.clear)
         }
+        .font(.footnote)
+        .foregroundStyle(Color.textMuted)
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.top, 8)
+        VStack(alignment: .leading, spacing: 12) {
+            ForEach(Self.consequences, id: \.self) {
+                Text($0.copy.text)
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.top, 24)
     }
 
-    /// A compact date row in New York walk days; label over picker at
-    /// accessibility sizes.
+    /// A compact date row in New York walk days, at the grouped row's own
+    /// 16 pt inset and 44 pt height; label over picker at accessibility
+    /// sizes.
     @ViewBuilder
     private func dateRow(
         _ label: AppCopy.ShareWalk,
@@ -169,20 +180,25 @@ struct ShareWalkSheet: View {
         .environment(\.timeZone, WalkedDayKey.timeZone)
         .environment(\.calendar, WalkedDayKey.calendar)
         .accessibilityIdentifier(id)
-        if dynamicTypeSize.isAccessibilitySize {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(label.copy.text)
-                picker.labelsHidden()
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(label.copy.text)
+                    picker.labelsHidden()
+                }
+            } else {
+                picker
             }
-        } else {
-            picker
         }
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .padding(.horizontal, Self.pageInset)
+        .padding(.vertical, 6)
     }
 
     /// The reason line directly above a disabled Share (in the focus order
-    /// before it, and its VoiceOver hint too), then Share, on the form's
-    /// opaque ground. A failure's line is in the picture's place instead.
-    private func shareBar(_ form: ShareWalkForm) -> some View {
+    /// before it, and its VoiceOver hint too), then Share. A failure's line
+    /// is in the picture's place instead.
+    private func shareControls(_ form: ShareWalkForm) -> some View {
         let reason = form.disabledReason
         return VStack(alignment: .leading, spacing: 8) {
             if let reason, reason != .pictureFailed {
@@ -205,12 +221,7 @@ struct ShareWalkSheet: View {
             .accessibilityIdentifier("shareWalk.share")
             .accessibilityFocused($isShareFocused)
         }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 16)
-        .frame(maxWidth: .infinity)
-        .background(Color(.systemGroupedBackground))
-        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { barHeight = $0 }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     /// Makes the picture for the current request, 0.3 s after the last
@@ -232,16 +243,17 @@ struct ShareWalkSheet: View {
         }
     }
 
-    /// The share sheet closed: a completed share is recorded and closes the
-    /// form; a cancel keeps it.
+    /// The share sheet closed (`ShareWalkForm.shareFinished`): a completed
+    /// share is recorded, reported and closes the form; a cancel keeps it,
+    /// with VoiceOver back on Share.
     private func shareFinished(completed: Bool) {
-        guard completed else {
+        switch ShareWalkForm.shareFinished(completed: completed, record: viewModel.walkShared) {
+        case .closeForm:
+            onShared()
+            dismiss()
+        case .stayOnShare:
             isShareFocused = true
-            return
         }
-        viewModel.walkShared()
-        onShared()
-        dismiss()
     }
 
     /// A failure, and Share turning disabled for a reason, are announced

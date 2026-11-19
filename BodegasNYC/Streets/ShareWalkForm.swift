@@ -81,6 +81,33 @@ struct ShareWalkForm {
 
     var canShare: Bool { phase == .ready }
 
+    /// The picture's panel is on screen while a picture is made, shown or
+    /// failed; with no blocks or too many there is no picture and no panel
+    /// (DS4: "No picture"), so the dates and the reason line lead.
+    var showsPicturePanel: Bool {
+        switch phase {
+        case .making, .ready, .failed: true
+        case .noBlocks, .tooManyBlocks: false
+        }
+    }
+
+    /// What the form does when the share sheet closes.
+    enum ShareFinish: Equatable {
+        /// Completed: `walk_shared` was recorded; the form closes and focus
+        /// returns to the entry button.
+        case closeForm
+        /// Cancelled: nothing recorded; the form stays, focus on Share.
+        case stayOnShare
+    }
+
+    /// The share sheet's completion (DS5, design Accessibility): `record`
+    /// (`walk_shared`) runs once when `completed`, never on a cancel.
+    static func shareFinished(completed: Bool, record: () -> Void) -> ShareFinish {
+        guard completed else { return .stayOnShare }
+        record()
+        return .closeForm
+    }
+
     /// What Share sends: the picture on show, only while it is current.
     var shareablePicture: SharedWalkPicture? { canShare ? picture : nil }
 
@@ -108,10 +135,11 @@ struct ShareWalkForm {
     }
 
     /// A newer history (a pass while the form is open): the walk is
-    /// recomputed and the picture remade. Returns `false` when the history
-    /// has no walked day left (Clear History), so the form closes.
-    mutating func historyChanged(_ newHistory: WalkedHistory) -> Bool {
-        guard !newHistory.walkedDays.isEmpty else { return false }
+    /// recomputed and the picture remade. Returns `false` when there is no
+    /// history or it has no walked day left (Clear History), so the form
+    /// closes.
+    mutating func historyChanged(_ newHistory: WalkedHistory?) -> Bool {
+        guard let newHistory, !newHistory.walkedDays.isEmpty else { return false }
         history = newHistory
         start = clamp(start, lower: firstDay)
         end = clamp(end, lower: start)

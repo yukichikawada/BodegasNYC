@@ -11,7 +11,7 @@ import SwiftUI
 /// large type) the page scrolls. VoiceOver reads the map as one element,
 /// "Map of this day's walk.", with the counts as its value.
 ///
-/// Share a Walk (#177 DS4) sits trailing in the bar, opening the form on
+/// Share a Walk (#177 DS4) is a `.topBarTrailing` toolbar item, opening the form on
 /// this day; it hides while the history has no walked day.
 struct WalkDayView: View {
     let day: WalkedDayKey
