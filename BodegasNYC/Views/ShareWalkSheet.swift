@@ -19,7 +19,13 @@ import SwiftUI
 /// History while it is open closes it.
 struct ShareWalkSheet: View {
     let viewModel: StreetsWalkedViewModel
+    /// A share completed; the presenter returns focus to its entry button
+    /// once the form is gone.
+    let onShared: () -> Void
     @State private var form: ShareWalkForm?
+    /// VoiceOver on Share: back here after a cancelled share sheet, and the
+    /// one place a ready picture is announced.
+    @AccessibilityFocusState private var isShareFocused: Bool
     /// The picture handed to the share sheet while it is up.
     @State private var sharing: SharedWalkPicture?
     @State private var barHeight: CGFloat = 0
@@ -35,9 +41,11 @@ struct ShareWalkSheet: View {
     init(
         viewModel: StreetsWalkedViewModel,
         preset: WalkedDayKey,
-        today: WalkedDayKey = WalkedDayKey(date: Date())
+        today: WalkedDayKey = WalkedDayKey(date: Date()),
+        onShared: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
+        self.onShared = onShared
         _form = State(initialValue: viewModel.walksHistory.flatMap {
             ShareWalkForm(history: $0, preset: preset, today: today)
         })
@@ -195,6 +203,7 @@ struct ShareWalkSheet: View {
             .disabled(!form.canShare)
             .accessibilityHint(reason?.copy.text ?? "")
             .accessibilityIdentifier("shareWalk.share")
+            .accessibilityFocused($isShareFocused)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -226,23 +235,34 @@ struct ShareWalkSheet: View {
     /// The share sheet closed: a completed share is recorded and closes the
     /// form; a cancel keeps it.
     private func shareFinished(completed: Bool) {
-        guard completed else { return }
+        guard completed else {
+            isShareFocused = true
+            return
+        }
         viewModel.walkShared()
+        onShared()
         dismiss()
     }
 
     /// A failure, and Share turning disabled for a reason, are announced
-    /// with that reason; a new picture on every date change is not (the
-    /// short making state between pictures is not announced either).
+    /// with that reason. A ready picture is announced only when it ends a
+    /// making state while VoiceOver is on Share; otherwise a new picture on
+    /// a date change is not announced.
     private func announce(from old: ShareWalkForm.Phase?, to new: ShareWalkForm.Phase?) {
         guard let old, let new, old != new else { return }
-        let line: AppCopy.ShareWalk? = switch new {
-        case .failed: .pictureFailed
-        case .noBlocks: .noBlocks
-        case .tooManyBlocks: .tooManyBlocks
-        case .making, .ready: nil
+        let text: String? = switch new {
+        case .failed: AppCopy.ShareWalk.pictureFailed.copy.text
+        case .noBlocks: AppCopy.ShareWalk.noBlocks.copy.text
+        case .tooManyBlocks: AppCopy.ShareWalk.tooManyBlocks.copy.text
+        // Share was disabled while the picture was made, and VoiceOver is
+        // waiting on it: say the picture (its dates and counts) is in.
+        case .ready:
+            old == .making && isShareFocused
+                ? form?.shareablePicture.map { AppCopy.sharedWalkPictureValue($0.walk).text }
+                : nil
+        case .making: nil
         }
-        guard let line else { return }
-        AccessibilityNotification.Announcement(line.copy.text).post()
+        guard let text else { return }
+        AccessibilityNotification.Announcement(text).post()
     }
 }

@@ -32,8 +32,9 @@ protocol WalkMapSnapshotting: Sendable {
 /// Below it an opaque #1C1C1E band, 16 pt inset: "38 blocks" in the display
 /// register at 34 pt, white, tabular digits; "6 new · 2.1 miles" at 17 pt
 /// white; the dates leading and "My Bodegas" trailing at 17 pt #98989F; and,
-/// when a day in range is an estimate, the estimate line in #98989F, the
-/// band growing from 108 to 132 pt as the map gives up the height. No card,
+/// when a day in range is an estimate, the estimate line in #98989F (two
+/// lines at 17 pt), the band growing from 108 pt by that line's height as
+/// the map gives up the height. Lines start at the 16 pt top inset. No card,
 /// radius, shadow, gradient or icon.
 ///
 /// A snapshot that fails or takes over 5 s is a failure, never a partial
@@ -64,8 +65,29 @@ enum SharedWalkCard {
         case failed
     }
 
+    /// The band without the estimate line (DS2).
+    static let baseBandHeight: CGFloat = 108
+
+    /// 108 pt, or with the estimate line 108 pt plus the height that line
+    /// takes at 17 pt across the text width (it wraps to two lines).
     static func bandHeight(isEstimate: Bool) -> CGFloat {
-        isEstimate ? 132 : 108
+        guard isEstimate else { return baseBandHeight }
+        return baseBandHeight + textHeight(estimateText, width: size.width - 2 * inset)
+    }
+
+    static var estimateText: NSAttributedString {
+        NSAttributedString(
+            string: AppCopy.ShareWalk.estimate.copy.text,
+            attributes: [.font: bodyFont, .foregroundColor: mutedTextColor]
+        )
+    }
+
+    static let textOptions: NSStringDrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
+
+    /// The whole-point height `text` takes wrapped at `width`.
+    static func textHeight(_ text: NSAttributedString, width: CGFloat) -> CGFloat {
+        let bounds = CGSize(width: width, height: .greatestFiniteMagnitude)
+        return ceil(text.boundingRect(with: bounds, options: textOptions, context: nil).height)
     }
 
     static func mapSize(isEstimate: Bool) -> CGSize {
@@ -176,7 +198,7 @@ enum SharedWalkCard {
         context.restoreGState()
     }
 
-    /// The band's lines, stacked and centred in its height, leading at the
+    /// The band's lines, stacked from the 16 pt top inset, leading at the
     /// inset; the dates share their line with the app's name, trailing.
     private static func drawBand(_ walk: SharedWalk, in band: CGRect) {
         let width = band.width - 2 * inset
@@ -197,23 +219,17 @@ enum SharedWalkCard {
             string: appName,
             attributes: [.font: bodyFont, .foregroundColor: mutedTextColor]
         )
-        let estimate = walk.isEstimate
-            ? NSAttributedString(
-                string: AppCopy.ShareWalk.estimate.copy.text,
-                attributes: [.font: bodyFont, .foregroundColor: mutedTextColor]
-            )
-            : nil
-        let options: NSStringDrawingOptions = [.usesLineFragmentOrigin, .usesFontLeading]
+        let estimate = walk.isEstimate ? estimateText : nil
+        let options = textOptions
         func height(_ text: NSAttributedString, _ maxWidth: CGFloat) -> CGFloat {
-            let bounds = CGSize(width: maxWidth, height: .greatestFiniteMagnitude)
-            return ceil(text.boundingRect(with: bounds, options: options, context: nil).height)
+            textHeight(text, width: maxWidth)
         }
         let nameWidth = ceil(name.size().width)
         let datesWidth = width - nameWidth - 8
         let lines: [CGFloat] = [
             height(count, width), height(counts, width), max(height(dates, datesWidth), height(name, nameWidth))
         ] + (estimate.map { [height($0, width)] } ?? [])
-        var top = band.minY + max(0, (band.height - lines.reduce(0, +)) / 2)
+        var top = band.minY + inset
         count.draw(with: CGRect(x: inset, y: top, width: width, height: lines[0]), options: options, context: nil)
         top += lines[0]
         counts.draw(with: CGRect(x: inset, y: top, width: width, height: lines[1]), options: options, context: nil)

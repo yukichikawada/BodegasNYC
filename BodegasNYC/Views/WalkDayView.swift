@@ -20,6 +20,9 @@ struct WalkDayView: View {
     @State private var position: MapCameraPosition = .automatic
     @State private var barHeight: CGFloat = 0
     @State private var isSharing = false
+    /// A share completed from the form; its dismissal returns focus here.
+    @State private var didShare = false
+    @AccessibilityFocusState private var isEntryFocused: Bool
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     static let minimumMapHeight: CGFloat = 200
@@ -51,12 +54,12 @@ struct WalkDayView: View {
         .toolbar {
             if summary?.isWalked == true {
                 ToolbarItem(placement: .topBarTrailing) {
-                    ShareWalkEntryButton { isSharing = true }
+                    ShareWalkEntryButton(focus: $isEntryFocused) { isSharing = true }
                 }
             }
         }
-        .sheet(isPresented: $isSharing) {
-            ShareWalkSheet(viewModel: viewModel, preset: day)
+        .sheet(isPresented: $isSharing, onDismiss: shareFormDidDismiss) {
+            ShareWalkSheet(viewModel: viewModel, preset: day) { didShare = true }
         }
         // Keyed on the history's version too, so a pass that adds to this
         // day while it is open redraws the trail with the counts. Only the
@@ -65,6 +68,14 @@ struct WalkDayView: View {
         .task(id: RunsKey(day: day, version: viewModel.walksHistory?.version)) {
             runs = await viewModel.walkDayRuns(day)
         }
+    }
+
+    /// After a completed share, VoiceOver goes back to the entry button
+    /// (#177 design Accessibility).
+    private func shareFormDidDismiss() {
+        guard didShare else { return }
+        didShare = false
+        isEntryFocused = true
     }
 
     /// What the runs depend on: the day and the history they came from.
@@ -110,8 +121,9 @@ struct WalkDayView: View {
 
 /// The Share a Walk entry (#177 DS4): `square.and.arrow.up` in the label
 /// colour on the bar's glass, "Share a Walk" with the hint "Picks days to
-/// send." for VoiceOver.
+/// send." for VoiceOver. `focus` takes VoiceOver back to it after a share.
 struct ShareWalkEntryButton: View {
+    let focus: AccessibilityFocusState<Bool>.Binding
     let action: () -> Void
 
     var body: some View {
@@ -121,5 +133,6 @@ struct ShareWalkEntryButton: View {
         .accessibilityLabel(AppCopy.ShareWalk.title.copy.text)
         .accessibilityHint(AppCopy.ShareWalk.entryHint.copy.text)
         .accessibilityIdentifier("shareWalk.entry")
+        .accessibilityFocused(focus)
     }
 }

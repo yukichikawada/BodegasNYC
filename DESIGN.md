@@ -736,8 +736,10 @@ opens the system share sheet with two items, the picture (link metadata titled "
 2026") and the text "38 blocks, 6 new, 2.1 miles. Nov 3–9, 2026." ("new" left out at zero);
 `walk_shared` is recorded only when the sheet completes. VoiceOver: the picture is one image, "Map
 of the walk you're sharing.", valued "November 3 to November 9, 2026, 38 blocks, 6 new, 2.1
-miles." with "estimate" when it applies; a failure and a disabled reason are announced, a new
-picture is not; escape is Cancel. The picture's opacity swap is 0.25 s, the same under Reduce
+miles." with "estimate" when it applies; a failure and a disabled reason are announced; a ready
+picture is announced (its value) only when it ends a making state while VoiceOver is on Share,
+otherwise a new picture is not; after a completed share the form closes and focus returns to the
+entry button that opened it, after a cancelled one to the form's Share; escape is Cancel. The picture's opacity swap is 0.25 s, the same under Reduce
 Motion.
 
 **Shared picture** (`SharedWalkCard`, #177 PR 1, DS2, DS3): the one artifact strangers see, always
@@ -747,11 +749,12 @@ collection, the muted standard configuration with the wayfinding filter, flat, n
 with `WalkRunsMap`'s fitted region; every walked block as a solid line in the `walked` dark cyan
 #5AE3FF, round caps and joins, 5pt when the fitted height is 2 km or less, else 3pt, every block
 drawn (no run cap), clipped out of the map's bottom-leading 96 x 24pt where MapKit puts its
-attribution. Under it an opaque #1C1C1E band, 360 x 108pt, text at the 16pt inset, centred in the
-band's height: "38 blocks" in the display register at 34pt, white, tabular digits; "6 new · 2.1
+attribution (the live snapshot carries Apple's Maps logo there). Under it an opaque #1C1C1E band,
+360 x 108pt, the lines stacked from the 16pt top inset, 16pt from the sides: "38 blocks" in the display register at 34pt, white, tabular digits; "6 new · 2.1
 miles" at 17pt regular white ("new" left out at zero); the dates ("Nov 3–9, 2026") leading and "My
 Bodegas" trailing at 17pt #98989F. With an estimated day a fourth #98989F line, "Some of this is an
-estimate. Rides may be counted.", and the band grows to 132pt as the map gives up the height. No
+estimate. Rides may be counted.", which wraps to two lines at 17pt, and the band grows by that
+line's measured height to 149pt (the map, 360 x 301pt, gives up the height). No
 card, radius, shadow, gradient or icon; nothing under 17pt. The app's name on the picture is a
 recorded exception for this exported image only: #154 DS11 declined a wordmark on the app's map,
 and that stands; the picture travels without a link in PR 1, so without the name it is anonymous.

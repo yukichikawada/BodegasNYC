@@ -257,7 +257,8 @@ struct SharedWalkTests {
     private static let trail = [0x5A, 0xE3, 0xFF]
 
     /// protects=the picture is a 1080 x 1350 PNG; the map ends and the
-    /// opaque #1C1C1E band starts 108 pt from the bottom (132 pt with the
+    /// opaque #1C1C1E band starts 108 pt from the bottom (108 pt plus the
+    /// two-line estimate text, 149 pt on the simulator, with the
     /// estimate flag, the map giving up the height); the trail is drawn in
     /// #5AE3FF over the map along the walked block; the picture freezes the
     /// walk it was made for; fails_when=the size, scale or band height
@@ -277,8 +278,18 @@ struct SharedWalkTests {
         let pixels = try Self.pixels(of: picture.png)
         #expect(pixels.width == 1_080 && pixels.height == 1_350)
 
-        let bandPoints: CGFloat = isEstimate ? 132 : 108
-        #expect(SharedWalkCard.bandHeight(isEstimate: isEstimate) == bandPoints)
+        // 108 pt; with the estimate line, 108 pt plus that line's two 17 pt
+        // lines (whole points, so the edge falls on a pixel row).
+        let bandPoints = SharedWalkCard.bandHeight(isEstimate: isEstimate)
+        print("SharedWalkCard band height, estimate \(isEstimate): \(bandPoints) pt")
+        if isEstimate {
+            let estimateLine = SharedWalkCard.textHeight(SharedWalkCard.estimateText, width: 328)
+            #expect(estimateLine >= 2 * SharedWalkCard.bodyFont.lineHeight - 1, "the estimate line fits one line")
+            #expect(bandPoints == 108 + estimateLine)
+            #expect((145 ... 160).contains(bandPoints), "estimate band is \(bandPoints) pt")
+        } else {
+            #expect(bandPoints == 108)
+        }
         let edge = Int((450 - bandPoints) * 3)
         // The right margin, inside the 16 pt inset: no text, no trail.
         let column = 1_075

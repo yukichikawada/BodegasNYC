@@ -31,6 +31,9 @@ struct YourWalksSheet: View {
     @State private var range = WalkProgressRange.initial
     /// The Share a Walk form is up (#177).
     @State private var isSharing = false
+    /// A share completed from the form; its dismissal returns focus here.
+    @State private var didShare = false
+    @AccessibilityFocusState private var isShareEntryFocused: Bool
 
     enum Tab: Hashable { case calendar, progress }
 
@@ -60,7 +63,7 @@ struct YourWalksSheet: View {
                     // the history loads or has no walked day.
                     if content.phase == .ready, !content.walkedDays.isEmpty {
                         ToolbarItem(placement: .topBarLeading) {
-                            ShareWalkEntryButton { isSharing = true }
+                            ShareWalkEntryButton(focus: $isShareEntryFocused) { isSharing = true }
                         }
                     }
                 }
@@ -68,10 +71,10 @@ struct YourWalksSheet: View {
                     WalkDayView(day: day, viewModel: viewModel)
                 }
         }
-        .sheet(isPresented: $isSharing) {
+        .sheet(isPresented: $isSharing, onDismiss: shareFormDidDismiss) {
             // Opened from Your Walks: the most recent walked day (eng E4).
             if let latest = viewModel.walksHistory?.walkedDays.last?.day {
-                ShareWalkSheet(viewModel: viewModel, preset: latest)
+                ShareWalkSheet(viewModel: viewModel, preset: latest) { didShare = true }
             }
         }
         .presentationDetents([.large])
@@ -82,6 +85,14 @@ struct YourWalksSheet: View {
             // Clear History emptied the open day (DS8.3).
             path.removeAll { !walked.contains($0) }
         }
+    }
+
+    /// After a completed share, VoiceOver goes back to the entry button
+    /// (#177 design Accessibility).
+    private func shareFormDidDismiss() {
+        guard didShare else { return }
+        didShare = false
+        isShareEntryFocused = true
     }
 
     /// The Calendar / Progress switch under the title (PR 2, DS6), opening
