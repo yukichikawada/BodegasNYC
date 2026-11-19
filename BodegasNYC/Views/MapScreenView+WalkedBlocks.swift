@@ -38,7 +38,7 @@ extension MapScreenView {
         // the intro's gate, so the two never compete for one presentation
         // (#126 eng).
         streetsWalkedIntro(
-            content
+            historyFileDialogs(content)
                 .onChange(of: streetsWalkedViewModel?.walkedRunsVersion) { refreshWalkedOverlay(proxy) }
                 .onChange(of: streetsWalkedViewModel?.showsWalkedOverlay) { refreshWalkedOverlay(proxy) }
                 .onChange(of: scenePhase, initial: true) { _, phase in
@@ -87,8 +87,8 @@ extension MapScreenView {
 
     /// The Streets Walked toolbar menu (design D5): Your Blocks, Your Walks
     /// (#170) and How Streets Walked Works (#126), Show on Map, Start/Stop
-    /// Recording, Clear History…, each in its own section. VoiceOver returns
-    /// here after the intro closes (#126 design D8).
+    /// Recording, Export History… (#180), Clear History…, each in its own
+    /// section. VoiceOver returns here after the intro closes (#126 design D8).
     @ToolbarContentBuilder
     var streetsWalkedToolbarItem: some ToolbarContent {
         if let streetsWalkedViewModel {
@@ -112,13 +112,15 @@ extension MapScreenView {
                         .disabled(!streetsWalkedViewModel.hasHistory)
                     }
                     recordingSection(streetsWalkedViewModel)
+                    historyFileSection(streetsWalkedViewModel)
                     Section {
                         Button(AppCopy.clearHistoryMenuItem.menuItemWithEllipsis, role: .destructive) {
                             showingClearConfirmation = true
                         }
+                        .disabled(!streetsWalkedViewModel.canClearHistory)
                     }
                 } label: {
-                    Label(AppCopy.streetsWalkedMenuLabel.copy.text, systemImage: "figure.walk")
+                    streetsWalkedMenuLabel(streetsWalkedViewModel)
                 }
                 .accessibilityFocused($isStreetsWalkedMenuFocused)
             }

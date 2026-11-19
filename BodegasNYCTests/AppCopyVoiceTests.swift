@@ -126,6 +126,8 @@ struct AppCopyVoiceTests {
         + sharedWalkCopy
         + AppCopy.ReceivedWalk.allCases.map(\.copy)
         + receivedWalkCopy
+        + AppCopy.HistoryFile.allCases.map(\.copy)
+        + [2, 3, 1_204].map(AppCopy.historyFileParts)
         + yourBlocksFixtures.flatMap { walked, total in
             [
                 AppCopy.boroughBlockCount(walked: walked, total: total),
@@ -364,6 +366,33 @@ struct AppCopyVoiceTests {
         let distance = AppCopy.walkDayDistance(meters: 60).text
         #expect(AppCopy.sharedWalkMapValue(Self.sharedWalks[0], someNotShown: false).text
             == "November 3, 2026, 1 block, \(distance).")
+    }
+
+    /// protects=#180 PR 1's export strings are the design review's copy
+    /// table (DS2, DS3, D7, D11, D12) with their kinds, the menu item shows
+    /// with "…", and none names the app (D4); fails_when=a string drifts, a
+    /// kind changes, or the spec's superseded draft ("Keep it somewhere
+    /// private.") returns; no_claim=where each is shown (views, UI test).
+    @Test func historyFileCopyMatchesTheDesignTable() {
+        typealias File = AppCopy.HistoryFile
+        let table: [(File, CopyString.Kind, String)] = [
+            (.exportMenuItem, .label, "Export History"),
+            (.exportMenuHint, .body, "Saves your walks to a file."),
+            (.exportConfirmTitle, .title, "Export your walked history?"),
+            (.exportConfirmBody, .body,
+             "The file holds everywhere you walked and when, to the second. It isn't locked. "
+                + "Anyone who gets it can read it."),
+            (.exportAction, .label, "Export History"),
+            (.exportAnnouncement, .body, "Making the file."),
+            (.exportFailed, .title, "The file didn't come out."),
+            (.exportFirstAction, .label, "Export First")
+        ]
+        #expect(table.count == File.allCases.count)
+        for (copy, kind, text) in table {
+            #expect(copy.copy == CopyString(kind: kind, text: text))
+        }
+        #expect(File.exportMenuItem.menuItemWithEllipsis == "Export History\u{2026}")
+        #expect(AppCopy.historyFileParts(2).text == "It comes as 2 files. Keep them together and import each one.")
     }
 
     /// protects=#177 PR 1's privacy wording: Streets Walked's intro and Your

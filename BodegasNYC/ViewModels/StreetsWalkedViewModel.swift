@@ -100,7 +100,7 @@ final class StreetsWalkedViewModel {
     let recorder: WalkRecorder
     /// Posts a VoiceOver announcement (design DS7); injected for tests.
     let announce: @MainActor (String) -> Void
-    @ObservationIgnored private let telemetry: Telemetry // walk_started/stopped (#147)
+    @ObservationIgnored let telemetry: Telemetry // walk_started/stopped (#147)
     let matcher: BlockMatchingActor
     /// Your Walks (#170, `StreetsWalkedViewModel+YourWalks.swift`): the last
     /// history read, whether the first read failed, and whether the sheet
@@ -108,6 +108,13 @@ final class StreetsWalkedViewModel {
     var walksHistory: WalkedHistory?
     var walksHistoryFailed = false
     var isYourWalksOpen = false
+    /// Walk history files (#180, `StreetsWalkedViewModel+WalkHistoryFile.swift`):
+    /// the app's one transfer (eng A4), what it is doing, whether an export
+    /// has run 0.5 s (the menu's pulse, design D7), and a Clear in progress.
+    let historyTransfer: WalkHistoryTransfer
+    var historyTransferState = WalkHistoryTransferState.idle
+    var showsHistoryExportProgress = false
+    private(set) var isClearingHistory = false
     let motion: any MotionActivityProviding
     private var refreshTask: Task<Void, Never>?
     private let firstCountRetryDelay: Duration
@@ -123,6 +130,8 @@ final class StreetsWalkedViewModel {
     ///   - motion: Motion & Fitness, for the one-time ask (design D6).
     ///   - firstCountRetryDelay: before a failed first count's retry (#113).
     ///   - announce: posts VoiceOver announcements (design DS7).
+    ///   - historyTransfer: the app's one (`AppDelegate`); by default one
+    ///     over `modelContainer`.
     init(
         locationPermissionClient: LocationPermissionClient,
         modelContainer: ModelContainer,
@@ -132,7 +141,8 @@ final class StreetsWalkedViewModel {
         matcher: BlockMatchingActor? = nil,
         firstCountRetryDelay: Duration = .milliseconds(500),
         announce: @escaping @MainActor (String) -> Void = StreetsWalkedViewModel.postAnnouncement,
-        telemetry: Telemetry = Telemetry(sinks: [])
+        telemetry: Telemetry = Telemetry(sinks: []),
+        historyTransfer: WalkHistoryTransfer? = nil
     ) {
         self.announce = announce
         self.telemetry = telemetry
@@ -144,6 +154,7 @@ final class StreetsWalkedViewModel {
         self.recorder = recorder
         self.motion = motion
         self.matcher = matcher ?? BlockMatchingActor(container: modelContainer, activityProvider: motion)
+        self.historyTransfer = historyTransfer ?? WalkHistoryTransfer(container: modelContainer)
         isOverlayVisible = userDefaults.object(forKey: Self.overlayVisibleDefaultsKey) as? Bool ?? true
         motionAuthorization = motion.authorization
         hasHistory = storedPointCount() > 0
@@ -222,6 +233,8 @@ final class StreetsWalkedViewModel {
     /// (never waiting on one), then clears the block cache after them: zero
     /// walked, real totals (#113). Fixes after the tap survive.
     func clearHistory(at tapTime: Date = Date()) async throws {
+        isClearingHistory = true // Export waits (#180 design D7)
+        defer { isClearingHistory = false }
         try modelContext.delete(model: WalkedPoint.self, where: #Predicate { $0.recordedAt <= tapTime })
         try modelContext.save()
         matcher.invalidate()

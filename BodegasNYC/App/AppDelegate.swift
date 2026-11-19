@@ -18,6 +18,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     private(set) var telemetry = Telemetry(sinks: [])
     private(set) var streetsWalkedContainer: ModelContainer?
     private(set) var walkRecorder: WalkRecorder?
+    /// The app's one walk history transfer (#180 eng A4), beside the recorder.
+    private(set) var walkHistoryTransfer: WalkHistoryTransfer?
     /// Authorization status, accuracy and Location Services (eng C2).
     private let accessReader = LocationAccessReader()
     private var streetsWalkedViewModel: StreetsWalkedViewModel?
@@ -66,6 +68,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         // A change re-reads the problems only; sessions move at activation.
         accessReader.onChange = { [weak recorder] in recorder?.accessDidChange() }
         recorder.resumeIfPreviouslyEnabled(isBackgroundLaunch: isBackgroundLaunch)
+        let transfer = WalkHistoryTransfer(container: container)
+        walkHistoryTransfer = transfer
+        // Export files a finished share left behind (eng A6).
+        Task { await transfer.sweepExports() }
     }
 
     /// The shared view model, built on the first call. `RootView`'s Retry
@@ -77,7 +83,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             locationPermissionClient: locationPermissionClient,
             modelContainer: streetsWalkedContainer,
             recorder: walkRecorder,
-            telemetry: telemetry
+            telemetry: telemetry,
+            historyTransfer: walkHistoryTransfer
         )
         streetsWalkedViewModel = viewModel
         return viewModel
