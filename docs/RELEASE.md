@@ -196,15 +196,18 @@ Status as of 2026-11-03 is in brackets.
 6. **Upload**: Organizer → Distribute App → App Store Connect → Upload.
    Keep "Upload your app's symbols" on. Automatic signing handles the
    distribution certificate and profile.
-6c. **Command-line alternative to 5 and 6** (used for builds 1 to 3 of 1.0 on
-   2026-11-03/04; no Xcode UI, works while another session uses Xcode). The
-   App Store Connect app record must exist first or the upload is refused.
-   Archive 1.0 with Xcode 26.6 (the toolchain every 1.0 device check used),
-   even though tests now run under Xcode 27.2 (see CLAUDE.md): set
-   `DEVELOPER_DIR` explicitly so the choice does not depend on `xcode-select`.
-   Move archives to 27.2 after a device pass on an iOS 27 SDK build.
+6c. **Command-line alternative to 5 and 6** (used for builds 1 to 3 of 1.0.0 on
+   2026-11-03/04 and build 4 of 1.1.0 on 2026-11-19; no Xcode UI, works while
+   another session uses Xcode). The App Store Connect app record must exist
+   first or the upload is refused. Archive with Xcode 27.2, the same toolchain
+   the tests run under (see CLAUDE.md): set `DEVELOPER_DIR` explicitly so the
+   choice does not depend on `xcode-select`. Builds 1 to 3 were archived with
+   Xcode 26.6, which is no longer installed on this Mac; 1.1.0 (4) is the
+   first build against the iOS 27 SDK (deployment target unchanged), so it
+   needs a look at the whole app on a phone before it goes to review, not
+   only at the new feature.
    ```sh
-   export DEVELOPER_DIR=/Applications/Xcode26_6.app/Contents/Developer
+   export DEVELOPER_DIR=/Applications/Xcode_27.2.app/Contents/Developer
    until [ "$(pgrep -x xcodebuild | wc -l)" -lt 2 ]; do sleep 30; done
    xcodebuild archive -project BodegasNYC.xcodeproj -scheme BodegasNYC \
      -configuration Release -destination 'generic/platform=iOS' \
