@@ -32,7 +32,8 @@ enum VoiceRule: CaseIterable, CustomTestStringConvertible {
 
     var testDescription: String { "\(self)" }
 
-    private static let minorWords: Set<String> = ["a", "an", "the", "of", "on", "in", "to", "and", "or"]
+    // "per" since #188 DS9 ("Blocks per Day").
+    private static let minorWords: Set<String> = ["a", "an", "the", "of", "on", "in", "to", "and", "or", "per"]
     private static let sentenceEndings = [".", "?", ".\u{201D}"]
 
     private static func words(_ text: String) -> [Substring] {
@@ -122,6 +123,7 @@ struct AppCopyVoiceTests {
         + AppCopy.YourWalks.allCases.map(\.copy)
         + yourWalksCopy
         + walkProgressCopy
+        + walkBarsCopy
         + AppCopy.ShareWalk.allCases.map(\.copy)
         + sharedWalkCopy
         + AppCopy.ReceivedWalk.allCases.map(\.copy)
@@ -196,6 +198,55 @@ struct AppCopyVoiceTests {
         + [0, 1, 1_204].map { AppCopy.walkProgressValue(count: $0, day: today) }
         + styles.map { AppCopy.walkChartAxisLabel(today, style: $0) }
     }()
+
+    /// The Progress bars' slices (#188): every unit, a cross-month and a
+    /// cross-year span, whole and clipped months and years, zero, one and
+    /// many blocks, with and without new ones.
+    static let walkBarsSamples: [WalkDailyBars] = {
+        func bars(_ start: Int, _ days: Int, walked: Int, new: Int) -> WalkDailyBars {
+            WalkDailyBars(
+                start: WalkedDayKey(value: start),
+                walked: (0 ..< days).map { $0 % 3 == 0 ? walked : 0 },
+                new: (0 ..< days).map { $0 % 3 == 0 ? new : 0 },
+                firstWeekday: 1
+            )
+        }
+        return [
+            bars(20261111, 7, walked: 1, new: 1), bars(20261219, 30, walked: 1_204, new: 0),
+            bars(20261201, 40, walked: 3, new: 1), bars(20260820, 90, walked: 5, new: 2),
+            bars(20251118, 365, walked: 14, new: 9),
+            bars(20230601, 1_200, walked: 2, new: 2)
+        ]
+    }()
+
+    /// Every bar template over `walkBarsSamples`: headings, labels, rest
+    /// values over every range (an empty one included), counts and spoken
+    /// values; the dates, which can pass four words, are checked apart.
+    static let walkBarsCopy: [CopyString] = {
+        let units: [WalkDailyBars.Unit] = [.day, .week, .month, .year]
+        let empty = WalkProgress(history: .empty, citywideWalked: nil, today: WalkedDayKey(value: 20261117))
+        let walked = WalkProgress(
+            history: WalkedHistory(
+                days: [WalkedDaySummary(day: WalkedDayKey(value: 20261110), walkedIDs: [1, 2], newCount: 1, meters: 50)],
+                cumulative: [WalkedHistory.CumulativePoint(day: WalkedDayKey(value: 20261110), count: 1)],
+                estimatedThroughDay: nil,
+                version: 1
+            ),
+            citywideWalked: nil,
+            today: WalkedDayKey(value: 20261117)
+        )
+        let slices = WalkProgressRange.allCases.flatMap { [empty.slice($0), walked.slice($0)] }
+        return units.flatMap { [AppCopy.walkBarsHeading($0), AppCopy.walkBarsChartLabel($0)] }
+            + slices.map(AppCopy.walkBarsRestValue)
+            + slices.compactMap(AppCopy.walkBarsEmptyLine)
+            + [(0, 0), (1, 0), (1, 1), (1_204, 1_204)].map { AppCopy.walkBarCounts(total: $0, new: $1) }
+            + walkBarsSamples.flatMap { bars in bars.buckets.map { AppCopy.walkBarSpokenValue($0, in: bars) } }
+    }()
+
+    /// Every bar's dates over `walkBarsSamples`.
+    static let walkBarDateCopy: [CopyString] = walkBarsSamples.flatMap { bars in
+        bars.buckets.map { AppCopy.walkBarDates($0, in: bars) }
+    }
 
     /// Share a Walk's walks (#177): one day, a week, across a month and
     /// across a year; zero, one and many blocks, new or not, estimated or not.
@@ -293,6 +344,27 @@ struct AppCopyVoiceTests {
             #expect(copy.text.last?.isNumber == true && copy.text.first?.isLowercase == false)
             #expect(copy.text.split(whereSeparator: \.isWhitespace).count <= 6)
         }
+    }
+
+    /// protects=#188 eng E11's bar dates keep the voice rules though a
+    /// cross-year span ("Dec 27, 2026 – Jan 2, 2027") passes a value's four
+    /// words, and every shorter shape stays within four; fails_when=a date
+    /// gains a period, an em dash or a lowercase start, or a shape other
+    /// than a cross-month or cross-year span runs long; no_claim=its fit on
+    /// one line (the reserve and the AX5 capture).
+    @Test func walkBarDatesPassEveryRuleButLength() {
+        #expect(Self.walkBarDateCopy.count > 20)
+        for copy in Self.walkBarDateCopy {
+            for rule in VoiceRule.allCases where rule != .valueShape {
+                #expect(rule.passes(copy), "\(rule) fails for \"\(copy.text)\"")
+            }
+            let words = copy.text.split(whereSeparator: \.isWhitespace).count
+            #expect(copy.kind == .value)
+            #expect(copy.text.last?.isNumber == true && copy.text.first?.isLowercase == false)
+            #expect(words <= 7, "\"\(copy.text)\"")
+            if words > 4 { #expect(copy.text.contains(AppCopy.walkSpanDash), "\"\(copy.text)\"") }
+        }
+        #expect(Self.walkBarDateCopy.contains { $0.text == "Dec 27, 2026 \u{2013} Jan 2, 2027" })
     }
 
     /// protects=Share a Walk's fixed strings are the design review's copy

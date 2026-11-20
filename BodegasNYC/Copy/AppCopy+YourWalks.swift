@@ -44,6 +44,10 @@ nonisolated extension AppCopy {
         case chartDayAxis
         case chartBlocksAxis
         case chartSeries
+        /// The bars' legend (#188 DS19) and the grouped bars' footnote (DS6).
+        case barsLegendNew
+        case barsLegendWalkedBefore
+        case barsFootnote
 
         var copy: CopyString {
             switch self {
@@ -69,6 +73,9 @@ nonisolated extension AppCopy {
             case .chartDayAxis: CopyString(kind: .label, text: "Day")
             case .chartBlocksAxis: CopyString(kind: .label, text: "Blocks")
             case .chartSeries: CopyString(kind: .label, text: "Blocks Walked")
+            case .barsLegendNew: CopyString(kind: .label, text: "New")
+            case .barsLegendWalkedBefore: CopyString(kind: .label, text: "Walked Before")
+            case .barsFootnote: CopyString(kind: .body, text: "Each bar adds up its days.")
             }
         }
 
@@ -206,6 +213,13 @@ nonisolated extension AppCopy {
 
     /// "40 new in the past month", "since Mar 2024".
     private static func walkProgressSummaryText(_ slice: WalkProgressSlice) -> String {
+        let phrase = walkRangePhrase(slice)
+        return slice.range == .all ? phrase : "\(groupedCount(slice.gain)) new \(phrase)"
+    }
+
+    /// "in the past month" (week, 3 months, year), or "since Mar 2024"
+    /// for All, from the slice's first day; shared with the bars (#188).
+    static func walkRangePhrase(_ slice: WalkProgressSlice) -> String {
         let period = switch slice.range {
         case .week: "week"
         case .month: "month"
@@ -216,7 +230,7 @@ nonisolated extension AppCopy {
         guard slice.range != .all else {
             return "since " + slice.start.noon.formatted(walkDateStyle.month(.abbreviated).year())
         }
-        return "\(groupedCount(slice.gain)) new in the past \(period)"
+        return "in the past \(period)"
     }
 
     /// The chart's VoiceOver value while stepping (DS6): "298 blocks, Nov 3,
@@ -236,7 +250,7 @@ nonisolated extension AppCopy {
         return CopyString(kind: .value, text: day.noon.formatted(format))
     }
 
-    private static var walkDateStyle: Date.FormatStyle {
+    static var walkDateStyle: Date.FormatStyle {
         Date.FormatStyle(
             locale: Locale(identifier: "en_US"),
             calendar: WalkedDayKey.calendar,
