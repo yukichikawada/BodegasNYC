@@ -329,7 +329,8 @@ struct WalkProgressTests {
                 let ticks = slice.xTicks
                 #expect(ticks.last?.index == slice.lastIndex, "\(range) over \(back) days")
                 guard slice.lastIndex > 0 else { continue }
-                let perDay = WalkProgressSlice.minimumPlotWidth / Double(slice.lastIndex)
+                // #188 DS4: the plot spans lastIndex + 1 days (xDomain).
+                let perDay = WalkProgressSlice.minimumPlotWidth / Double(slice.lastIndex + 1)
                 for (left, right) in zip(ticks, ticks.dropFirst()) {
                     var needed = WalkProgressSlice.labelWidth(left.style) + WalkProgressSlice.labelGap
                     if right.index == slice.lastIndex { needed += WalkProgressSlice.labelWidth(right.style) }

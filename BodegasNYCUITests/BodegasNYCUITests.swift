@@ -484,6 +484,46 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(yesterday.waitForNonExistence(timeout: 5), "Done left the sheet up")
     }
 
+    /// protects: #188 AC 11 and DS7 end to end: Progress shows the bars as their own VoiceOver element,
+    /// `yourWalks.progress.bars`, beside the line chart's, labelled "Bar chart of blocks per day." and valued by
+    /// the range's walked days; the range picker between the charts changes it. With `-UITestWalkedDays` a block is
+    /// walked 100, 35, 9, 3 and 1 days back (two, one new, 3 back), so the month has 3 walked days, the year 5 and
+    /// the week 2 (`YourWalksTests.uiFixtureWalksFiveDays` checks those days against the bundle).
+    /// fails_when: the bars are missing or merged into the line chart's element, the value counts blocks or
+    /// calendar days, or a range change leaves the bars on the old range.
+    /// no_claim: the bars' drawing, the two tones, scrubbing or the layout (unit tests, simulator captures); the
+    /// fixture has no all-repeat day, so the walked-before tone is not seen here.
+    @MainActor
+    func testYourWalksProgressBarsFollowTheRange() throws {
+        let app = launchWithFixtures(["-UITestWalkedDays"])
+        _ = openYourWalks(app)
+        let progress = app.buttons["Progress"].firstMatch
+        XCTAssertTrue(progress.waitForExistence(timeout: 5), "there is no Progress tab")
+        progress.tap()
+
+        let bars = app.descendants(matching: .any)["yourWalks.progress.bars"].firstMatch
+        XCTAssertTrue(bars.waitForExistence(timeout: 10), "Progress never showed its bars")
+        XCTAssertEqual(bars.label, "Bar chart of blocks per day.")
+        XCTAssertTrue(
+            waitForValue(bars, "Blocks counted on 3 days in the past month.", timeout: 20),
+            "1 month reads \(String(describing: bars.value))"
+        )
+        let values = [
+            ("1 year", "Blocks counted on 5 days in the past year.", "Bar chart of blocks per month."),
+            ("1 week", "Blocks counted on 2 days in the past week.", "Bar chart of blocks per day.")
+        ]
+        for (segment, value, label) in values {
+            let button = app.buttons[segment].firstMatch
+            XCTAssertTrue(button.waitForExistence(timeout: 5), "no range segment reads \"\(segment)\"")
+            button.tap()
+            XCTAssertTrue(waitForValue(bars, value, timeout: 5), "\(segment) reads \(String(describing: bars.value))")
+            XCTAssertEqual(bars.label, label, "\(segment)")
+        }
+        XCTAssertTrue(app.descendants(matching: .any)["yourWalks.progress.chart"].firstMatch.exists, "the line chart is gone")
+        app.buttons["Done"].tap()
+        XCTAssertTrue(bars.waitForNonExistence(timeout: 5), "Done left the sheet up")
+    }
+
     /// A walk day (`yyyymmdd`) as the Share a Walk picture's VoiceOver value starts: "November 17, 2026".
     private static func spokenDay(_ day: Int) -> String {
         let months = DateFormatter()

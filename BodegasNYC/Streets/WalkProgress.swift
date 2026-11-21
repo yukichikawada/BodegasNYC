@@ -48,13 +48,27 @@ nonisolated struct WalkProgress: Equatable, Sendable {
     let allStart: WalkedDayKey
     /// "312 blocks": Your Blocks' citywide count (never below the line).
     let headline: Int
+    /// Blocks walked on each day, parallel to `counts` (#188): the day's
+    /// `walkedIDs.count`, zero on a day without a row.
+    let walked: [Int]
+    /// New blocks on each day, parallel to `counts`: the day's `newCount`.
+    let new: [Int]
+    /// The Calendar tab's first weekday, 1 = Sunday (#188 eng E5).
+    let firstWeekday: Int
 
     /// - Parameters:
     ///   - citywideWalked: Your Blocks' citywide count (`WalkedSummary`), or
     ///     `nil` before a count, when the line's last value stands in.
     ///   - today: today's walk day; a row dated later (a clock change)
     ///     extends the series to it.
-    init(history: WalkedHistory, citywideWalked: Int?, today: WalkedDayKey) {
+    ///   - firstWeekday: where a weekly bar starts (#188 eng E5), the
+    ///     Calendar grid's first weekday by default.
+    init(
+        history: WalkedHistory,
+        citywideWalked: Int?,
+        today: WalkedDayKey,
+        firstWeekday: Int = YourWalksContent.layoutCalendar.firstWeekday
+    ) {
         let end = max(today, history.days.last?.day ?? today)
         allStart = history.walkedDays.first?.day ?? history.days.first?.day ?? end
         let yearStart = end.dayNumber - (WalkProgressRange.year.dayCount ?? 1) + 1
@@ -64,6 +78,24 @@ nonisolated struct WalkProgress: Equatable, Sendable {
         counts = Self.filled(history.cumulative, from: firstNumber, through: end.dayNumber)
         let lineLast = counts.last ?? 0
         headline = max(citywideWalked ?? lineLast, lineLast)
+        let perDay = Self.perDay(history.days, from: firstNumber, count: counts.count)
+        walked = perDay.walked
+        new = perDay.new
+        self.firstWeekday = firstWeekday
+    }
+
+    /// Each day's walked and new block counts from `start` (a day number)
+    /// for `count` days, zero on a day without a row (#188 spec item 1).
+    static func perDay(_ days: [WalkedDaySummary], from start: Int, count: Int) -> (walked: [Int], new: [Int]) {
+        var walked = [Int](repeating: 0, count: count)
+        var new = [Int](repeating: 0, count: count)
+        for summary in days {
+            let offset = summary.day.dayNumber - start
+            guard offset >= 0, offset < count else { continue }
+            walked[offset] = summary.walkedIDs.count
+            new[offset] = summary.newCount
+        }
+        return (walked, new)
     }
 
     /// One count per day from `start` through `end` (day numbers): each
@@ -96,9 +128,21 @@ nonisolated struct WalkProgress: Equatable, Sendable {
     func slice(_ range: WalkProgressRange) -> WalkProgressSlice {
         let start = range.dayCount.map { today.advancedNumerically(by: -($0 - 1)) } ?? allStart
         let lower = start.dayNumber - first.dayNumber
-        let values = Array(counts[max(0, lower)...])
+        let days = max(0, lower) ..< counts.count
         let before = count(on: start.advancedNumerically(by: -1))
-        return WalkProgressSlice(range: range, start: start, counts: values, countBefore: before)
+        let walked = Array(self.walked[days])
+        let new = Array(self.new[days])
+        let bars = WalkDailyBars(start: start, walked: walked, new: new, firstWeekday: firstWeekday)
+        return WalkProgressSlice(
+            range: range,
+            start: start,
+            counts: Array(counts[days]),
+            countBefore: before,
+            walked: walked,
+            new: new,
+            bars: bars,
+            barsReserve: AppCopy.walkBarReserve(bars)
+        )
     }
 }
 
@@ -138,6 +182,15 @@ nonisolated struct WalkProgressSlice: Equatable, Sendable {
     let counts: [Int]
     /// The count just before `start` (DS6: the gain is measured from it).
     let countBefore: Int
+    /// Blocks walked on each day, parallel to `counts` (#188).
+    let walked: [Int]
+    /// New blocks on each day, parallel to `counts` (#188).
+    let new: [Int]
+    /// The range's bars, built once with the slice (#188 eng E4).
+    let bars: WalkDailyBars
+    /// The bars' longest readout (`AppCopy.walkBarReserve`, DS13), formatted
+    /// once here so a scrub frame formats no dates.
+    let barsReserve: [String]
 
     var dayCount: Int { counts.count }
     var lastIndex: Int { max(0, counts.count - 1) }
@@ -147,6 +200,13 @@ nonisolated struct WalkProgressSlice: Equatable, Sendable {
     var gain: Int { (counts.last ?? countBefore) - countBefore }
 
     func day(at index: Int) -> WalkedDayKey { start.advancedNumerically(by: index) }
+
+    /// The x-domain both charts share (#188 DS4): half a day past the
+    /// first and last days, so a day's bar and the line's step sit on the
+    /// same x; a single day spans -1 ... 1.
+    var xDomain: ClosedRange<Double> {
+        isSingleDay ? -1 ... 1 : -0.5 ... Double(lastIndex) + 0.5
+    }
 
     func point(at index: Int) -> Point {
         Point(index: index, day: day(at: index), count: counts[index])
@@ -239,12 +299,13 @@ nonisolated struct WalkProgressSlice: Equatable, Sendable {
     /// years, then each year's first. Walking back from today, a candidate
     /// is kept only when its label, and today's when the next kept tick is
     /// today, fit before the next kept gridline with `labelGap` to spare on
-    /// a `minimumPlotWidth` plot, so neighbouring labels never touch.
+    /// a `minimumPlotWidth` plot, so neighbouring labels never touch. The
+    /// plot spans `lastIndex + 1` days (`xDomain`, #188 DS4).
     var xTicks: [Tick] {
         let count = counts.count
         guard count > 1 else { return count == 1 ? [Tick(index: 0, day: start, style: .monthDay)] : [] }
         let today = Tick(index: lastIndex, day: day(at: lastIndex), style: count <= 7 ? .weekday : .monthDay)
-        let pointsPerDay = Self.minimumPlotWidth / Double(lastIndex)
+        let pointsPerDay = Self.minimumPlotWidth / Double(lastIndex + 1)
         var kept = [today]
         for candidate in tickCandidates.reversed() where candidate.index < lastIndex {
             let next = kept[kept.count - 1]

@@ -2,14 +2,19 @@ import Accessibility
 import Charts
 import SwiftUI
 
-/// Your Walks' Progress tab (#170 PR 2, design DS6, DS8.2, DS8.6): the
-/// chart with its header, then the range picker under it, then the sheet's
-/// footer. The states follow the Calendar's (`YourWalksContent`): a first
-/// read shows "Finding your walks…" under the title over the chart's empty
-/// room; history with no walked day shows the flat line and "No blocks
-/// counted yet."; the no-grid states never reach this view. A range change
-/// is the app's 0.25 s opacity change, which is also what Reduce Motion
-/// gets (DS8.6).
+/// Your Walks' Progress tab (#170 PR 2, design DS6, DS8.2, DS8.6; #188):
+/// the line chart with its header, the range picker, the bars of blocks
+/// per day, then the sheet's footer (#188 DS15's spacing: 16 to the picker,
+/// 24 to the bars' heading, 24 to the footer). The states follow the
+/// Calendar's (`YourWalksContent`): a first read shows "Finding your walks…"
+/// under the title over both charts' empty room; history with no walked day
+/// shows the flat line and "No blocks counted yet."; the no-grid states
+/// never reach this view. A range change is the app's 0.25 s opacity
+/// change, which is also what Reduce Motion gets (DS8.6).
+///
+/// This view only builds the range's slice, once per change of `progress`
+/// or `range` (eng E4); `WalkProgressStack` owns the scrub, so a drag
+/// re-renders the stack and never rebuilds the slice.
 struct WalkProgressView: View {
     let content: YourWalksContent
     let progress: WalkProgress?
@@ -17,28 +22,86 @@ struct WalkProgressView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                ZStack {
-                    if let progress {
-                        WalkProgressChart(slice: progress.slice(range), headline: progress.headline)
-                            .id(range)
-                            .transition(.opacity)
-                    } else {
-                        // The first read: the chart's room, nothing drawn yet.
-                        Color.clear
-                            .frame(height: WalkProgressChart.plotHeight + 64)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.25), value: range)
-                rangePicker
-                footer
-            }
-            .padding(.vertical, 16)
+            WalkProgressStack(
+                slice: progress?.slice(range),
+                headline: progress?.headline ?? 0,
+                isRecording: content.isRecording,
+                range: $range
+            )
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             if let line = content.statusLine { YourWalksStatusLine(text: line) }
         }
+    }
+}
+
+/// The Progress tab's content under one slice (#188): the line chart, the
+/// picker, the bars and the footer. The scrubbed day is one state shared by
+/// both charts (eng E1): a finger on either shows the rule on the same day
+/// in both. It is an index from the range's first day, so a range change
+/// clears it. The picker sits outside both charts' `.id(range)` subtrees,
+/// and this view has no `.id`, so the picker is never recreated and
+/// VoiceOver focus stays on it (E6).
+private struct WalkProgressStack: View {
+    /// `nil` before the first history read.
+    let slice: WalkProgressSlice?
+    let headline: Int
+    let isRecording: Bool
+    @Binding var range: WalkProgressRange
+    /// The day index under the finger on either chart; `nil` once it lifts.
+    @State private var selectedDay: Int?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                if let slice {
+                    WalkProgressChart(
+                        slice: slice,
+                        headline: headline,
+                        yLabelColumn: Self.yLabelColumn(slice),
+                        selectedDay: $selectedDay
+                    )
+                    .id(range)
+                    .transition(.opacity)
+                } else {
+                    // The first read: the chart's room, nothing drawn yet.
+                    Color.clear
+                        .frame(height: WalkProgressChart.plotHeight + 64)
+                        .accessibilityHidden(true)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: range)
+            rangePicker
+                .padding(.top, 16)
+            ZStack {
+                if let slice {
+                    WalkDailyBarsChart(
+                        slice: slice,
+                        yLabelColumn: Self.yLabelColumn(slice),
+                        selectedDay: $selectedDay
+                    )
+                    .id(range)
+                    .transition(.opacity)
+                } else {
+                    // DS16: the bars' room with no heading (no unit yet).
+                    Color.clear
+                        .frame(height: WalkDailyBarsChart.plotHeight + 56)
+                        .accessibilityHidden(true)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: range)
+            .padding(.top, 24)
+            footer
+                .padding(.top, 24)
+        }
+        .padding(.vertical, 16)
+        .onChange(of: range) { selectedDay = nil }
+    }
+
+    /// The y labels' shared column (#188 DS4): both charts lay out the
+    /// widest of their top labels, so the two plots are the same width.
+    private static func yLabelColumn(_ slice: WalkProgressSlice) -> [String] {
+        [slice.yDomain.upperBound, slice.bars.yDomain.upperBound].map(AppCopy.groupedCount)
     }
 
     /// 1W, 1M, 3M, 1Y, All; read as "1 week" and so on (DS8.5).
@@ -51,7 +114,7 @@ struct WalkProgressView: View {
             }
         }
         .pickerStyle(.segmented)
-        .disabled(progress == nil)
+        .disabled(slice == nil)
         .padding(.horizontal, 16)
     }
 
@@ -60,7 +123,7 @@ struct WalkProgressView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppCopy.YourWalks.footer.copy.text)
-            if content.isRecording {
+            if isRecording {
                 Text(AppCopy.YourWalks.todayPending.copy.text)
             }
         }
@@ -84,15 +147,18 @@ struct WalkProgressView: View {
 struct WalkProgressChart: View {
     let slice: WalkProgressSlice
     let headline: Int
-    /// The day index under the finger; `nil` once it lifts.
-    @State private var rawSelection: Int?
+    /// The y labels' shared column (#188 DS4, `WalkChartYLabel`).
+    let yLabelColumn: [String]
+    /// The day index under the finger, shared with the bars (#188 eng E1);
+    /// `nil` once it lifts.
+    @Binding var selectedDay: Int?
     /// The day VoiceOver has stepped to; `nil` reads the range summary.
     @State private var voiceOverIndex: Int?
 
     static let plotHeight: CGFloat = 240
 
     var body: some View {
-        let selected = slice.selection(at: rawSelection)
+        let selected = slice.selection(at: selectedDay)
         VStack(alignment: .leading, spacing: 12) {
             header(selected)
                 .padding(.horizontal, 16)
@@ -174,7 +240,8 @@ struct WalkProgressChart: View {
                     .symbolSize(48)
             }
         }
-        .chartXScale(domain: slice.isSingleDay ? -1 ... 1 : 0 ... slice.lastIndex)
+        // #188 DS4: the bars' x-domain, half a day past each end.
+        .chartXScale(domain: slice.xDomain)
         .chartYScale(domain: slice.yDomain)
         .chartXAxis {
             AxisMarks(values: slice.xTicks.map(\.index)) { value in
@@ -187,18 +254,20 @@ struct WalkProgressChart: View {
             }
         }
         .chartYAxis {
-            AxisMarks(position: .trailing, values: slice.yTicks) { _ in
+            AxisMarks(position: .trailing, values: slice.yTicks) { value in
                 AxisGridLine()
-                AxisValueLabel()
+                AxisValueLabel {
+                    WalkChartYLabel(value: value.as(Int.self), column: yLabelColumn)
+                }
             }
         }
-        .chartXSelection(value: $rawSelection)
+        .chartXSelection(value: $selectedDay)
     }
 
     /// Swift Charts' default placement (just after the gridline), except
     /// today's label, which ends at the plot's trailing edge: placed after
     /// it, it ran out of the plot and was dropped (simulator capture).
-    private static func labelAnchor(_ index: Int?, lastIndex: Int) -> UnitPoint? {
+    static func labelAnchor(_ index: Int?, lastIndex: Int) -> UnitPoint? {
         lastIndex > 0 && index == lastIndex ? .topTrailing : nil
     }
 }

@@ -188,8 +188,9 @@ struct YourWalksContent: Equatable {
     }
 
     /// The months the grid draws for `layout`, as `Calendar.current` with
-    /// New York's zone (eng A7).
-    static var layoutCalendar: Calendar {
+    /// New York's zone (eng A7). Nonisolated so `WalkProgress` can take
+    /// its first weekday as a default (#188 eng E5).
+    nonisolated static var layoutCalendar: Calendar {
         var calendar = Calendar.current
         calendar.timeZone = WalkedDayKey.timeZone
         return calendar
