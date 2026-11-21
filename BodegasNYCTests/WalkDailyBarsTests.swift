@@ -237,7 +237,8 @@ struct WalkDailyBarsTests {
     /// protects: eng E2: the bars map a continuous x to the nearest day
     /// themselves, clamped to the range; a lifted finger (nil) is nil.
     /// fails_when: x truncates instead of rounding, a half-day edge goes
-    /// to the wrong side, or an x past the plot leaves the range.
+    /// to the wrong side, an x past the plot leaves the range, or a huge
+    /// finite x traps converting to Int.
     /// no_claim: what Swift Charts hands the binding (simulator probe).
     @Test func continuousXRoundsToADay() {
         let bars = Self.progress().slice(.week).bars
@@ -250,6 +251,10 @@ struct WalkDailyBarsTests {
         #expect(bars.dayIndex(forX: 6.5) == 6)
         #expect(bars.dayIndex(forX: 40) == 6)
         #expect(bars.dayIndex(forX: .nan) == nil)
+        #expect(bars.dayIndex(forX: .infinity) == nil)
+        #expect(bars.dayIndex(forX: 1e300) == 6, "a huge finite x clamps, never traps")
+        #expect(bars.dayIndex(forX: -1e300) == 0)
+        #expect(bars.dayIndex(forX: Double.greatestFiniteMagnitude) == 6)
     }
 
     /// protects: eng E3 and spec item 7: `bar(containing:)` finds the

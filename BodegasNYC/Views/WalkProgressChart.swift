@@ -12,69 +12,89 @@ import SwiftUI
 /// never reach this view. A range change is the app's 0.25 s opacity
 /// change, which is also what Reduce Motion gets (DS8.6).
 ///
-/// The scrubbed day is one state shared by both charts (#188 eng E1): a
-/// finger on either shows the rule on the same day in both. It is an index
-/// from the range's first day, so a range change clears it. The picker sits
-/// outside both charts' `.id(range)` subtrees, so it is never recreated and
-/// VoiceOver focus stays on it (E6).
+/// This view only builds the range's slice, once per change of `progress`
+/// or `range` (eng E4); `WalkProgressStack` owns the scrub, so a drag
+/// re-renders the stack and never rebuilds the slice.
 struct WalkProgressView: View {
     let content: YourWalksContent
     let progress: WalkProgress?
+    @Binding var range: WalkProgressRange
+
+    var body: some View {
+        ScrollView {
+            WalkProgressStack(
+                slice: progress?.slice(range),
+                headline: progress?.headline ?? 0,
+                isRecording: content.isRecording,
+                range: $range
+            )
+        }
+        .safeAreaInset(edge: .top, spacing: 0) {
+            if let line = content.statusLine { YourWalksStatusLine(text: line) }
+        }
+    }
+}
+
+/// The Progress tab's content under one slice (#188): the line chart, the
+/// picker, the bars and the footer. The scrubbed day is one state shared by
+/// both charts (eng E1): a finger on either shows the rule on the same day
+/// in both. It is an index from the range's first day, so a range change
+/// clears it. The picker sits outside both charts' `.id(range)` subtrees,
+/// and this view has no `.id`, so the picker is never recreated and
+/// VoiceOver focus stays on it (E6).
+private struct WalkProgressStack: View {
+    /// `nil` before the first history read.
+    let slice: WalkProgressSlice?
+    let headline: Int
+    let isRecording: Bool
     @Binding var range: WalkProgressRange
     /// The day index under the finger on either chart; `nil` once it lifts.
     @State private var selectedDay: Int?
 
     var body: some View {
-        // One slice per body, handed to both charts (eng E4).
-        let slice = progress?.slice(range)
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                ZStack {
-                    if let progress, let slice {
-                        WalkProgressChart(
-                            slice: slice,
-                            headline: progress.headline,
-                            yLabelColumn: Self.yLabelColumn(slice),
-                            selectedDay: $selectedDay
-                        )
-                        .id(range)
-                        .transition(.opacity)
-                    } else {
-                        // The first read: the chart's room, nothing drawn yet.
-                        Color.clear
-                            .frame(height: WalkProgressChart.plotHeight + 64)
-                            .accessibilityHidden(true)
-                    }
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack {
+                if let slice {
+                    WalkProgressChart(
+                        slice: slice,
+                        headline: headline,
+                        yLabelColumn: Self.yLabelColumn(slice),
+                        selectedDay: $selectedDay
+                    )
+                    .id(range)
+                    .transition(.opacity)
+                } else {
+                    // The first read: the chart's room, nothing drawn yet.
+                    Color.clear
+                        .frame(height: WalkProgressChart.plotHeight + 64)
+                        .accessibilityHidden(true)
                 }
-                .animation(.easeInOut(duration: 0.25), value: range)
-                rangePicker
-                    .padding(.top, 16)
-                ZStack {
-                    if let slice {
-                        WalkDailyBarsChart(
-                            slice: slice,
-                            yLabelColumn: Self.yLabelColumn(slice),
-                            selectedDay: $selectedDay
-                        )
-                        .id(range)
-                        .transition(.opacity)
-                    } else {
-                        // DS16: the bars' room with no heading (no unit yet).
-                        Color.clear
-                            .frame(height: WalkDailyBarsChart.plotHeight + 56)
-                            .accessibilityHidden(true)
-                    }
-                }
-                .animation(.easeInOut(duration: 0.25), value: range)
-                .padding(.top, 24)
-                footer
-                    .padding(.top, 24)
             }
-            .padding(.vertical, 16)
+            .animation(.easeInOut(duration: 0.25), value: range)
+            rangePicker
+                .padding(.top, 16)
+            ZStack {
+                if let slice {
+                    WalkDailyBarsChart(
+                        slice: slice,
+                        yLabelColumn: Self.yLabelColumn(slice),
+                        selectedDay: $selectedDay
+                    )
+                    .id(range)
+                    .transition(.opacity)
+                } else {
+                    // DS16: the bars' room with no heading (no unit yet).
+                    Color.clear
+                        .frame(height: WalkDailyBarsChart.plotHeight + 56)
+                        .accessibilityHidden(true)
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: range)
+            .padding(.top, 24)
+            footer
+                .padding(.top, 24)
         }
-        .safeAreaInset(edge: .top, spacing: 0) {
-            if let line = content.statusLine { YourWalksStatusLine(text: line) }
-        }
+        .padding(.vertical, 16)
         .onChange(of: range) { selectedDay = nil }
     }
 
@@ -94,7 +114,7 @@ struct WalkProgressView: View {
             }
         }
         .pickerStyle(.segmented)
-        .disabled(progress == nil)
+        .disabled(slice == nil)
         .padding(.horizontal, 16)
     }
 
@@ -103,7 +123,7 @@ struct WalkProgressView: View {
     private var footer: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(AppCopy.YourWalks.footer.copy.text)
-            if content.isRecording {
+            if isRecording {
                 Text(AppCopy.YourWalks.todayPending.copy.text)
             }
         }

@@ -132,6 +132,7 @@ nonisolated struct WalkProgress: Equatable, Sendable {
         let before = count(on: start.advancedNumerically(by: -1))
         let walked = Array(self.walked[days])
         let new = Array(self.new[days])
+        let bars = WalkDailyBars(start: start, walked: walked, new: new, firstWeekday: firstWeekday)
         return WalkProgressSlice(
             range: range,
             start: start,
@@ -139,7 +140,8 @@ nonisolated struct WalkProgress: Equatable, Sendable {
             countBefore: before,
             walked: walked,
             new: new,
-            bars: WalkDailyBars(start: start, walked: walked, new: new, firstWeekday: firstWeekday)
+            bars: bars,
+            barsReserve: AppCopy.walkBarReserve(bars)
         )
     }
 }
@@ -186,6 +188,9 @@ nonisolated struct WalkProgressSlice: Equatable, Sendable {
     let new: [Int]
     /// The range's bars, built once with the slice (#188 eng E4).
     let bars: WalkDailyBars
+    /// The bars' longest readout (`AppCopy.walkBarReserve`, DS13), formatted
+    /// once here so a scrub frame formats no dates.
+    let barsReserve: [String]
 
     var dayCount: Int { counts.count }
     var lastIndex: Int { max(0, counts.count - 1) }

@@ -141,7 +141,8 @@ nonisolated struct WalkDailyBars: Equatable, Sendable {
     /// clamped to the range; `nil` when nothing is selected.
     func dayIndex(forX value: Double?) -> Int? {
         guard let value, dayCount > 0, value.isFinite else { return nil }
-        return min(max(Int(value.rounded()), 0), dayCount - 1)
+        // Clamped as a Double first: `Int(_:)` traps on a huge finite value.
+        return Int(min(max(value, 0), Double(dayCount - 1)).rounded())
     }
 
     /// The bucket holding `index`, clamped to the range (eng E3); a bucket

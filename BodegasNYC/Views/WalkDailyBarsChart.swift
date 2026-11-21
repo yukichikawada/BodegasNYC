@@ -90,7 +90,7 @@ struct WalkDailyBarsChart: View {
                 .font(.headline)
                 .foregroundStyle(.primary)
             ZStack(alignment: .topLeading) {
-                readout(AppCopy.walkBarReserve(bars)).hidden()
+                readout(slice.barsReserve).hidden()
                 restLine.opacity(atRest ? 1 : 0)
                 if let selected {
                     readout(AppCopy.walkBarReadout(selected, in: bars))
