@@ -222,11 +222,14 @@ corner at night; the map tiles already switch, so the chrome follows the system 
 - Red is text only: form errors and destructive actions in sheets (#154). Nothing on the map is red.
 - Orange is the cat and only the cat (cat pins, the cat symbol in the onboarding spine, the
   first-add card, the noBodegas empty state), and the Streets Walked intro's symbol (#126 D3). Yellow is stars and only stars.
-- Cyan is the walked trail and the marks of walked history, Your Walks' day dots and its chart
-  line, and nothing else (#154, superseding #108 D1; widened by #170 D2): the
+- Cyan is the walked trail and the marks of walked history, Your Walks' day dots, its chart line
+  and its per-day bars, and nothing else (#154, superseding #108 D1; widened by #170 D2 and #188): the
   `walked` asset, #0891B2 light and #5AE3FF dark, with Increase Contrast slots #066A85 / #A0F0FF.
   A mark is never a wash: no fill under the chart line (#170 DS6), and a dot is never the only
-  signal (the day's number is `.primary` when walked, DS8.1).
+  signal (the day's number is `.primary` when walked, DS8.1). A bar's lighter part (blocks walked
+  before, the same cyan at 35%, the breadcrumb track's tone) is always closed by a 1pt outline in the
+  solid cyan, so no tint stands without a solid mark; Increase Contrast draws that outline in the
+  contrast slot with no tint (#188).
   At the 8 and 5pt bands the trail is breadcrumbs: round dots (zero-length dashes with round caps)
   over a translucent track of the same cyan at 35%: 8pt dots every 16pt on a 16pt track, and
   6.5pt dots every 13pt on a 14pt track. At the 3 and 2pt bands it is a plain solid line with no
@@ -701,7 +704,7 @@ week, every seventh day back from today in a month, each month's first in 3 mont
 quarter's first in a year (January as "2026"), after their gridlines as Swift Charts places them, the
 one before today left out when the two would not sit 8pt apart on a 300pt plot (an iPhone SE's); the
 axis labels stay at the default text size (a month's dates overlapped at larger sizes) while the header
-scales fully. Under the chart a segmented range picker, 1W, 1M, 3M, 1Y, All, opening on 1M, read as "1
+scales fully. Under the chart a segmented range picker (between the two charts since #188), 1W, 1M, 3M, 1Y, All, opening on 1M, read as "1
 week", "1 month", "3 months", "1 year", "All"; a range change is the 0.25s opacity change, Reduce
 Motion included; then the sheet footer and the recording line, as under the Calendar. Scrubbing
 (Swift Charts' x selection) shows a 1pt `textMuted` rule and a cyan point on the day under the finger
@@ -712,6 +715,32 @@ walked day shows the flat line at zero and "No blocks counted yet.". VoiceOver: 
 are one adjustable element, "Chart of the blocks you walked.", valued "312 blocks, 40 new in the past
 month." at rest; swiping up or down steps a day at a time from today ("298 blocks, Nov 3, 2025."),
 stopping at both ends; it carries an Audio Graph of the range's days.
+Since #188 the range picker sits between two charts (`WalkDailyBarsChart` under it), 16pt under the
+line's plot and 24pt over the bars' heading, outside both charts' fading subtrees so it keeps
+VoiceOver focus. Both plots share one x-domain, half a day past the first and last days (-1 to 1 for
+a single day), with ticks spaced for that width, the same gridlines and today's label, and one
+fixed y-label column (the wider of the two charts' top labels, monospaced digits), so a day sits at
+the same x in both. The bars: heading "Blocks per Day" (Week, Month, Year: up to 31 days daily, up
+to 124 weekly from the Calendar's first weekday, up to 1,095 monthly, then yearly; civil months and
+years, the first and last clipped to the range) in `.headline` `.primary`, 4pt over a second line
+in `.subheadline` `textMuted`, monospaced digits: at rest the legend (8pt squares scaled with the
+text, 4pt to "New" and "Walked Before", 12pt apart, stacked when they do not fit), for a range with
+no counted block "No blocks counted in the past week." in its place (the y labels hidden, nothing
+centred); while scrubbing the bar's counts and dates, "19 blocks, 12 new · Nov 3", "64 blocks, 22
+new · Nov 9 – 15", "Nov 2026" or "2026" for a whole month or year, its dates for a clipped one, at a
+height reserved for the longest the range can show (counts over dates at accessibility sizes). Then,
+12pt under it, the 140pt plot: each bar its new blocks in solid `walked` under the blocks walked
+before in the 35% tint closed by a 1pt solid outline inside its bounds (drawn from the chart's own
+positions, as Swift Charts cannot stroke a rectangle mark); square corners, a tenth of the unit
+inset each side (at most a quarter of a clipped bar's span), never wider than 36pt on a 300pt plot;
+the y-axis from zero to the largest bar's total. Grouped bars add up their days, and say so 8pt
+under the plot in `.footnote` `textMuted`: "Each bar adds up its days."; 24pt to the footer. A
+finger on either plot shows the 1pt `textMuted` rule on the same day in both (in the bars, from the
+bar's top up, never across one, since the tint is see-through; no bar dims), swaps both second lines, and a range change clears it. The bars are one
+adjustable VoiceOver element, "Bar chart of blocks per day.", valued "Blocks counted on 12 days in
+the past month." at rest, stepping through every day or period of the range, zeros included
+("Tuesday, November 3, 14 blocks, 9 new.", "November 9 to 15, 64 blocks, 22 new."), with an Audio
+Graph of the same points. A first read leaves the bars' room empty with no heading.
 The day map is `WalkRunsMap` (#177), which the Share a Walk work extracted unchanged; it gains the
 VoiceOver actions Zoom In, Zoom Out and Show Whole Walk (DS6), so "Zoom in to see your blocks." can
 be acted on without a pinch.
