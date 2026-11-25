@@ -19,10 +19,10 @@ struct DataPointsSection: View {
         /// Present: symbol and caption in `.primary`. Absent: the same symbol
         /// and a struck-through caption in `textMuted`, never dimmed by
         /// opacity (#95 design D9). D9 asks for the symbol's `.slash` variant
-        /// where one exists; none of the six has one in iOS 26 (`cat.slash`,
-        /// `flame.slash`, `cross.slash`, `mug.slash`, `ticket.slash` and
-        /// `banknote.slash` are not SF Symbols), so the strikethrough is the
-        /// shape cue for all.
+        /// where one exists; none of the seven has one in iOS 26 (`cat.slash`,
+        /// `flame.slash`, `cross.slash`, `mug.slash`, `ticket.slash`,
+        /// `banknote.slash` and `toilet.slash` are not SF Symbols), so the
+        /// strikethrough is the shape cue for all.
         var foreground: Color { isPresent ? .primary : .textMuted }
         var strikesCaption: Bool { !isPresent }
     }
@@ -42,8 +42,7 @@ struct DataPointsSection: View {
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
-    /// Six icon-over-caption columns while they fit at their ideal widths
-    /// (through xxxLarge on a 402 pt phone, through xxLarge on 375 pt);
+    /// Seven icon-over-caption columns while they fit at their ideal widths;
     /// otherwise, and always at the accessibility sizes (DD16, the same
     /// threshold as the map card), one leading icon-and-caption row per
     /// point, so no caption is squeezed into broken lines ("Ho/t/foo/d")

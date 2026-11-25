@@ -35,6 +35,7 @@ struct AddBodegaViewModelTests {
       "sells_beer": false,
       "sells_lotto": false,
       "has_atm": false,
+      "has_bathroom": false,
       "hours": null,
       "is_hidden": false,
       "created_at": "2026-07-21T18:30:00.123456+00:00",
@@ -67,8 +68,9 @@ struct AddBodegaViewModelTests {
     }
 
     /// protects: the insert body carries `created_by` from the session, the
-    /// EWKT location and, since #141, `has_atm` from the form.
-    /// fails_when: any of the three is missing or wrong in the POST body.
+    /// EWKT location and, since #141 and #194, `has_atm` and `has_bathroom`
+    /// from the form.
+    /// fails_when: any of the four is missing or wrong in the POST body.
     /// no_claim: the other data point keys (covered by the PATCH key set).
     @Test func submitSendsCreatedByFromTheSessionAndEWKTLocation() async throws {
         MockURLProtocol.reset()
@@ -81,6 +83,7 @@ struct AddBodegaViewModelTests {
         let viewModel = try makeViewModel(session: makeTestSession(userID: userID))
         viewModel.name = "El Sol Deli & Grocery"
         viewModel.hasAtm = true
+        viewModel.hasBathroom = true
 
         viewModel.submit()
         await viewModel.waitForPendingSubmitForTesting()
@@ -95,6 +98,7 @@ struct AddBodegaViewModelTests {
         #expect(json["created_by"] as? String == userID.uuidString)
         #expect(json["location"] as? String == "SRID=4326;POINT(-73.9965 40.7291)")
         #expect(json["has_atm"] as? Bool == true)
+        #expect(json["has_bathroom"] as? Bool == true)
     }
 
     @Test func submitOmitsAddressWhenBlank() async throws {
@@ -216,7 +220,8 @@ struct AddBodegaViewModelTests {
             address: "123 Bleecker St",
             hasCat: true,
             sellsLotto: true,
-            hasAtm: true
+            hasAtm: true,
+            hasBathroom: true
         )
         bodega.hours = BodegaHours(
             mon: .init(open: "7:00", close: "23:00"),
@@ -236,8 +241,9 @@ struct AddBodegaViewModelTests {
     }
 
     /// protects: Edit Bodega opens with every field of the existing bodega,
-    /// including `hasAtm` (#141).
-    /// fails_when: any field, ATM included, is not copied from the bodega.
+    /// including `hasAtm` (#141) and `hasBathroom` (#194).
+    /// fails_when: any field, ATM or Bathroom included, is not copied from
+    /// the bodega.
     /// no_claim: that the prefilled values are sent (see the PATCH test).
     @Test func editModePrefillsEveryFieldFromTheExistingBodega() throws {
         let viewModel = try makeEditViewModel(session: makeTestSession())
@@ -251,6 +257,7 @@ struct AddBodegaViewModelTests {
         #expect(!viewModel.sellsBeer)
         #expect(viewModel.sellsLotto)
         #expect(viewModel.hasAtm)
+        #expect(viewModel.hasBathroom)
         let mon = try #require(viewModel.dayEntries.first { $0.id == "mon" })
         #expect(mon.open == "7:00" && mon.close == "23:00" && !mon.isClosed)
         let sun = try #require(viewModel.dayEntries.first { $0.id == "sun" })
@@ -268,11 +275,14 @@ struct AddBodegaViewModelTests {
     @Test func amenityBindingsReadAndWriteOnlyTheirOwnField() throws {
         let viewModel = try makeViewModel(session: makeTestSession())
         let stored: (AddBodegaViewModel) -> [Bool] = {
-            [$0.hasCat, $0.servesHotFood, $0.sellsCigarettes, $0.sellsBeer, $0.sellsLotto, $0.hasAtm]
+            [
+                $0.hasCat, $0.servesHotFood, $0.sellsCigarettes, $0.sellsBeer, $0.sellsLotto, $0.hasAtm,
+                $0.hasBathroom
+            ]
         }
-        let allOff = [false, false, false, false, false, false]
+        let allOff = [false, false, false, false, false, false, false]
         let order: [BodegaFilter.Amenity] = [
-            .hasCat, .servesHotFood, .sellsCigarettes, .sellsBeer, .sellsLotto, .hasAtm
+            .hasCat, .servesHotFood, .sellsCigarettes, .sellsBeer, .sellsLotto, .hasAtm, .hasBathroom
         ]
         #expect(BodegaFilter.Amenity.allCases == order)
         for (index, amenity) in order.enumerated() {
@@ -295,9 +305,19 @@ struct AddBodegaViewModelTests {
         #expect(!viewModel.isEditing)
     }
 
-    // Also (#20): protects=Edit Bodega never runs the duplicate check;
-    // fails_when=an RPC request appears or more than one request is sent;
-    // no_claim=none beyond protects.
+    /// protects: Edit Bodega PATCHes the bodega by id with exactly the
+    /// editable keys, the seven data points included (`has_atm` since #141,
+    /// `has_bathroom` since #194), and sends the prefilled values it did not
+    /// touch (`has_bathroom` stays true from the existing bodega).
+    /// fails_when: a data point key is missing or extra, a non-editable key
+    /// (`location`, `created_by`, `is_hidden`) is sent, or a prefilled value
+    /// is dropped.
+    /// no_claim: the server applying the PATCH; MockURLProtocol stands in for
+    /// PostgREST.
+    ///
+    /// Also (#20): protects=Edit Bodega never runs the duplicate check;
+    /// fails_when=an RPC request appears or more than one request is sent;
+    /// no_claim=none beyond protects.
     @Test func editSubmitPatchesTheBodegaByIDWithOnlyEditableKeys() async throws {
         MockURLProtocol.reset()
         let capturedRequest = Captured<URLRequest?>(nil)
@@ -328,7 +348,7 @@ struct AddBodegaViewModelTests {
         let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: Any])
         #expect(Set(json.keys) == [
             "name", "address", "has_cat", "serves_hot_food", "sells_cigarettes",
-            "sells_beer", "sells_lotto", "has_atm", "hours"
+            "sells_beer", "sells_lotto", "has_atm", "has_bathroom", "hours"
         ])
         #expect(json["location"] == nil)
         #expect(json["created_by"] == nil)
@@ -338,6 +358,7 @@ struct AddBodegaViewModelTests {
         #expect(json["sells_beer"] as? Bool == true)
         #expect(json["has_cat"] as? Bool == true)
         #expect(json["has_atm"] as? Bool == true)
+        #expect(json["has_bathroom"] as? Bool == true)
         let hours = try #require(json["hours"] as? [String: Any])
         #expect(Set(hours.keys) == ["mon", "sun"])
     }
@@ -409,6 +430,7 @@ extension NetworkingTests.AddBodegaViewModelTests {
                 "sells_beer": false,
                 "sells_lotto": false,
                 "has_atm": false,
+                "has_bathroom": false,
                 "hours": NSNull(),
                 "is_hidden": isHidden,
                 "created_at": "2026-07-21T18:30:00.000000+00:00",

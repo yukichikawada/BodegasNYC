@@ -30,7 +30,7 @@ struct BodegaFilterTests {
     }
 
     /// protects: requiring one amenity keeps a bodega with that data point
-    /// and drops one without it, for all six (ATM since #141).
+    /// and drops one without it, for all seven (ATM since #141, Bathroom since #194).
     /// fails_when: an amenity's `isSatisfied(by:)` reads another field or
     /// none, or requiring it does not count once in the badge.
     /// no_claim: combinations (see `combinedAmenitiesUseANDSemantics`).
@@ -43,7 +43,8 @@ struct BodegaFilterTests {
             sellsCigarettes: amenity == .sellsCigarettes,
             sellsBeer: amenity == .sellsBeer,
             sellsLotto: amenity == .sellsLotto,
-            hasAtm: amenity == .hasAtm
+            hasAtm: amenity == .hasAtm,
+            hasBathroom: amenity == .hasBathroom
         )
         var filter = BodegaFilter.none
         filter.setRequired(amenity, true)
@@ -185,13 +186,16 @@ struct BodegaFilterTests {
     /// label is the bare noun; the verb lives in the VoiceOver label, which
     /// is read without the section title.
     ///
-    /// protects: the bare-noun / verb split, ATM's label, VoiceOver label,
-    /// symbol and last place (#141), and one label source per amenity:
-    /// `label` is its `caption` text (#141 design DS6).
-    /// fails_when: a label gains a verb, a VoiceOver label loses it, ATM's
-    /// strings or symbol drift, ATM moves off the end, or `label` and
+    /// protects: the bare-noun / verb split; ATM's label, VoiceOver label and
+    /// symbol (#141); Bathroom's ("Bathroom", "Has a Bathroom", `toilet`)
+    /// and its last place right after ATM among seven (#194); and one label
+    /// source per amenity: `label` is its `caption` text (#141 design DS6).
+    /// fails_when: a label gains a verb, a VoiceOver label loses it, ATM's or
+    /// Bathroom's strings or symbol drift, the count is not seven, Bathroom
+    /// moves off the end or ATM off the place before it, or `label` and
     /// `caption` diverge.
-    /// no_claim: how the strings render on any surface.
+    /// no_claim: how the strings render on any surface, or that `toilet`
+    /// renders (see `TextContrastTests.dataPointSymbolsExistWithoutSlashVariants`).
     @Test func amenityLabelsAreBareNounsAndAccessibilityLabelsCarryTheVerb() {
         let verbs = ["Has ", "Sells ", "Serves "]
         for amenity in BodegaFilter.Amenity.allCases {
@@ -205,6 +209,10 @@ struct BodegaFilterTests {
         #expect(BodegaFilter.Amenity.hasAtm.label == "ATM")
         #expect(BodegaFilter.Amenity.hasAtm.accessibilityLabel == "Has an ATM")
         #expect(BodegaFilter.Amenity.hasAtm.systemImage == "banknote")
-        #expect(BodegaFilter.Amenity.allCases.last == .hasAtm)
+        #expect(BodegaFilter.Amenity.hasBathroom.label == "Bathroom")
+        #expect(BodegaFilter.Amenity.hasBathroom.accessibilityLabel == "Has a Bathroom")
+        #expect(BodegaFilter.Amenity.hasBathroom.systemImage == "toilet")
+        #expect(BodegaFilter.Amenity.allCases.count == 7)
+        #expect(Array(BodegaFilter.Amenity.allCases.suffix(2)) == [.hasAtm, .hasBathroom])
     }
 }

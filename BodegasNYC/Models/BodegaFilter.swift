@@ -1,7 +1,7 @@
 import Foundation
 
 /// What the browse surfaces (map and list) narrow their already-fetched
-/// bodegas down to: any combination of the six data points, plus a
+/// bodegas down to: any combination of the seven data points, plus a
 /// free-text name/address search. Applied entirely client-side against the
 /// in-memory set each view model already holds — deliberately not pushed
 /// into `BodegaService`'s queries, so `.nearby`'s radius refetches and the
@@ -11,7 +11,7 @@ import Foundation
 /// shared by both browse screens, owned by `BrowseView` so switching tabs
 /// never loses it.
 nonisolated struct BodegaFilter: Equatable, Sendable {
-    /// One of `Bodega`'s six yes/no data points. `allCases` order is the
+    /// One of `Bodega`'s seven yes/no data points. `allCases` order is the
     /// display order on every surface: the Filters sheet, the Add/Edit
     /// form, the detail screen and onboarding page 2.
     nonisolated enum Amenity: String, CaseIterable, Identifiable, Sendable {
@@ -23,6 +23,8 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
         /// Last: the five original points keep their order, and ATM, the
         /// first service point, follows them (#141).
         case hasAtm
+        /// After ATM, the second service point (#194).
+        case hasBathroom
 
         var id: Self { self }
 
@@ -37,6 +39,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             case .sellsBeer: .onboardingBeerLabel
             case .sellsLotto: .onboardingLottoLabel
             case .hasAtm: .onboardingAtmLabel
+            case .hasBathroom: .onboardingBathroomLabel
             }
         }
 
@@ -54,6 +57,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             case .sellsBeer: "Sells Beer"
             case .sellsLotto: "Sells Lotto"
             case .hasAtm: "Has an ATM"
+            case .hasBathroom: "Has a Bathroom"
             }
         }
 
@@ -65,6 +69,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             case .sellsBeer: "mug"
             case .sellsLotto: "ticket"
             case .hasAtm: "banknote"
+            case .hasBathroom: "toilet"
             }
         }
 
@@ -76,6 +81,7 @@ nonisolated struct BodegaFilter: Equatable, Sendable {
             case .sellsBeer: bodega.sellsBeer
             case .sellsLotto: bodega.sellsLotto
             case .hasAtm: bodega.hasAtm
+            case .hasBathroom: bodega.hasBathroom
             }
         }
     }

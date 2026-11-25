@@ -73,6 +73,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case onboardingBeerLabel
     case onboardingLottoLabel
     case onboardingAtmLabel
+    case onboardingBathroomLabel
     case onboardingPage3Title
     case onboardingPage3Body
     case onboardingAddAction
@@ -115,7 +116,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
 
     // MARK: Detail data points (#70)
 
-    /// VoiceOver values for the detail screen's six data points, which
+    /// VoiceOver values for the detail screen's seven data points, which
     /// otherwise show presence only by color and a struck-through caption.
     case dataPointPresentValue
     case dataPointAbsentValue
@@ -234,7 +235,12 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     case directionsHint
     /// Under the detail's action row when Apple Maps did not open (DS10).
     case mapsDidNotOpenBody
+}
 
+// The text table sits outside the enum body so the case list alone counts
+// toward SwiftLint's type_body_length (the Bathroom label in #194 took the
+// combined body past 250 lines).
+nonisolated extension AppCopy {
     var copy: CopyString {
         switch self {
         case .emptyNoBodegasTitle: CopyString(kind: .title, text: "Nothing on the map yet.")
@@ -272,7 +278,8 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .onboardingPage2Body:
             CopyString(
                 kind: .body,
-                text: "Cat, hot food, nicotine, beer, lotto, ATM. Find the right one before the walk, not after."
+                text: "Cat, hot food, nicotine, beer, lotto, ATM, bathroom. "
+                    + "Find the right one before the walk, not after."
             )
         case .onboardingCatLabel: CopyString(kind: .label, text: "Cat")
         case .onboardingHotFoodLabel: CopyString(kind: .label, text: "Hot Food")
@@ -280,6 +287,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
         case .onboardingBeerLabel: CopyString(kind: .label, text: "Beer")
         case .onboardingLottoLabel: CopyString(kind: .label, text: "Lotto")
         case .onboardingAtmLabel: CopyString(kind: .label, text: "ATM")
+        case .onboardingBathroomLabel: CopyString(kind: .label, text: "Bathroom")
         case .onboardingPage3Title: CopyString(kind: .title, text: "You know a spot.")
         case .onboardingPage3Body:
             CopyString(kind: .body, text: "Put the one on your corner on the map. A minute, maybe two.")
@@ -380,7 +388,7 @@ nonisolated enum AppCopy: CaseIterable, Hashable, Sendable {
     }
 }
 
-// Outside the enum body, which sits at SwiftLint's type_body_length limit.
+// Outside the enum body, which once sat at SwiftLint's type_body_length limit.
 nonisolated extension AppCopy {
     /// A menu item that opens a confirmation, with the HIG's trailing "…".
     /// The voice rules check the label without it.

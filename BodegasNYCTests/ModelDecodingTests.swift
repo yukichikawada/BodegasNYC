@@ -14,12 +14,14 @@ import Foundation
 
 struct ModelDecodingTests {
 
-    /// protects: a PostgREST `bodegas` row decodes, including the six data
-    /// points; `has_atm: true` lands in `hasAtm` (#141).
-    /// fails_when: a key name or a field mapping is wrong, or `has_atm` is
-    /// decoded into the wrong field.
+    /// protects: a PostgREST `bodegas` row decodes, including the seven data
+    /// points; `has_atm: true` lands in `hasAtm` (#141) and
+    /// `has_bathroom: true` in `hasBathroom` (#194).
+    /// fails_when: a key name or a field mapping is wrong, or `has_atm` or
+    /// `has_bathroom` is decoded into the wrong field.
     /// no_claim: that a row without `has_atm` fails to decode (strict decode
-    /// is by inspection, like the other five).
+    /// is by inspection, like the other five); the missing `has_bathroom`
+    /// case is `bodegaWithoutHasBathroomFailsToDecode`.
     @Test func decodesBodegaWithFractionalSecondTimestamps() throws {
         let json = """
         {
@@ -35,6 +37,7 @@ struct ModelDecodingTests {
           "sells_beer": true,
           "sells_lotto": false,
           "has_atm": true,
+          "has_bathroom": true,
           "hours": {
             "mon": { "open": "06:00", "close": "23:00", "isClosed": false },
             "sun": { "open": "00:00", "close": "00:00", "isClosed": true }
@@ -52,6 +55,7 @@ struct ModelDecodingTests {
         #expect(bodega.hasCat == true)
         #expect(bodega.sellsLotto == false)
         #expect(bodega.hasAtm == true)
+        #expect(bodega.hasBathroom == true)
         #expect(bodega.hours?.mon?.open == "06:00")
         #expect(bodega.hours?.sun?.isClosed == true)
         #expect(bodega.hours?.tue == nil)
@@ -77,6 +81,7 @@ struct ModelDecodingTests {
           "sells_beer": true,
           "sells_lotto": false,
           "has_atm": true,
+          "has_bathroom": true,
           "hours": null,
           "is_hidden": false,
           "created_at": "2026-07-21T18:30:00.123456+00:00",
@@ -92,6 +97,40 @@ struct ModelDecodingTests {
         let object = try #require(try JSONSerialization.jsonObject(with: encoded) as? [String: Any])
         #expect(object["created_by"] == nil)
         #expect(object["id"] as? String == bodega.id.uuidString)
+    }
+
+    /// protects: strict decode of the seventh point (#194, repeating #141
+    /// D6): a `bodegas` row without `has_bathroom` is an error, not a
+    /// silent `false`, so a build run against a database the migration has
+    /// not reached fails loudly instead of reporting "no bathroom" everywhere.
+    /// fails_when: `Bodega.init(from:)` uses `decodeIfPresent` or a default
+    /// for `has_bathroom`.
+    /// no_claim: the error's wording or how the UI surfaces it; the row is a
+    /// JSON literal standing in for a pre-migration PostgREST response.
+    @Test func bodegaWithoutHasBathroomFailsToDecode() {
+        let json = """
+        {
+          "id": "8f14e45f-ceea-467e-adc9-15476f4eaa15",
+          "created_by": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+          "name": "El Sol Deli & Grocery",
+          "latitude": 40.7291,
+          "longitude": -73.9965,
+          "address": null,
+          "has_cat": true,
+          "serves_hot_food": true,
+          "sells_cigarettes": true,
+          "sells_beer": true,
+          "sells_lotto": false,
+          "has_atm": true,
+          "hours": null,
+          "is_hidden": false,
+          "created_at": "2026-07-21T18:30:00.123456+00:00",
+          "updated_at": "2026-07-22T00:15:59.000042+00:00"
+        }
+        """
+        #expect(throws: DecodingError.self) {
+            try PostgRESTDecoding.makeDecoder().decode(Bodega.self, from: Data(json.utf8))
+        }
     }
 
     @Test func decodesReviewWithWholeSecondTimestamps() throws {
