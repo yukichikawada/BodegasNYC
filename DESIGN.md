@@ -677,7 +677,7 @@ is bold in the normal text colour (`.primary`), walked or not, never green. A da
 accessibility sizes each month lists its walked days instead, date (`.body`) over "14 blocks, 9 new ·
 1.4 miles" (`.subheadline` `textMuted`), fully scaling; the swap is the 0.25s opacity change. Under a
 month with estimated days: "Some days are estimates. Rides may be counted." (`.footnote`
-`textMuted`). Sheet footer: "A block counts once a day. Miles include repeats. Days start at 4 a.m.",
+`textMuted`). Sheet footer: "A block counts once a day. Miles count walking on streets, repeats included. Days start at 4 a.m.",
 plus "Today shows up once it's counted." while recording. States, failure > loading > empty: Your
 Blocks' street-map line, or "Your days couldn't be loaded. Your walks are still saved.", in `.primary`
 with no grid; a first read shows this month's grid with muted numbers and "Finding your walks…" under
@@ -760,7 +760,7 @@ date panel's rows keep the grouped row's own 16pt inside it): the
 picture itself as the preview (4:5, 12pt radius, on `secondarySystemBackground`; DS4: what is
 shown is what is sent), an inset-grouped section of compact From and To date rows (New York walk
 days, the first walked day through today; From past To drags To along; label over picker at
-accessibility sizes) with "Blocks count once across these days. Miles include repeats." and, when
+accessibility sizes) with "Blocks count once across these days. Miles count walking on streets, repeats included." and, when
 a day in range is an estimate, "Some of this is an estimate. Rides may be counted." in `.footnote`
 `textMuted` under it, then the three consequence lines in `.subheadline` `.primary` (PR 2: "This
 sends a picture and a link with the blocks you walked on these days, the dates, counts and

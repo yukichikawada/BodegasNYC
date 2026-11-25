@@ -254,7 +254,7 @@ struct YourWalksTests {
         #expect(AppCopy.walkMonthDays(1).text == "1 day" && AppCopy.walkMonthDays(8).text == "8 days")
         #expect(AppCopy.walkMonthNewBlocks(1).text == "1 new block")
         #expect(AppCopy.walkMonthNewBlocks(1_204).text == "1,204 new blocks")
-        #expect(AppCopy.YourWalks.footer.copy.text == "A block counts once a day. Miles include repeats. Days start at 4 a.m.")
+        #expect(AppCopy.YourWalks.footer.copy.text == "A block counts once a day. Miles count walking on streets, repeats included. Days start at 4 a.m.")
         #expect(AppCopy.YourWalks.estimates.copy.text == "Some days are estimates. Rides may be counted.") // #180 DS5
         #expect(AppCopy.YourWalks.menuHint.copy.text == "Shows the days you walked and your progress.")
     }

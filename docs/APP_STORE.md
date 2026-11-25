@@ -134,6 +134,13 @@ Up to ten frames; six is plenty. App preview video: skip for 1.0.
 
 > Every bodega in New York on one map, with the things a business listing never tells you: the cat, the hot food, the beer, the lotto, the ATM, the real hours.
 
+**What's New** (4000 max; pending lines for the next release after 1.1.0,
+pasted when its build is attached; `docs/RELEASE.md` step 8):
+
+> Miles in Your Walks now count walking on streets, so past days read a little lower. Blocks haven't changed.
+
+(#192 DS2: the one-time drop in past miles is announced here, not in the app.)
+
 **Description** (4000 max; this one is about 1,550):
 
 > New York runs on bodegas, and the big map apps treat them as an afterthought: a pin, a wrong closing time, a photo of the awning. My Bodegas is a map of the city's corner stores built by the people who actually use them.

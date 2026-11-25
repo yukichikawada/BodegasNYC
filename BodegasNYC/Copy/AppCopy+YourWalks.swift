@@ -59,8 +59,13 @@ nonisolated extension AppCopy {
                 CopyString(kind: .body, text: "Your days couldn't be loaded. Your walks are still saved.")
             // #180 DS5: an imported day can be last week's, so not "Older".
             case .estimates: CopyString(kind: .body, text: "Some days are estimates. Rides may be counted.")
+            // #192 DS1: miles are street miles now.
             case .footer:
-                CopyString(kind: .body, text: "A block counts once a day. Miles include repeats. Days start at 4 a.m.")
+                CopyString(
+                    kind: .body,
+                    text: "A block counts once a day. Miles count walking on streets, repeats included. "
+                        + "Days start at 4 a.m."
+                )
             case .todayPending: CopyString(kind: .body, text: "Today shows up once it's counted.")
             case .dayMapLabel: CopyString(kind: .body, text: "Map of this day's walk.")
             case .underATenthOfAMile: CopyString(kind: .value, text: "Less than 0.1 miles")

@@ -55,7 +55,11 @@ nonisolated enum BlockMatcher {
     /// One walk day's share of a match (#170 spec rule 2).
     struct DayDelta: Equatable, Sendable {
         var masks: [UInt32: UInt16] = [:]
-        /// Summed length of the day's creditable legs, matched or not.
+        /// The day's street meters (#192 eng E1, E2): each creditable leg
+        /// adds the shorter of its straight length and the distance between
+        /// its two ends' snapped positions, nothing when either end is more
+        /// than 30 m from every block, and nothing when its end fix is
+        /// standing still (`isDwelling`). Repeats count.
         var meters: Double = 0
     }
 
@@ -67,17 +71,22 @@ nonisolated enum BlockMatcher {
         var days: [WalkedDayKey: DayDelta] = [:]
     }
 
-    /// `match`, keeping each leg's day and length. The current day's
+    /// `match`, keeping each leg's day and street meters. The current day's
     /// interval is kept and recomputed only when a leg's end fix falls
     /// outside it, so a long history costs about one calendar call per day
-    /// (eng A7).
+    /// (eng A7). Legs are formed only for end indexes from `firstLegEnd`;
+    /// the fixes before it are context an incremental pass loaded for the
+    /// standing-still look-back (#192 eng E3), so the same history gives
+    /// the same meters in any batching. Each fix is snapped once.
     static func matchByDay(
         _ points: [WalkedPointSnapshot],
         grid: StreetGrid,
-        activity: VehicleActivity = .unavailable
+        activity: VehicleActivity = .unavailable,
+        firstLegEnd: Int = 1
     ) -> MatchResult {
         var result = MatchResult()
-        guard points.count >= 2 else { return result }
+        let firstEnd = max(1, firstLegEnd)
+        guard points.count > firstEnd else { return result }
         var current: (key: WalkedDayKey, interval: DateInterval)?
         var delta = DayDelta()
         func flush() {
@@ -86,9 +95,12 @@ nonisolated enum BlockMatcher {
             result.days[key, default: DayDelta()].masks.merge(delta.masks) { $0 | $1 }
             delta = DayDelta()
         }
-        for index in 1 ..< points.count {
+        var startSnapped = snappedPosition(of: points[firstEnd - 1].coordinate, grid: grid)
+        for index in firstEnd ..< points.count {
             let start = points[index - 1]
             let end = points[index]
+            let endSnapped = snappedPosition(of: end.coordinate, grid: grid)
+            defer { startSnapped = endSnapped }
             guard isCreditableLeg(from: start, to: end, activity: activity) else { continue }
             let time = end.recordedAt
             if let interval = current?.interval, interval.start <= time, time < interval.end {
@@ -98,7 +110,7 @@ nonisolated enum BlockMatcher {
                 let key = WalkedDayKey(date: time)
                 current = (key, key.interval)
             }
-            delta.meters += distance(start.coordinate, end.coordinate)
+            delta.meters += streetMeters(points, endingAt: index, from: startSnapped, to: endSnapped)
             creditLeg(from: start.coordinate, to: end.coordinate, grid: grid, into: &delta.masks)
         }
         flush()
@@ -106,6 +118,63 @@ nonisolated enum BlockMatcher {
             result.masks.merge(day.masks) { $0 | $1 }
         }
         return result
+    }
+
+    // MARK: Street meters (#192)
+
+    /// The look-back window for standing still (#192 spec rule 2).
+    static let dwellWindowSeconds: TimeInterval = 300
+    /// Every fix in the window within this of the end fix means standing still.
+    static let dwellRadiusMeters = 50.0
+    /// The fixes read must reach back at least this far.
+    static let dwellMinimumSpanSeconds: TimeInterval = 240
+    /// At most this many fixes before the end fix are read (#192 eng E3), so
+    /// a dense imported file costs at most this many distances a leg.
+    static let dwellMaxFixes = 64
+
+    /// A fix's snapped position (#192 eng E1): the point on its nearest
+    /// block within 30 m (`StreetGrid.nearestSegment`, same tie rule), or
+    /// `nil` when it is unmatched.
+    static func snappedPosition(of coordinate: Coordinate, grid: StreetGrid) -> Coordinate? {
+        grid.nearestSegment(to: coordinate, within: matchRadiusMeters)?.coordinate
+    }
+
+    /// The street meters of the creditable leg ending at `index` (#192 eng
+    /// E1, E2): `min(straight, snapped distance)`, or 0 when either end is
+    /// unmatched or the end fix is dwelling. A leg that cuts a corner
+    /// measures the diagonal between its snapped ends (accepted, E1).
+    static func streetMeters(
+        _ points: [WalkedPointSnapshot],
+        endingAt index: Int,
+        from startSnapped: Coordinate?,
+        to endSnapped: Coordinate?
+    ) -> Double {
+        guard let startSnapped, let endSnapped else { return 0 }
+        let straight = distance(points[index - 1].coordinate, points[index].coordinate)
+        let meters = min(straight, distance(startSnapped, endSnapped))
+        guard meters > 0, !isDwelling(points, at: index) else { return 0 }
+        return meters
+    }
+
+    /// Whether the fix at `index` is standing still (#192 spec rule 2, eng
+    /// E3): of the at most `dwellMaxFixes` fixes before it in history order,
+    /// those recorded within `dwellWindowSeconds` before it reach back at
+    /// least `dwellMinimumSpanSeconds` and all lie within
+    /// `dwellRadiusMeters` of it. Looks back only, so batching cannot
+    /// change the answer; fixes that end no creditable leg still count.
+    static func isDwelling(_ points: [WalkedPointSnapshot], at index: Int) -> Bool {
+        let end = points[index]
+        let windowStart = end.recordedAt.addingTimeInterval(-dwellWindowSeconds)
+        let lowest = max(0, index - dwellMaxFixes)
+        var earliest: Date?
+        var lookBack = index - 1
+        while lookBack >= lowest, points[lookBack].recordedAt >= windowStart {
+            guard distance(points[lookBack].coordinate, end.coordinate) <= dwellRadiusMeters else { return false }
+            earliest = points[lookBack].recordedAt
+            lookBack -= 1
+        }
+        guard let earliest else { return false }
+        return end.recordedAt.timeIntervalSince(earliest) >= dwellMinimumSpanSeconds
     }
 
     /// Whether a leg can earn bins: same walk (20 min, 250 m), at most 60 m,

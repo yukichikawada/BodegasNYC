@@ -62,9 +62,12 @@ nonisolated extension WalkedBlockStore {
 
     /// The estimate a pass records (eng E2): none for an incremental pass,
     /// which leaves the saved value alone; a rebuild judges by CoreMotion's
-    /// 7 days, a backfill (no CoreMotion) by every unknown leg.
+    /// 7 days, a backfill (no CoreMotion) by every unknown leg, unless it
+    /// re-derives day rows that already existed: then the saved estimate
+    /// stands (#192 eng E4).
     func estimatedThroughDay(_ plan: Plan, found evidence: [UUID: RideEvidence]) -> WalkedDayKey? {
         guard plan.kind != .incremental else { return nil }
+        if plan.kind == .backfill, plan.keepsSavedEstimate { return plan.savedEstimate }
         return WalkedEstimate.throughDay(
             plan.snapshots,
             found: evidence,
