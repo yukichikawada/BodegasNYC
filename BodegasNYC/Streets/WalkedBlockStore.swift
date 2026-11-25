@@ -25,8 +25,9 @@ nonisolated final class WalkedBlockStore {
     static let pageSize = 5_000
     /// The per-day rows' version (#170): a store whose state is behind it
     /// backfills them once. A fix that changes how day rows are derived
-    /// bumps it to rebuild them from `WalkedPoint`.
-    static let dayIndexVersion = 1
+    /// bumps it to rebuild them from `WalkedPoint`. 2: street meters and
+    /// standing still (#192).
+    static let dayIndexVersion = 2
 
     let container: ModelContainer
     let grid: StreetGrid
@@ -70,19 +71,22 @@ nonisolated final class WalkedBlockStore {
     struct Plan {
         let kind: WalkedPassKind
         let context: ModelContext
-        /// History order; for an incremental pass the newest matched fix
-        /// first, so it closes the first new leg.
+        /// History order; for an incremental pass the matched context
+        /// (#192 eng E3) first, its newest fix closing the first new leg.
         let snapshots: [WalkedPointSnapshot]
         /// The fixes this pass flips to matched.
         let unmatched: [WalkedPoint]
         /// The fixes this pass may save ride evidence on (#170): every fix it
         /// matches the leg into, never an incremental pass's predecessor.
         let evidenceRows: [WalkedPoint]
-
-        var range: DateInterval? {
-            guard let first = snapshots.first, let last = snapshots.last else { return nil }
-            return DateInterval(start: first.recordedAt, end: last.recordedAt)
-        }
+        /// The index of the first new fix in `snapshots` (#192): legs end
+        /// from here on, and the fixes before it are only read. 1 for a
+        /// rebuild, a backfill, or an incremental pass with no matched fix.
+        var firstNewIndex = 1
+        /// A backfill of day rows that already existed (saved version 1 or
+        /// more) keeps the saved estimate as it is (#192 eng E4).
+        var keepsSavedEstimate = false
+        var savedEstimate: WalkedDayKey?
     }
 
     /// What the next pass must do, or `nil` when the cache is current.
@@ -99,8 +103,7 @@ nonisolated final class WalkedBlockStore {
             return try rebuildPlan(context)
         }
         if allowsBackfill, state.dayIndexVersion != Self.dayIndexVersion {
-            let matched = Self.ordered(try fetchPaged(context, predicate: #Predicate { $0.isMatched == true }))
-            return Plan(kind: .backfill, context: context, snapshots: matched, unmatched: [], evidenceRows: [])
+            return try backfillPlan(context, state: state)
         }
         let unmatched = try fetchPaged(context, predicate: #Predicate { $0.isMatched == false })
         let new = Self.ordered(unmatched)
@@ -114,13 +117,14 @@ nonisolated final class WalkedBlockStore {
         if let predecessor, WalkedPointSnapshot.sortsBefore(oldestNew, predecessor) {
             return try rebuildPlan(context)
         }
-        let snapshots = (predecessor.map { [$0] } ?? []) + new
+        let lookBack = try predecessor.map { try matchedContext(context, before: oldestNew, newest: $0) } ?? []
         return Plan(
             kind: .incremental,
             context: context,
-            snapshots: snapshots,
+            snapshots: lookBack + new,
             unmatched: unmatched,
-            evidenceRows: unmatched
+            evidenceRows: unmatched,
+            firstNewIndex: max(1, lookBack.count)
         )
     }
 
@@ -147,8 +151,11 @@ nonisolated final class WalkedBlockStore {
         seam: (BlockMatchingActor.CommitPoint) throws -> Void = { _ in },
         shouldCommit: () -> Bool
     ) throws -> Bool {
-        let result = BlockMatcher.matchByDay(plan.snapshots, grid: grid, activity: activity)
-        let evidence = BlockMatcher.evidence(plan.snapshots, activity: activity)
+        let result = BlockMatcher.matchByDay(
+            plan.snapshots, grid: grid, activity: activity, firstLegEnd: plan.firstNewIndex
+        )
+        // Only the predecessor and the new fixes (#192 eng E5).
+        let evidence = BlockMatcher.evidence(plan.legSnapshots, activity: activity)
         // Rebuilds and backfills re-derive old days (eng E2); an
         // incremental pass leaves the saved value alone.
         let estimated = estimatedThroughDay(plan, found: evidence)
@@ -319,7 +326,7 @@ nonisolated final class WalkedBlockStore {
         return loaded
     }
 
-    private func fetchPaged(_ context: ModelContext, predicate: Predicate<WalkedPoint>?) throws -> [WalkedPoint] {
+    func fetchPaged(_ context: ModelContext, predicate: Predicate<WalkedPoint>?) throws -> [WalkedPoint] {
         var result: [WalkedPoint] = []
         var offset = 0
         while true {
@@ -352,7 +359,7 @@ nonisolated final class WalkedBlockStore {
 
     /// Snapshots in history order. The store sorts pages the same way; this
     /// settles timestamp ties by id exactly as `sortsBefore` defines them.
-    private static func ordered(_ points: [WalkedPoint]) -> [WalkedPointSnapshot] {
+    static func ordered(_ points: [WalkedPoint]) -> [WalkedPointSnapshot] {
         points.map(snapshot).sorted(by: WalkedPointSnapshot.sortsBefore)
     }
 }

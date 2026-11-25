@@ -380,7 +380,7 @@ struct AppCopyVoiceTests {
             (.fromLabel, .label, "From"),
             (.toLabel, .label, "To"),
             (.shareAction, .label, "Share"),
-            (.definition, .body, "Blocks count once across these days. Miles include repeats."),
+            (.definition, .body, "Blocks count once across these days. Miles count walking on streets, repeats included."),
             (.consequenceWhatGoes, .body,
              "This sends a picture and a link with the blocks you walked on these days, the dates, counts and "
                 + "distance. No times of day."),

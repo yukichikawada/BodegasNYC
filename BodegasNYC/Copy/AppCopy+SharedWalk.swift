@@ -48,8 +48,12 @@ nonisolated extension AppCopy {
             case .fromLabel: CopyString(kind: .label, text: "From")
             case .toLabel: CopyString(kind: .label, text: "To")
             case .shareAction: CopyString(kind: .label, text: "Share")
+            // #192 DS1: miles are street miles now.
             case .definition:
-                CopyString(kind: .body, text: "Blocks count once across these days. Miles include repeats.")
+                CopyString(
+                    kind: .body,
+                    text: "Blocks count once across these days. Miles count walking on streets, repeats included."
+                )
             case .consequenceWhatGoes:
                 CopyString(
                     kind: .body,

@@ -42,11 +42,14 @@ nonisolated final class StreetGrid: Sendable {
     }
 
     /// A sample's nearest block: its index, how far along it the projection
-    /// lands (0...1, start to end), and the distance in metres.
+    /// lands (0...1, start to end), the distance in metres, and the
+    /// projected point itself on the block's centerline (#192 eng E1: a
+    /// fix's snapped position, which day miles are measured between).
     nonisolated struct Match: Sendable, Equatable {
         var segment: Int
         var fraction: Double
         var distance: Double
+        var coordinate: Coordinate
     }
 
     static let formatVersion: UInt16 = 1
@@ -182,7 +185,13 @@ nonisolated extension StreetGrid {
         let edgeStart = cumulativeMeters[edge]
         let along = edgeStart + edgeFraction * (cumulativeMeters[edge + 1] - edgeStart)
         let fraction = total > 0 ? min(1, max(0, along / total)) : 0
-        return Match(segment: segment, fraction: fraction, distance: distance)
+        // Linear in degrees is linear in the local plane, so this is the
+        // planar projection the distance was measured to.
+        let projected = Coordinate(
+            latitude: latitudes[edge] + edgeFraction * (latitudes[edge + 1] - latitudes[edge]),
+            longitude: longitudes[edge] + edgeFraction * (longitudes[edge + 1] - longitudes[edge])
+        )
+        return Match(segment: segment, fraction: fraction, distance: distance, coordinate: projected)
     }
 }
 

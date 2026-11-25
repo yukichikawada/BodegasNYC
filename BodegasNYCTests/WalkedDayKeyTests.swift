@@ -92,14 +92,17 @@ struct WalkedDayKeyTests {
     /// no_claim: where a block's tenths fall (BlockMatcherTests).
     @Test func aWalkAcrossFourAmSplitsAtTheLegEndingAtFour() {
         // Fixes every 10 m at 1.4 m/s from 3:59:30: the fifth leg ends at
-        // 4:00:05.7, the fourth at 3:59:58.6.
+        // 4:00:05.7, the fourth at 3:59:58.6. Street meters (#192 eng E1):
+        // the fixes at x = 0 and 10 snap to cross street 200 at (0, 12), and
+        // x = 90 and 100 to 201 at (100, 12), so the first and last legs
+        // make no progress; the other eight add 10 m each.
         let walk = Self.walk((0, 12), (100, 12), at: Self.newYork(2027, 1, 15, 3, 59, 30))
         let result = BlockMatcher.matchByDay(walk, grid: F.cornerGrid())
         let before = WalkedDayKey(value: 20270114)
         let after = WalkedDayKey(value: 20270115)
         #expect(Set(result.days.keys) == [before, after])
-        #expect(abs((result.days[before]?.meters ?? 0) - 40) < 0.01)
-        #expect(abs((result.days[after]?.meters ?? 0) - 60) < 0.01)
+        #expect(abs((result.days[before]?.meters ?? 0) - 30) < 0.01)
+        #expect(abs((result.days[after]?.meters ?? 0) - 50) < 0.01)
         let union = result.days.values.reduce(into: [UInt32: UInt16]()) { $0.merge($1.masks) { $0 | $1 } }
         #expect(result.masks == union)
         #expect(result.masks == BlockMatcher.match(walk, grid: F.cornerGrid()))
@@ -120,20 +123,38 @@ struct WalkedDayKeyTests {
         #expect(Set(walked.keys) == [100, 300])
     }
 
-    /// protects: spec rule 2: meters sum every creditable leg, matched or
-    /// not, and nothing for legs that fail the walk rules (gaps, speed).
-    /// fails_when: meters count only matched legs, or count a ride or gap.
-    /// no_claim: the ride evidence rules (RideEvidenceTests).
-    @Test func metersCountEveryCreditableLegMatchedOrNot() {
+    /// protects: #192 AC 2 (replaces `metersCountEveryCreditableLegMatchedOrNot`,
+    /// whose off-street miles the owner ruled out): a leg with either end
+    /// more than 30 m from every block adds 0 meters, a walk 40 m beside a
+    /// block adds nothing while the same walk 20 m beside it adds the
+    /// block's length, and legs that fail the walk rules (a taxi's speed)
+    /// still add nothing.
+    /// fails_when: an off-street leg or a leg with one unmatched end
+    /// counts its straight length (the pre-#192 rule), or nothing counts
+    /// at all.
+    /// no_claim: the ride evidence rules (RideEvidenceTests); a real plaza
+    /// or park (the 30 m radius is the matcher's, unchanged).
+    @Test func aLegAwayFromEveryStreetAddsNoMeters() {
         let noon = Self.newYork(2027, 1, 15, 12)
-        // 500 m north of the grid: matches nothing, still walked.
-        let offGrid = Self.walk((0, 500), (100, 500), at: noon)
-        let taxi = F.walk(from: (0, 12), to: (100, 12), speed: 12, startTime: noon.timeIntervalSince(F.baseDate) + 600)
-        let result = BlockMatcher.matchByDay(offGrid + taxi, grid: F.cornerGrid())
         let day = WalkedDayKey(value: 20270115)
+        let grid = F.loneBlockGrid()
+        func meters(_ walk: [WalkedPointSnapshot]) -> Double {
+            BlockMatcher.matchByDay(walk, grid: grid).days[day]?.meters ?? 0
+        }
+        let offStreet = Self.walk((0, 40), (100, 40), at: noon)
+        let result = BlockMatcher.matchByDay(offStreet, grid: grid)
         #expect(result.masks.isEmpty)
-        #expect(abs((result.days[day]?.meters ?? 0) - 100) < 0.01)
-        #expect(result.days[day]?.masks.isEmpty == true)
+        #expect(meters(offStreet) == 0)
+        #expect(abs(meters(Self.walk((0, 20), (100, 20), at: noon)) - 100) < 0.01)
+        // Out to 40 m and back to 20 m: 22.4 m legs at 1.9 m/s, creditable,
+        // each with one unmatched end.
+        let outAndIn = [(50.0, 20.0), (60, 40), (70, 20)].enumerated().map { index, point in
+            WalkedPointSnapshot(coordinate: F.coordinate(x: point.0, y: point.1), recordedAt: noon.addingTimeInterval(Double(index) * 12))
+        }
+        #expect(BlockMatcher.isCreditableLeg(from: outAndIn[0], to: outAndIn[1], activity: .unavailable))
+        #expect(meters(outAndIn) == 0)
+        let taxi = F.walk(from: (0, 0), to: (100, 0), speed: 12, startTime: noon.timeIntervalSince(F.baseDate) + 600)
+        #expect(meters(taxi) == 0)
     }
 
     // MARK: estimatedThroughDay (eng E2)

@@ -228,7 +228,9 @@ struct WalkedBlockStoreIncrementalTests {
         let before = store.blockRowsFetched
         let plan = try #require(try store.plan())
         #expect(plan.kind == .incremental)
-        let touched = BlockMatcher.match(plan.snapshots, grid: grid)
+        // The pass's own legs, from the predecessor on: since #192 the
+        // plan also leads with look-back fixes that form no leg.
+        let touched = BlockMatcher.match(plan.legSnapshots, grid: grid)
         #expect(!touched.isEmpty && touched.count < Self.lattice.count / 10)
         #expect(try store.apply(plan, activity: .unavailable) { true })
         #expect(store.blockRowsFetched - before == touched.count)
