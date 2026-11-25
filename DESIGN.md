@@ -132,7 +132,7 @@ components:
 ## Overview
 
 **Creative North Star:** Signage on the system shell. A native iOS map app whose identity lives in
-its data (green and orange pins, six amenities, a cyan trail) and its voice (dry New Yorker), not in its chrome.
+its data (green and orange pins, seven amenities, a cyan trail) and its voice (dry New Yorker), not in its chrome.
 The city goes quiet, the corner store lights up, and your walk is the trail of coins you collected (#154).
 The chrome is quiet, translucent where it floats, and typeset in the system face; the one
 typographic flourish is a heavy condensed title that reads like awning lettering.
@@ -532,17 +532,19 @@ the release. The pin stays in the selected look, its own pin and labelled first 
 pin or cluster tap, the List tab, placement or an add; VoiceOver hears "<Name>. On the map." once
 the camera settles (DS9).
 
-**Data points** (`DataPointsSection`, #70, #95 D9, #141): six amenities (cat, hot food, nicotine,
-beer, lotto, ATM), in `BodegaFilter.Amenity` order on every surface, each with one caption shared by
-onboarding, detail, the Add/Edit form and the Filters sheet. Symbol over a `.caption2` caption, six
-columns while they fit: at xxxLarge on a 375 pt phone they stack, 402 pt phones hold six through
-xxxLarge. Otherwise, and always at accessibility sizes, one symbol-and-caption row per point.
+**Data points** (`DataPointsSection`, #70, #95 D9, #141, #194): seven amenities (cat, hot food,
+nicotine, beer, lotto, ATM, bathroom), in `BodegaFilter.Amenity` order on every surface, each with
+one caption shared by onboarding, detail, the Add/Edit form and the Filters sheet. Bathroom is last,
+captioned "Bathroom" with `toilet`, VoiceOver "Has a Bathroom". Symbol over a `.caption2` caption,
+seven columns while they fit, stacked otherwise (thresholds per width: measured in #194 QA), and
+always stacked at accessibility sizes: one symbol-and-caption row per point.
 Presence is shape plus contrast: present, symbol and caption `.primary`; absent, the same symbol and
 a struck-through caption in `textMuted`, with no opacity dimming. D9 prefers a symbol's `.slash`
-variant, but none of the six has one in iOS 26 (`banknote.slash` does not exist either; checked
-against the runtime's SF Symbols list; `TextContrastTests` fails if one appears), so the
-strikethrough is the shape cue for all. VoiceOver reads the caption with a Yes or No value; the
-symbol is hidden. Hours times and review dates are `textMuted` too.
+variant, but none of the seven has one in iOS 26 (`banknote.slash` and `toilet.slash` do not exist
+either; checked against the runtime's SF Symbols list; `TextContrastTests` fails if one appears), so
+the strikethrough is the shape cue for all. A `toilet.slash`, should one appear, is not adopted: the
+strikethrough stays the absent cue for all seven so the points read alike (#194). VoiceOver reads
+the caption with a Yes or No value; the symbol is hidden. Hours times and review dates are `textMuted` too.
 
 **List row** (`BodegaRow`, #68): name `.headline`, address `.subheadline` `textMuted` (#95 D6), both wrapping
 at every size and never truncating. The distance (`AppCopy.distanceValue`, `.value` kind) is
@@ -582,7 +584,7 @@ Nearest first needs to know where you are." otherwise (denied, restricted, Preci
 a fix pending or expired); no footer under Newest First, and never a button, symbol or Settings
 link. Choosing an order in the sheet scrolls the list to its top. The order is not a filter:
 Clear Filters (renamed from Clear) and the toolbar badge ignore it. The sheet opens at `.large`
-only at accessibility sizes. Must Have is six rows (ATM last, #141); on 667 pt screens they run
+only at accessibility sizes. Must Have is seven rows (ATM, then Bathroom last, #141, #194); on 667 pt screens they run
 past the `.medium` fold and the sheet scrolls, which is accepted; the detents are unchanged.
 VoiceOver: an automatic re-sort while the list is in front (no sheet, no detail) announces
 "Nearest first now." and keeps focus on the same bodega (on the new first row
@@ -1113,3 +1115,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-19 | #177 PR 1 Share a Walk (eng E1, E4, E6, E7; design DS2 to DS7): a Share a Walk form from Your Walks (most recent walked day) and from a walked day (that day), whose preview is the exported picture itself and whose Share sends exactly that image plus one line of text through the system share sheet; the picture is always dark, in the sender's `walked` cyan as a solid line, with the count in the display register (a fifth surface, for the exported image only) and "My Bodegas" in its band (an exception for the exported image only; #154 DS11's no-wordmark rule for the app's map stands); its type is fixed, a named exception in the Typography scale; `WalkRunsMap` extracted from the day view with Zoom In, Zoom Out and Show Whole Walk for VoiceOver; every promise that walks stay on the phone gains the sharing exception, except the Account sheet's deletion line ("Walked blocks stay on this phone.") and the privacy policy's account-deletion paragraph, which are kept because they describe what deleting an account leaves alone (owner decision). The link, the Shared Walk sheet, the violet and the five-colour rule are PR 2 | Design review DS1 to DS7 and eng review E1 to E9, owner accepted all. A picture alone reads in the thread with no link; a live map preview differed in colour, framing and shape from what was sent; the picture is the one artifact strangers see, so it has one look and carries the app's name |
 | 2026-11-19 | #177 PR 2 walk links (eng E2, E3, E5, E7, E8; design DS1, DS5, DS7): a share also carries a link, `https://yukichikawada.github.io/BodegasNYC/walk/#1.<payload>.w`, whose fragment holds the walk (dates, counts, the estimate flag, at most 5,000 block ids) and nothing else; it opens the Shared Walk sheet, which waits for anything presented and comes before the Streets Walked intro, draws the sender's walk in a fifth data colour, `sharedWalk` violet (#7E22CE / #CF8AFF, contrast #5A0FA3 / #DDB0FF), as a solid line at every band, shows the sender's counts with a coverage line when this street file knows fewer blocks, and saves nothing; a phone without the app, or on 1.0.0, gets the static fallback page. The share sheet's items are picture, text, link, all from one frozen walk | Design review DS1 (violet holds against cyan, Deli Green and red under colour-blind simulation; the solid line is the cue that does not rely on colour) and eng review E2, E3, E5, E7, E8, owner accepted all; the night capture of the violet at the four bands was taken before the build continued |
 | 2026-11-19 | #180 walk history file (design DS1 to DS6, D1 to D14; eng E1 to E4, A1 to A12): Export History… and Import History… in their own menu section above Clear History; export is a confirmation dialog that says plainly what the file holds, with Export First on Clear History's dialog; import is a sheet on the Account sheet's pattern that previews the file by name, dates and days of recording (never points), always states that the walks mix in and only Clear History takes them out, and ends on "Your walks are in." with Show Your Walks and, when recording is off, Start Recording. Imported days with no ride evidence are estimates, so the Your Walks line becomes "Some days are estimates. Rides may be counted." | Owner decisions O1 to O5 (a file, merge only, one format, two ways in, no encryption), design review DS1 to DS6 and eng review E1 to E4, owner accepted all. A point is a unit the app never shows; dates and days are what a person can check against memory before a permanent merge; a dialog cannot hold a spinner, a retry or a replaced preview; someone restoring onto a new phone is never shown the intro, so the result offers recording |
+| 2026-11-24 | #194 Bathroom as the seventh data point: `has_bathroom` boolean, defaulted false, decoded strictly like the other six; Bathroom last on every surface, after ATM, captioned "Bathroom" with `toilet`, VoiceOver "Has a Bathroom"; yes means a bathroom a customer can use, staff-only does not count, and describes the amenity, not whether it works today; the struck-through caption stays the absent cue (no `toilet.slash`); the detail points keep `ViewThatFits`, seven columns while they fit and stacked rows otherwise, with no layout change; onboarding page 2 body lists "bathroom"; rollback keeps the column | Repeats #141 eng D5 to D9 and design DS1 to DS7, so no fresh review pass. The four surfaces already derive from `BodegaFilter.Amenity`; one shape cue keeps the seven points reading alike; a drop would break installed strict-decoding builds |

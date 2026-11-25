@@ -12,7 +12,7 @@ App Store: <https://apps.apple.com/us/app/my-bodegas/id6830464647> (released 202
 ## What it does
 
 - **Map and list of bodegas** near you, with pins clustered at low zoom and
-  capsule labels at block zoom. Tap a pin for the detail screen: the six
+  capsule labels at block zoom. Tap a pin for the detail screen: the seven
   signature data points, hours, photos, rating and reviews.
 - **Add a bodega** by dropping a pin or using your location, with a proximity
   check that catches duplicates before they are saved.

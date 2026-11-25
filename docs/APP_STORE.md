@@ -139,7 +139,7 @@ Up to ten frames; six is plenty. App preview video: skip for 1.0.
 > New York runs on bodegas, and the big map apps treat them as an afterthought: a pin, a wrong closing time, a photo of the awning. My Bodegas is a map of the city's corner stores built by the people who actually use them.
 >
 > FIND THE RIGHT ONE
-> Every bodega carries the six things you want to know before you walk in: is there a cat, is there hot food, do they sell beer, lotto, cigarettes, and is there an ATM. Filter the map to the ones that matter right now, then tap a pin for hours, photos, a rating and reviews.
+> Every bodega carries the seven things you want to know before you walk in: is there a cat, is there hot food, do they sell beer, lotto, cigarettes, is there an ATM, and is there a bathroom. Filter the map to the ones that matter right now, then tap a pin for hours, photos, a rating and reviews.
 >
 > ADD WHAT'S MISSING
 > Drop a pin or use your location to add a bodega. The app checks for duplicates before it saves. Sign in with Apple to add photos, write a review, or flag a listing that closed or changed. Photos are resized on your phone before upload, so no camera or location metadata leaves it.
