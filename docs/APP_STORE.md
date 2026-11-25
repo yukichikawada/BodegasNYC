@@ -50,7 +50,7 @@ down.
 | --- | --- | --- |
 | User-generated content | **Yes** | Photos, reviews, added bodegas and flags are posted by users and visible to everyone. |
 | Does the app show user-generated content in a feed or recommend it | **No** (if asked) | Content is attached to a place on a map and to that place's detail screen; there is no feed and no ranking of people. |
-| Does the app let users share their location with others | **No** | The nearby query sends coordinates to the server and does not store them; Streets Walked history stays on the device unless the user shares a picture of a walk. Export History (#180) also lets the user hand their whole walk history, as a file, to the system share sheet. **Owner: revisit this answer at the next release (#177 lets a user share a picture of past walked streets; recommended: Yes, the rating is already 13+).** |
+| Does the app let users share their location with others | **Yes** (since 1.1.0, set 2026-11-25; the rating stayed 13+) | Share a Walk (#177) lets a user send a picture and a link of streets they walked, and Export History (#180) hands the whole walk history, as a file, to the system share sheet. Nothing is shared live and nothing goes to our servers: the nearby query sends coordinates and does not store them. |
 | Messaging, chat, user profiles | **No** | There is no messaging and no public profile. |
 | Gambling, contests | **No** | "Lotto" is a data point about the store, not a feature. |
 | Alcohol, tobacco | **No** (reference only) | "Beer" and "Cigarettes" are yes/no facts about a store, with no sale, promotion or imagery. If the questionnaire offers "infrequent/mild references", pick that over "none". |
@@ -215,8 +215,20 @@ forms until the app charges money.
 ## Status
 
 Filled in and verified on 2026-11-03 (app id 6830464647): sections 1 to 6,
-including the published App Privacy answers and the App Review block. Open:
-screenshots, attaching the build, the Digital Services Act setup, Submit.
+including the published App Privacy answers and the App Review block. 1.0.0
+went live on 2026-11-06.
+
+1.1.0 (build 4) was submitted on 2026-11-25 through the App Store Connect
+API, set to release automatically on approval. Its page differs from the
+text above in one place: the description says "six things" and has no
+bathroom, because Bathroom (#194) is not in build 4. Paste the "seven
+things" paragraph with the release that carries it. What's New for 1.1.0:
+
+> Your Walks: a calendar of every day you've walked, a map of each day, and a Progress chart of the blocks you've covered over time.
+>
+> Share a Walk: send a picture of a day or a range of days, with a link that opens the walk in My Bodegas on another iPhone.
+>
+> The map now tilts when you zoom in to block level, and your whole walk history is drawn on it.
 
 ## How it was filled
 

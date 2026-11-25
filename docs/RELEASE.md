@@ -256,6 +256,17 @@ Status as of 2026-11-03 is in brackets.
 8. **App Store Connect**: wait for processing (a few minutes to an hour),
    attach the build to the version, fill in "What's New", check the App
    Review notes still describe the build, then Submit for Review.
+   Since 2026-11-25 this step can go through the App Store Connect API
+   instead of the website (used for 1.1.0): the team key
+   `~/.config/bodegasnyc/AuthKey_<Key ID>.p8` (role App Manager), its Key ID
+   and Issuer ID in `~/.config/bodegasnyc/asc-api.env`, and the helper
+   `~/.config/bodegasnyc/asc.py METHOD PATH [body.json]`. Create the version
+   with the build attached (`POST /v1/appStoreVersions`), set What's New
+   (`PATCH /v1/appStoreVersionLocalizations/<id>`), update the review notes
+   (`PATCH /v1/appStoreReviewDetails/<id>`), then `POST /v1/reviewSubmissions`,
+   `POST /v1/reviewSubmissionItems` and `PATCH` the submission with
+   `submitted: true`. The age rating answers are editable the same way
+   (`/v1/ageRatingDeclarations/<id>`); the app record and App Privacy are not.
 9. **TestFlight first** if the change touched location, sign-in or photo
    upload: install the processed build via TestFlight on your own phone
    before submitting. It is the same binary App Review will see.
