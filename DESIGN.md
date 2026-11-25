@@ -536,8 +536,11 @@ the camera settles (DS9).
 nicotine, beer, lotto, ATM, bathroom), in `BodegaFilter.Amenity` order on every surface, each with
 one caption shared by onboarding, detail, the Add/Edit form and the Filters sheet. Bathroom is last,
 captioned "Bathroom" with `toilet`, VoiceOver "Has a Bathroom". Symbol over a `.caption2` caption,
-seven columns while they fit, stacked otherwise (thresholds per width: measured in #194 QA), and
-always stacked at accessibility sizes: one symbol-and-caption row per point.
+seven columns while they fit, stacked otherwise, and always stacked at accessibility sizes: one
+symbol-and-caption row per point. Measured in #194 QA (iOS 26.5): a 402 pt phone holds seven columns
+at Large and stacks from xLarge up; a 375 pt phone stacks at Large and above (smaller sizes were not
+sampled). Six points held columns through xxxLarge on 402 pt and xxLarge on 375 pt, so the seventh
+makes stacked rows the common layout on small phones and larger text; accepted in #194.
 Presence is shape plus contrast: present, symbol and caption `.primary`; absent, the same symbol and
 a struck-through caption in `textMuted`, with no opacity dimming. D9 prefers a symbol's `.slash`
 variant, but none of the seven has one in iOS 26 (`banknote.slash` and `toilet.slash` do not exist
