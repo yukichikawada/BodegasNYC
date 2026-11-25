@@ -70,6 +70,7 @@ final class AddBodegaViewModel: Identifiable {
     var sellsBeer = false
     var sellsLotto = false
     var hasAtm = false
+    var hasBathroom = false
     var dayEntries: [DayEntry] = AddBodegaViewModel.defaultDayEntries
 
     private(set) var submissionState: SubmissionState = .idle
@@ -113,6 +114,7 @@ final class AddBodegaViewModel: Identifiable {
             sellsBeer = existingBodega.sellsBeer
             sellsLotto = existingBodega.sellsLotto
             hasAtm = existingBodega.hasAtm
+            hasBathroom = existingBodega.hasBathroom
             dayEntries = Self.dayEntries(from: existingBodega.hours)
         }
     }
@@ -237,6 +239,7 @@ final class AddBodegaViewModel: Identifiable {
                 sellsBeer: sellsBeer,
                 sellsLotto: sellsLotto,
                 hasAtm: hasAtm,
+                hasBathroom: hasBathroom,
                 hours: hours
             ))
         }
@@ -252,6 +255,7 @@ final class AddBodegaViewModel: Identifiable {
             sellsBeer: sellsBeer,
             sellsLotto: sellsLotto,
             hasAtm: hasAtm,
+            hasBathroom: hasBathroom,
             hours: hours,
             fieldsToClear: fieldsToClear
         ))
@@ -365,7 +369,7 @@ extension AddBodegaViewModel {
 
 extension AddBodegaViewModel {
     /// The form's per-amenity read, so `AddBodegaView` can build one toggle
-    /// per `BodegaFilter.Amenity` (eng D5). The six stored Bools stay the
+    /// per `BodegaFilter.Amenity` (eng D5). The seven stored Bools stay the
     /// source of truth: `makeRequest(userID:)` reads them directly.
     func isOn(_ amenity: BodegaFilter.Amenity) -> Bool {
         self[keyPath: Self.field(for: amenity)]
@@ -384,6 +388,7 @@ extension AddBodegaViewModel {
         case .sellsBeer: \.sellsBeer
         case .sellsLotto: \.sellsLotto
         case .hasAtm: \.hasAtm
+        case .hasBathroom: \.hasBathroom
         }
     }
 }

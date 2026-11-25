@@ -19,6 +19,7 @@ nonisolated struct NewBodega: Encodable, Sendable {
     var sellsBeer: Bool = false
     var sellsLotto: Bool = false
     var hasAtm: Bool = false
+    var hasBathroom: Bool = false
     var hours: BodegaHours?
 
     private enum CodingKeys: String, CodingKey {
@@ -30,6 +31,7 @@ nonisolated struct NewBodega: Encodable, Sendable {
         case sellsBeer = "sells_beer"
         case sellsLotto = "sells_lotto"
         case hasAtm = "has_atm"
+        case hasBathroom = "has_bathroom"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -47,6 +49,7 @@ nonisolated struct NewBodega: Encodable, Sendable {
         try container.encode(sellsBeer, forKey: .sellsBeer)
         try container.encode(sellsLotto, forKey: .sellsLotto)
         try container.encode(hasAtm, forKey: .hasAtm)
+        try container.encode(hasBathroom, forKey: .hasBathroom)
         try container.encodeIfPresent(hours, forKey: .hours)
     }
 }
@@ -77,6 +80,7 @@ nonisolated struct BodegaUpdate: Encodable, Sendable {
     var sellsBeer: Bool?
     var sellsLotto: Bool?
     var hasAtm: Bool?
+    var hasBathroom: Bool?
     var hours: BodegaHours?
     var fieldsToClear: Set<ClearableField> = []
 
@@ -88,6 +92,7 @@ nonisolated struct BodegaUpdate: Encodable, Sendable {
         case sellsBeer = "sells_beer"
         case sellsLotto = "sells_lotto"
         case hasAtm = "has_atm"
+        case hasBathroom = "has_bathroom"
     }
 
     func encode(to encoder: Encoder) throws {
@@ -104,6 +109,7 @@ nonisolated struct BodegaUpdate: Encodable, Sendable {
         try container.encodeIfPresent(sellsBeer, forKey: .sellsBeer)
         try container.encodeIfPresent(sellsLotto, forKey: .sellsLotto)
         try container.encodeIfPresent(hasAtm, forKey: .hasAtm)
+        try container.encodeIfPresent(hasBathroom, forKey: .hasBathroom)
         if let hours {
             try container.encode(hours, forKey: .hours)
         } else if fieldsToClear.contains(.hours) {

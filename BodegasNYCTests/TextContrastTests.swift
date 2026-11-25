@@ -30,29 +30,32 @@ struct TextContrastTests {
         #expect(hexString(color, colorTraits(.dark, .high)) == "AEAEB2")
     }
 
-    /// protects: each of the six points reads its own amenity, in order
-    /// (cat, hot food, cigarettes, beer, lotto, ATM), now that the points
-    /// are derived from `BodegaFilter.Amenity` (#141 eng D5).
+    /// protects: each of the seven points reads its own amenity, in order
+    /// (cat, hot food, cigarettes, beer, lotto, ATM, bathroom), now that the
+    /// points are derived from `BodegaFilter.Amenity` (#141 eng D5; Bathroom
+    /// since #194).
     /// fails_when: any two `isPresent` sources are swapped, a point is
     /// missing or extra, or the order changes. Three fixtures give every
     /// point a distinct present/absent signature across them (cat 100,
-    /// hot food 010, cigarettes 001, beer 110, lotto 011, ATM 101); two
-    /// fixtures cannot, since two bits only make four signatures. The
-    /// expected arrays stay literal, never derived from `Amenity`.
+    /// hot food 010, cigarettes 001, beer 110, lotto 011, ATM 101,
+    /// bathroom 111); two fixtures cannot, since two bits only make four
+    /// signatures. Three bits make eight, so seven points use every one but
+    /// 000; an eighth point would need a fourth fixture. The expected arrays
+    /// stay literal, never derived from `Amenity`.
     /// no_claim: the captions or symbols (see the other data point tests).
     @Test func dataPointsReadTheirOwnAmenity() throws {
         let fixtures: [(bodega: Bodega, expected: [Bool])] = [
             (
-                try makeTestBodega(hasCat: true, sellsBeer: true, hasAtm: true),
-                [true, false, false, true, false, true]
+                try makeTestBodega(hasCat: true, sellsBeer: true, hasAtm: true, hasBathroom: true),
+                [true, false, false, true, false, true, true]
             ),
             (
-                try makeTestBodega(servesHotFood: true, sellsBeer: true, sellsLotto: true),
-                [false, true, false, true, true, false]
+                try makeTestBodega(servesHotFood: true, sellsBeer: true, sellsLotto: true, hasBathroom: true),
+                [false, true, false, true, true, false, true]
             ),
             (
-                try makeTestBodega(sellsCigarettes: true, sellsLotto: true, hasAtm: true),
-                [false, false, true, false, true, true]
+                try makeTestBodega(sellsCigarettes: true, sellsLotto: true, hasAtm: true, hasBathroom: true),
+                [false, false, true, false, true, true, true]
             )
         ]
         for fixture in fixtures {
@@ -65,13 +68,13 @@ struct TextContrastTests {
     /// fails_when: an absent point is told apart by color alone, a present
     /// one is muted or struck, or the absent color drifts back to `.primary`.
     /// no_claim: the rendered strikethrough (a property check, not a render);
-    /// absent count 4 because #141 made it six points.
+    /// absent count 5 because #194 made it seven points (#141 made it six).
     @Test func dataPointStyleFollowsPresence() throws {
         let points = DataPointsSection.points(for: try makeTestBodega(hasCat: true, sellsCigarettes: true))
         let present = points.filter(\.isPresent)
         let absent = points.filter { !$0.isPresent }
         #expect(present.count == 2)
-        #expect(absent.count == 4)
+        #expect(absent.count == 5)
         for point in present {
             #expect(point.foreground == Color.primary)
             #expect(point.strikesCaption == false)
@@ -85,9 +88,15 @@ struct TextContrastTests {
 
     /// protects: D9's "slash variant where one exists, else strikethrough"
     /// choice. Every symbol renders and none has a `.slash` variant on this
-    /// runtime, so the strikethrough is the absent cue for all six.
-    /// fails_when: a symbol name is misspelled, or a future SF Symbols set
-    /// adds a `.slash` variant (then switch that point to it, per D9).
+    /// runtime, so the strikethrough is the absent cue for all seven,
+    /// Bathroom's `toilet` included (#194: `toilet.slash` is not used even
+    /// if one appears, so the seven read alike).
+    /// fails_when: a symbol name is misspelled, `toilet` is missing from the
+    /// test runtime's SF Symbols, or a future SF Symbols set adds a `.slash`
+    /// variant (then switch that point to it, per D9; for `toilet` the #194
+    /// spec says keep the strikethrough, so revisit that decision instead).
+    /// no_claim: any runtime but the test script's pinned simulator (iOS
+    /// 26.5), so not the owner's phone; how the symbols look at any size.
     @Test func dataPointSymbolsExistWithoutSlashVariants() throws {
         let points = DataPointsSection.points(for: try makeTestBodega())
         for point in points {

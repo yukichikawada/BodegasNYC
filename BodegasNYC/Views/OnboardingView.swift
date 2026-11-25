@@ -218,7 +218,7 @@ extension OnboardingPage where Extra == EmptyView {
     }
 }
 
-/// Page 2's six data points, in `BodegaFilter.Amenity` order with its
+/// Page 2's seven data points, in `BodegaFilter.Amenity` order with its
 /// captions and symbols.
 private struct AmenityRows: View {
     var body: some View {
