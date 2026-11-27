@@ -629,10 +629,11 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(from.waitForExistence(timeout: 5), "the form has no From row")
         // The calendar popover, known by its full-screen dismiss region. #201: once, at night, the day was not
         // found within 5 s of a single tap; the date path was ruled out (the same 2:18 am configuration lists
-        // the day), so the tap is retried once if no popover came up, and the wait is longer.
+        // the day), so the wait is longer, and the tap is retried once only if no popover is up after it: a
+        // second tap on a popover that is merely slow would close it.
         let dismissRegion = app.buttons["PopoverDismissRegion"].firstMatch
         from.tap()
-        if !dismissRegion.waitForExistence(timeout: 5) { from.tap() }
+        if !dismissRegion.waitForExistence(timeout: 15), !dismissRegion.exists { from.tap() }
         XCTAssertTrue(dismissRegion.waitForExistence(timeout: 10), "tapping From opened no calendar")
         let today = Self.walkDay(daysBefore: 0)
         let months = DateFormatter()
