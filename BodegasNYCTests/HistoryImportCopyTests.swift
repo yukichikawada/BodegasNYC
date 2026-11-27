@@ -29,6 +29,7 @@ struct HistoryImportCopyTests {
             (.partlyHere, .body, "Some of it is already on this phone. Only the rest is added."),
             (.skippedEntries, .body, "Part of the file couldn't be read. The rest comes in."),
             (.estimates, .body, "Days from a file show as estimates. This phone can't check them for rides."),
+            (.ownWalks, .body, "Only add a file of your own walks."), // #203
             (.consequence, .body,
              "They mix into your blocks, days and counts. Taking them out again means clearing everything."),
             (.footer, .body, "Walks recorded on two phones can count distance twice."),

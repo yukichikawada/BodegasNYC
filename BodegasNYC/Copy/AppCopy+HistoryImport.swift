@@ -20,6 +20,8 @@ nonisolated extension AppCopy {
         case skippedEntries
         /// D3: when a new fix carries no ride evidence.
         case estimates
+        /// #203: always on the preview, above the consequence.
+        case ownWalks
         /// D2: always on the preview.
         case consequence
         /// A11's known limit, as the preview's footer.
@@ -62,6 +64,7 @@ nonisolated extension AppCopy {
                     kind: .body,
                     text: "Days from a file show as estimates. This phone can't check them for rides."
                 )
+            case .ownWalks: CopyString(kind: .body, text: "Only add a file of your own walks.")
             case .consequence:
                 CopyString(
                     kind: .body,

@@ -726,6 +726,10 @@ final class BodegasNYCUITests: XCTestCase {
             ].firstMatch.exists,
             "the preview has no consequence line"
         )
+        XCTAssertTrue(
+            app.staticTexts["Only add a file of your own walks."].firstMatch.exists,
+            "the preview does not say the file should be your own walks (#203)"
+        )
         XCTAssertFalse(app.navigationBars["Streets Walked"].exists, "the intro presented over the opened file")
 
         let add = app.buttons["historyImport.add"].firstMatch
