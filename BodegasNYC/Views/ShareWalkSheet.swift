@@ -44,7 +44,7 @@ struct ShareWalkSheet: View {
     init(
         viewModel: StreetsWalkedViewModel,
         preset: WalkedDayKey,
-        today: WalkedDayKey = WalkedDayKey(date: Date()),
+        today: WalkedDayKey = WalkedDayKey(date: AppClock.now()),
         onShared: @escaping () -> Void = {}
     ) {
         self.viewModel = viewModel
