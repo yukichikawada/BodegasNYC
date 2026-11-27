@@ -138,7 +138,8 @@ struct WalkHistoryImportSheet: View {
     }
 
     /// DS1, D2, D3: heading, file name, dates, days, then the lines that
-    /// apply, the consequence and the known limit (eng A11) as the footer.
+    /// apply, whose walks the file should hold (#203), the consequence and
+    /// the known limit (eng A11) as the footer.
     @ViewBuilder
     private func previewSections(_ preview: WalkHistoryTransfer.ImportPreview) -> some View {
         Section {
@@ -166,6 +167,7 @@ struct WalkHistoryImportSheet: View {
             if preview.newFixCount < preview.fileFixCount { line(Copy.partlyHere) }
             if preview.skippedFixCount > 0 { line(Copy.skippedEntries) }
             if preview.newFixesLackEvidence { line(Copy.estimates) }
+            line(Copy.ownWalks) // #203: the file is for moving your own history
             Text(Copy.consequence.copy.text)
                 .font(.subheadline)
                 .foregroundStyle(.primary)

@@ -866,7 +866,8 @@ name as a `textMuted` data line that wraps, the dates in `.body` as "Aug 16–No
 recording" in `.subheadline` `textMuted` monospaced, never a point count; then, when they apply,
 "Some of it is already on this phone. Only the rest is added.", "Part of the file couldn't be read.
 The rest comes in." and "Days from a file show as estimates. This phone can't check them for rides.";
-always "They mix into your blocks, days and counts. Taking them out again means clearing everything."
+always "Only add a file of your own walks." in `.body` `.primary` (#203: import cannot tell whose
+file it is), then "They mix into your blocks, days and counts. Taking them out again means clearing everything."
 in `.subheadline` `.primary`; the footer "Walks recorded on two phones can count distance twice.";
 Cancel leading, and Add Walks `.borderedProminent`, large, full width in a bottom `safeAreaInset`
 while at least 200pt remain to read, else at the end of the scroll); Nothing new ("Nothing new in
