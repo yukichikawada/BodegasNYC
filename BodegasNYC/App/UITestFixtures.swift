@@ -46,6 +46,19 @@ nonisolated enum UITestFixtures {
         return Int(arguments[flag + 1]) ?? 0
     }
 
+    /// `-UITestNow <ISO 8601 instant>` (#201): `AppClock.now()` returns this
+    /// instant, so walk days do not depend on when the test runs. With
+    /// `-UITestFixtures` only.
+    static let nowArgument = "-UITestNow"
+
+    static let pinnedNow: Date? = {
+        let arguments = CommandLine.arguments
+        guard isEnabled, let flag = arguments.firstIndex(of: nowArgument), flag + 1 < arguments.count else {
+            return nil
+        }
+        return ISO8601DateFormatter().date(from: arguments[flag + 1])
+    }()
+
     static func registerForSharedSession() {
         guard isEnabled else { return }
         URLProtocol.registerClass(FixtureURLProtocol.self)

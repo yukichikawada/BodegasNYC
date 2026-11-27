@@ -27,7 +27,7 @@ nonisolated extension UITestFixtures {
     /// The in-memory Streets Walked store with the fixture walks saved, or
     /// nil if the bundled street data or the store fails.
     @MainActor
-    static func makeWalkedBlocksContainer(now: Date = Date()) -> ModelContainer? {
+    static func makeWalkedBlocksContainer(now: Date = AppClock.now()) -> ModelContainer? {
         guard let grid = try? StreetGridLoader.shared.grid(),
               let container = try? ModelContainer(
                   for: Schema(StreetsWalkedSchema.models),

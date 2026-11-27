@@ -22,9 +22,16 @@ final class BodegasNYCUITests: XCTestCase {
         continueAfterFailure = false
     }
 
+    /// The app's "now" in every `-UITestWalkedDays` launch (`-UITestNow`, #201), and the instant `walkDay`
+    /// counts from, so the walk days the tests name are the app's whenever the suite runs. 2:18 am on
+    /// November 27 is before the 4 am day start (today's walk day is November 26) and, with yesterday's walk
+    /// on November 25, keeps the Share a Walk picker's preset and today in one month: the picker opens on the
+    /// preset's month, so a today in the next month (the 1st, or the 2nd before 4 am) is not on screen.
+    private static let pinnedNow = ISO8601DateFormatter().date(from: "2026-11-27T02:18:00-05:00")!
+
     /// Launches past onboarding, onto the map, with the fixture bodega, and
     /// past the Streets Walked intro (#126) unless `seenStreetsWalkedIntro`
-    /// is false.
+    /// is false. With `-UITestWalkedDays` the app's clock is `pinnedNow`.
     @MainActor
     private func launchWithFixtures(
         _ extraArguments: [String] = [],
@@ -37,6 +44,9 @@ final class BodegasNYCUITests: XCTestCase {
             "-firstRun.hasCompletedOnboarding", "YES",
             "-firstRun.hasSeenStreetsWalkedIntro", seenStreetsWalkedIntro ? "YES" : "NO"
         ] + extraArguments
+        if extraArguments.contains("-UITestWalkedDays") {
+            app.launchArguments += ["-UITestNow", ISO8601DateFormatter().string(from: Self.pinnedNow)]
+        }
         app.launch()
         return app
     }
@@ -394,11 +404,12 @@ final class BodegasNYCUITests: XCTestCase {
         XCTAssertTrue(manhattan.waitForNonExistence(timeout: 5), "Done left the sheet up")
     }
 
-    /// The walk day `days` before today's, as `WalkedDayKey`'s yyyymmdd: New York time, a day starting at 4 am.
+    /// The walk day `days` before `pinnedNow`'s, as `WalkedDayKey`'s yyyymmdd: New York time, a day starting
+    /// at 4 am.
     private static func walkDay(daysBefore days: Int) -> Int {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(identifier: "America/New_York") ?? .current
-        let now = Date()
+        let now = pinnedNow
         let startsToday = calendar.component(.hour, from: now) >= 4
         let date = calendar.date(byAdding: .day, value: -days - (startsToday ? 0 : 1), to: now) ?? now
         let parts = calendar.dateComponents([.year, .month, .day], from: date)
@@ -601,7 +612,7 @@ final class BodegasNYCUITests: XCTestCase {
 
     /// protects: #177 DS4's no-blocks state end to end: moving From to today (no walks) drags To along, the
     /// range holds no block, "No blocks counted on these days." shows above Share, Share is disabled and no
-    /// picture is shown.
+    /// picture is shown. At `pinnedNow` (2:18 am, #201) today is the walk day before the calendar date.
     /// fails_when: From cannot reach today, To stays before From, an empty range can be shared, or its line is
     /// missing.
     /// no_claim: the over-5,000 and failed states (ShareWalkFormTests; the DEBUG stub snapshotter
@@ -616,15 +627,22 @@ final class BodegasNYCUITests: XCTestCase {
 
         let from = app.datePickers["shareWalk.from"].firstMatch
         XCTAssertTrue(from.waitForExistence(timeout: 5), "the form has no From row")
+        // The calendar popover, known by its full-screen dismiss region. #201: once, at night, the day was not
+        // found within 5 s of a single tap; the date path was ruled out (the same 2:18 am configuration lists
+        // the day), so the tap is retried once if no popover came up, and the wait is longer.
+        let dismissRegion = app.buttons["PopoverDismissRegion"].firstMatch
         from.tap()
+        if !dismissRegion.waitForExistence(timeout: 5) { from.tap() }
+        XCTAssertTrue(dismissRegion.waitForExistence(timeout: 10), "tapping From opened no calendar")
         let today = Self.walkDay(daysBefore: 0)
         let months = DateFormatter()
         months.locale = Locale(identifier: "en_US")
         let todayLabel = "\(months.monthSymbols[today / 100 % 100 - 1]) \(today % 100)"
-        let todayButton = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", todayLabel)).firstMatch
-        XCTAssertTrue(todayButton.waitForExistence(timeout: 5), "the calendar has no \(todayLabel)")
+        // The day reads "Thursday, November 26" ("Today, Friday, November 27" on the simulator's own date):
+        // matched on its end, so "November 2" cannot match November 20 to 29.
+        let todayButton = app.buttons.matching(NSPredicate(format: "label ENDSWITH %@", ", \(todayLabel)")).firstMatch
+        XCTAssertTrue(todayButton.waitForExistence(timeout: 10), "the calendar has no \(todayLabel)")
         todayButton.tap()
-        let dismissRegion = app.buttons["PopoverDismissRegion"].firstMatch
         if dismissRegion.waitForExistence(timeout: 2) { dismissRegion.tap() }
 
         let reason = app.staticTexts["No blocks counted on these days."]
