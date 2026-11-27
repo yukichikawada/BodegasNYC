@@ -532,15 +532,31 @@ the release. The pin stays in the selected look, its own pin and labelled first 
 pin or cluster tap, the List tab, placement or an add; VoiceOver hears "<Name>. On the map." once
 the camera settles (DS9).
 
-**Data points** (`DataPointsSection`, #70, #95 D9, #141, #194): seven amenities (cat, hot food,
+**Data points** (`DataPointsSection`, #70, #95 D9, #141, #194, #196): seven amenities (cat, hot food,
 nicotine, beer, lotto, ATM, bathroom), in `BodegaFilter.Amenity` order on every surface, each with
 one caption shared by onboarding, detail, the Add/Edit form and the Filters sheet. Bathroom is last,
-captioned "Bathroom" with `toilet`, VoiceOver "Has a Bathroom". Symbol over a `.caption2` caption,
-seven columns while they fit, stacked otherwise, and always stacked at accessibility sizes: one
-symbol-and-caption row per point. Measured in #194 QA (iOS 26.5): a 402 pt phone holds seven columns
-at Large and stacks from xLarge up; a 375 pt phone stacks at Large and above (smaller sizes were not
-sampled). Six points held columns through xxxLarge on 402 pt and xxLarge on 375 pt, so the seventh
-makes stacked rows the common layout on small phones and larger text; accepted in #194.
+captioned "Bathroom" with `toilet`, VoiceOver "Has a Bathroom". Three forms, and the first that fits
+the content width wins (`ViewThatFits(in: .horizontal)`, no width hard-coded): one row of seven
+symbol-over-`.caption2` columns, 16pt apart; else a `Grid` of four over three (Cat, Hot Food,
+Nicotine, Beer, then Lotto, ATM, Bathroom), each column as wide as its widest cell, cells centred in
+their column, 16pt between columns and 12pt between the two rows, the grid at its natural width on
+the leading inset with the space to its right left empty on purpose, and the empty fourth slot
+holding no view; else one leading symbol-and-caption row per point. Accessibility sizes always take the rows
+(DD16). In the row and the grid a caption never wraps, shrinks or truncates (`.lineLimit(1)` and
+`fixedSize` horizontally, no flexible spacer or frame), so a form that does not fit falls through
+instead of squeezing; the symbol sits 4pt above its caption in a slot of one height for all seven
+(24pt at Large, `@ScaledMetric` relative to `.caption2`), so captions share a baseline. No animation
+between forms. The page inset is 16pt, so the content is 343pt wide on a 375pt phone and 370pt on a
+402pt phone. Measured in #196 QA (iOS 26.5, English captions; the app ships English only): the row
+is about 341pt wide from xSmall to Medium and about 344pt at Large (`.caption2` stays 11pt to
+Large, the symbols grow), so a 375pt phone shows the row from xSmall to Medium and the grid from
+Large through xxxLarge, and with Bold Text the grid already at Medium; a 402pt phone shows the row at
+Large (Bold Text too) and the grid from xLarge through xxxLarge; a 440pt phone the row at Large and
+the grid at xxxLarge; landscape the row. The grid is about 200pt wide at Large and 269pt at xxxLarge,
+so it holds on every phone through xxxLarge with room to spare. Both phones take the rows at the
+accessibility sizes. Against #194's stacked rows, the section from Show on Map to the Photos header
+is about 115pt shorter at Large on 375pt and about 110pt shorter at xLarge on 402pt. An eighth point
+takes row two, column four, and the widths are measured again; a ninth needs a design pass.
 Presence is shape plus contrast: present, symbol and caption `.primary`; absent, the same symbol and
 a struck-through caption in `textMuted`, with no opacity dimming. D9 prefers a symbol's `.slash`
 variant, but none of the seven has one in iOS 26 (`banknote.slash` and `toilet.slash` do not exist
@@ -1122,3 +1138,4 @@ on the card and in the popover it is `.primary` (#95 D11).
 | 2026-11-19 | #177 PR 2 walk links (eng E2, E3, E5, E7, E8; design DS1, DS5, DS7): a share also carries a link, `https://yukichikawada.github.io/BodegasNYC/walk/#1.<payload>.w`, whose fragment holds the walk (dates, counts, the estimate flag, at most 5,000 block ids) and nothing else; it opens the Shared Walk sheet, which waits for anything presented and comes before the Streets Walked intro, draws the sender's walk in a fifth data colour, `sharedWalk` violet (#7E22CE / #CF8AFF, contrast #5A0FA3 / #DDB0FF), as a solid line at every band, shows the sender's counts with a coverage line when this street file knows fewer blocks, and saves nothing; a phone without the app, or on 1.0.0, gets the static fallback page. The share sheet's items are picture, text, link, all from one frozen walk | Design review DS1 (violet holds against cyan, Deli Green and red under colour-blind simulation; the solid line is the cue that does not rely on colour) and eng review E2, E3, E5, E7, E8, owner accepted all; the night capture of the violet at the four bands was taken before the build continued |
 | 2026-11-19 | #180 walk history file (design DS1 to DS6, D1 to D14; eng E1 to E4, A1 to A12): Export History… and Import History… in their own menu section above Clear History; export is a confirmation dialog that says plainly what the file holds, with Export First on Clear History's dialog; import is a sheet on the Account sheet's pattern that previews the file by name, dates and days of recording (never points), always states that the walks mix in and only Clear History takes them out, and ends on "Your walks are in." with Show Your Walks and, when recording is off, Start Recording. Imported days with no ride evidence are estimates, so the Your Walks line becomes "Some days are estimates. Rides may be counted." | Owner decisions O1 to O5 (a file, merge only, one format, two ways in, no encryption), design review DS1 to DS6 and eng review E1 to E4, owner accepted all. A point is a unit the app never shows; dates and days are what a person can check against memory before a permanent merge; a dialog cannot hold a spinner, a retry or a replaced preview; someone restoring onto a new phone is never shown the intro, so the result offers recording |
 | 2026-11-24 | #194 Bathroom as the seventh data point: `has_bathroom` boolean, defaulted false, decoded strictly like the other six; Bathroom last on every surface, after ATM, captioned "Bathroom" with `toilet`, VoiceOver "Has a Bathroom"; yes means a bathroom a customer can use, staff-only does not count, and describes the amenity, not whether it works today; the struck-through caption stays the absent cue (no `toilet.slash`); the detail points keep `ViewThatFits`, seven columns while they fit and stacked rows otherwise, with no layout change; onboarding page 2 body lists "bathroom"; rollback keeps the column | Repeats #141 eng D5 to D9 and design DS1 to DS7, so no fresh review pass. The four surfaces already derive from `BodegaFilter.Amenity`; one shape cue keeps the seven points reading alike; a drop would break installed strict-decoding builds |
+| 2026-11-27 | #196 data points grid (design DS1 to DS12): a third form between the one row and the stacked rows, a `Grid` of four over three in amenity order, chosen by `ViewThatFits` (row, grid, stacked; accessibility sizes stacked); columns as wide as their widest cell, cells centred, grid on the leading inset at its natural width, no placeholder in the empty slot; 16pt columns, 12pt rows (the DS5 check at xxxLarge found a struck-through first-row caption reads with its own symbol, so 12pt stays), 4pt symbol to caption; row and grid captions one line at their ideal width so nothing squeezes; symbols in a `.caption2`-scaled slot so captions share a baseline; no animation. Measured: grid on 375pt from Large through xxxLarge, on 402pt from xLarge through xxxLarge, row at Large on 402pt and 440pt and below Large on 375pt | Seven points stacked on most phones and text sizes after #194 (about 220pt where the row took about 60pt); the owner took option 2 and every recommended item in `/plan-design-review` (Codex and an independent Claude pass). Equal quarter-width columns were rejected (they stop fitting "Bathroom" at xxxLarge on 375pt) |

@@ -46,6 +46,27 @@ nonisolated enum UITestFixtures {
         return Int(arguments[flag + 1]) ?? 0
     }
 
+    /// `-UITestDataPoints all|none|mixed` (#196 AC 7): the fixture
+    /// bodega's seven amenities, in `BodegaFilter.Amenity` order, so layout
+    /// captures cover every presence look on one bodega. `all` has every
+    /// point, `none` none, `mixed` the grid's first row (Cat to Beer) and
+    /// not its second (Lotto, ATM, Bathroom). Without the argument, the
+    /// mix the UI tests have always had.
+    static let dataPointsArgument = "-UITestDataPoints"
+
+    static var dataPointFlags: [Bool] {
+        let arguments = CommandLine.arguments
+        let value = arguments.firstIndex(of: dataPointsArgument).flatMap { flag in
+            flag + 1 < arguments.count ? arguments[flag + 1] : nil
+        }
+        switch value {
+        case "all": return Array(repeating: true, count: 7)
+        case "none": return Array(repeating: false, count: 7)
+        case "mixed": return [true, true, true, true, false, false, false]
+        default: return [true, true, false, true, false, true, true]
+        }
+    }
+
     static func registerForSharedSession() {
         guard isEnabled else { return }
         URLProtocol.registerClass(FixtureURLProtocol.self)
@@ -204,27 +225,30 @@ nonisolated final class FixtureURLProtocol: URLProtocol {
         return data as Data
     }
 
-    static let bodegaJSON = """
-    [{
-      "id": "\(bodegaID)",
-      "created_by": "00000000-0000-0000-0000-000000000001",
-      "name": "\(UITestFixtures.bodegaName)",
-      "latitude": 40.7128,
-      "longitude": -74.006,
-      "address": "1 Fixture St",
-      "has_cat": true,
-      "serves_hot_food": true,
-      "sells_cigarettes": false,
-      "sells_beer": true,
-      "sells_lotto": false,
-      "has_atm": true,
-      "has_bathroom": true,
-      "hours": null,
-      "is_hidden": false,
-      "created_at": "2026-10-01T12:00:00+00:00",
-      "updated_at": "2026-10-01T12:00:00+00:00"
-    }]
-    """
+    static let bodegaJSON: String = {
+        let flags = UITestFixtures.dataPointFlags
+        return """
+        [{
+          "id": "\(bodegaID)",
+          "created_by": "00000000-0000-0000-0000-000000000001",
+          "name": "\(UITestFixtures.bodegaName)",
+          "latitude": 40.7128,
+          "longitude": -74.006,
+          "address": "1 Fixture St",
+          "has_cat": \(flags[0]),
+          "serves_hot_food": \(flags[1]),
+          "sells_cigarettes": \(flags[2]),
+          "sells_beer": \(flags[3]),
+          "sells_lotto": \(flags[4]),
+          "has_atm": \(flags[5]),
+          "has_bathroom": \(flags[6]),
+          "hours": null,
+          "is_hidden": false,
+          "created_at": "2026-10-01T12:00:00+00:00",
+          "updated_at": "2026-10-01T12:00:00+00:00"
+        }]
+        """
+    }()
 
     override static func canInit(with request: URLRequest) -> Bool { true }
 

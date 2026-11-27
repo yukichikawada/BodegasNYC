@@ -40,7 +40,7 @@
 
 **Why:** A bodega nobody has checked reads "No" for every point and is hidden by every Must Have filter. ATM is the first point whose default is wrong for most rows, since most NYC bodegas have one (#141 reviews).
 
-**Context:** #141 eng D9 and design DS3. `BodegaDetailSections.swift` renders presence by shape plus contrast; `BodegaFilter.Amenity.isSatisfied(by:)` is the filter; the columns are in `20260722043224_create_bodegas_table.sql`, `20261030120000_add_bodega_has_atm.sql` and `20261124120000_add_bodega_has_bathroom.sql` (#194).
+**Context:** #141 eng D9 and design DS3. `DataPointsSection.swift` renders presence by shape plus contrast; `BodegaFilter.Amenity.isSatisfied(by:)` is the filter; the columns are in `20260722043224_create_bodegas_table.sql`, `20261030120000_add_bodega_has_atm.sql` and `20261124120000_add_bodega_has_bathroom.sql` (#194).
 
 **Effort:** L
 **Priority:** P2
@@ -162,7 +162,7 @@
 
 **Why:** DESIGN.md Layout: "44pt minimum for every target"; one-handed sidewalk use. Raised by Codex in the #150 design review (DS11); the new row matched the page rather than introduce two heights.
 
-**Context:** `BodegasNYC/Views/BodegaDetailSections.swift:118` (`DetailButtonRow`), `BodegaDetailView.swift`. Check the AX stacking and the side-by-side fit on 375pt after the change; update DESIGN.md Buttons.
+**Context:** `BodegasNYC/Views/BodegaDetailSections.swift:19` (`DetailButtonRow`), `BodegaDetailView.swift`. Check the AX stacking and the side-by-side fit on 375pt after the change; update DESIGN.md Buttons.
 
 **Effort:** S
 **Priority:** P2

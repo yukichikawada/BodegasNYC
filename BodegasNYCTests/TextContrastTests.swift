@@ -63,6 +63,23 @@ struct TextContrastTests {
         }
     }
 
+    /// protects: the grid form's shape (#196 DS2): four cells over three, in
+    /// amenity order row by row (Cat, Hot Food, Nicotine, Beer, then Lotto,
+    /// ATM, Bathroom), with no placeholder for the empty fourth slot.
+    /// fails_when: the rows split elsewhere, a point moves rows or columns,
+    /// or the short row is padded to four.
+    /// no_claim: which form `ViewThatFits` picks at a width (captures and
+    /// `testDetailDataPointsUseTheGridWhenTheRowDoesNotFit`), spacing, looks.
+    @Test func dataPointGridIsFourOverThreeInAmenityOrder() throws {
+        let points = DataPointsSection.points(for: try makeTestBodega())
+        let rows = DataPointsSection.gridRows(points)
+        #expect(rows.map(\.count) == [4, 3])
+        #expect(rows.map { $0.map(\.label.copy.text) } == [
+            ["Cat", "Hot Food", "Nicotine", "Beer"],
+            ["Lotto", "ATM", "Bathroom"]
+        ])
+    }
+
     /// protects: D9's shape plus contrast. Present: `.primary`, no
     /// strikethrough. Absent: not `.primary`, `textMuted`, struck through.
     /// fails_when: an absent point is told apart by color alone, a present
