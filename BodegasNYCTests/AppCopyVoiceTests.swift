@@ -77,12 +77,13 @@ enum VoiceRule: CaseIterable, CustomTestStringConvertible {
                 return word.first?.isUppercase == true || word.first?.isNumber == true
             }
         case .valueShape:
-            // A data fragment (#68): 1 to 4 words, ends in a letter or digit
-            // (so no period), never starts lowercase; no Title Case rule.
+            // A data fragment (#68): 1 to 4 words, ends in a letter, a digit
+            // or a closing parenthesis ("Version 1.1.0 (4)", #191), so no
+            // period, never starts lowercase; no Title Case rule.
             guard copy.kind == .value else { return true }
             let words = Self.words(text)
             guard !words.isEmpty, words.count <= 4 else { return false }
-            guard let last = text.last, last.isLetter || last.isNumber else { return false }
+            guard let last = text.last, last.isLetter || last.isNumber || last == ")" else { return false }
             return text.first?.isLowercase != true
         }
     }
@@ -119,6 +120,9 @@ struct AppCopyVoiceTests {
         + AppCopy.Recorder.allCases.map(\.copy)
         + AppCopy.StreetsWalkedIntro.allCases.map(\.copy)
         + AppCopy.Account.allCases.map(\.copy)
+        + [AppVersion(version: "1.1.0", build: "4"), AppVersion(infoDictionary: nil)].flatMap {
+            [AppCopy.Account.version($0), AppCopy.Account.versionSpoken($0)]
+        }
         + AppCopy.Telemetry.allCases.map(\.copy)
         + AppCopy.YourWalks.allCases.map(\.copy)
         + yourWalksCopy
@@ -743,6 +747,8 @@ struct AppCopyVoiceTests {
         #expect(!VoiceRule.valueShape.passes(fiveWords))
         #expect(!VoiceRule.valueShape.passes(lowercase))
         #expect(VoiceRule.valueShape.passes(CopyString(kind: .value, text: "Around the corner")))
+        #expect(VoiceRule.valueShape.passes(CopyString(kind: .value, text: "Version 1.1.0 (4)")))
+        #expect(!VoiceRule.valueShape.passes(CopyString(kind: .value, text: "Version 1.1.0 (4).")))
         // Values are exempt from the other shape rules, and vice versa.
         #expect(VoiceRule.labelShape.passes(lowercase))
         #expect(VoiceRule.valueShape.passes(CopyString(kind: .body, text: "two blocks.")))

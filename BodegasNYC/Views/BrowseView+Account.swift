@@ -6,9 +6,9 @@ extension BrowseView {
     /// Account toolbar item: a `Menu` (#21) in three sections (#147 DS2):
     /// the account ("Your Account…" opens the Account sheet, #127 DS1, or
     /// Sign In), Show Intro Again, then the sharing switch with the Privacy
-    /// Policy directly under it as its explanation. The same rows signed in
-    /// or out (DS7). Same label as before, so the #44 toolbar layout is
-    /// unchanged.
+    /// Policy directly under it as its explanation, then the version (#191).
+    /// The same rows signed in or out (DS7). Same label as before, so the
+    /// #44 toolbar layout is unchanged.
     var accountMenu: some View {
         Menu {
             Section {
@@ -32,6 +32,7 @@ extension BrowseView {
                 // the menu and nothing else happens (DS7).
                 Toggle(AppCopy.Telemetry.shareUsage.copy.text, isOn: telemetryIsEnabled)
                 Link(AppCopy.Account.privacyPolicy.copy.text, destination: AppCopy.Account.privacyPolicyURL)
+                versionRow
             }
         } label: {
             Label(
@@ -40,6 +41,19 @@ extension BrowseView {
             )
         }
         .accessibilityFocused($accountMenuFocused)
+    }
+
+    /// The installed version and build under Privacy Policy (#191), signed in
+    /// or out: a disabled `Button`, which a menu draws as a dimmed row nothing
+    /// can tap. A plain `Text` draws the same; the disabled button is the form
+    /// an XCUITest probe showed carrying both the spoken label and the
+    /// identifier onto the menu item. VoiceOver hears "Version 1.1.0, build 4".
+    private var versionRow: some View {
+        let appVersion = Bundle.main.appVersion
+        return Button(AppCopy.Account.version(appVersion).text) {}
+            .disabled(true)
+            .accessibilityLabel(AppCopy.Account.versionSpoken(appVersion).text)
+            .accessibilityIdentifier("account.version")
     }
 
     /// The setting, written only through `Telemetry.setEnabled(_:)` (eng E3).

@@ -230,10 +230,8 @@ extension Telemetry {
     }
     #endif
 
-    /// Sentry's `releaseName`: "1.0+1".
+    /// Sentry's `releaseName`: "1.0+1" (`AppVersion.sentryRelease`, #191).
     nonisolated static func release(bundle: Bundle) -> String {
-        let version = bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0"
-        let build = bundle.infoDictionary?["CFBundleVersion"] as? String ?? "0"
-        return "\(version)+\(build)"
+        bundle.appVersion.sentryRelease
     }
 }
