@@ -60,12 +60,10 @@ actor WalkHistoryTransfer {
         directoryHint: .isDirectory
     )
 
-    /// "1.0.0 (3)": the marketing version and build, informational.
+    /// "1.0.0 (3)": the marketing version and build, informational
+    /// (`AppVersion.display`, #191).
     nonisolated static var bundleAppVersion: String {
-        let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "0"
-        let build = info?["CFBundleVersion"] as? String ?? "0"
-        return "\(version) (\(build))"
+        Bundle.main.appVersion.display
     }
 
     // MARK: Export

@@ -105,6 +105,17 @@ nonisolated extension AppCopy {
             copy.text + "\u{2026}"
         }
 
+        /// The Account menu's version row (#191): "Version 1.1.0 (4)".
+        static func version(_ appVersion: AppVersion) -> CopyString {
+            CopyString(kind: .value, text: "Version \(appVersion.display)")
+        }
+
+        /// The version row's VoiceOver label (#191): "Version 1.1.0, build 4",
+        /// so the build is not read as an open parenthesis.
+        static func versionSpoken(_ appVersion: AppVersion) -> CopyString {
+            CopyString(kind: .value, text: "Version \(appVersion.version), build \(appVersion.build)")
+        }
+
         /// The published privacy policy (`docs/PRIVACY.md` on GitHub Pages),
         /// linked from the toolbar menu and the Account sheet (spec D5).
         static let privacyPolicyURL = URL(string: "https://yukichikawada.github.io/BodegasNYC/privacy/")!

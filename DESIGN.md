@@ -913,8 +913,10 @@ is the #20 duplicate sheet.
 **Account sheet** (`AccountView`, #127 DS1 to DS7): opened by "Your Account…" (signed in; Sign
 In otherwise), alone in the Account menu's first section. The menu has three sections, the same
 signed in or out (#147 DS2): [Your Account… / Sign In], [Show Intro Again], [Share Usage and
-Diagnostics, Privacy Policy]. The sharing switch is a native `Toggle` (a checkmark item, DS6),
-on by default and per device; flipping it closes the menu and nothing else happens, no
+Diagnostics, Privacy Policy, version]. The version row (#191) is a disabled `Button` reading
+"Version 1.1.0 (4)" from the bundle, which the menu draws dimmed and untappable as quiet
+metadata; VoiceOver hears "Version 1.1.0, build 4". The sharing switch is a native `Toggle`
+(a checkmark item, DS6), on by default and per device; flipping it closes the menu and nothing else happens, no
 confirmation, toast or delay (DS7); Privacy Policy (a `Link`) sits directly under it as its
 explanation. `[.medium, .large]`, `.large` only at accessibility sizes,
 opaque `systemGroupedBackground`, inset-grouped `Form`, inline title "Account", Done. Idle:
