@@ -134,9 +134,15 @@ Up to ten frames; six is plenty. App preview video: skip for 1.0.
 
 > Every bodega in New York on one map, with the things a business listing never tells you: the cat, the hot food, the beer, the lotto, the ATM, the real hours.
 
-**What's New** (4000 max; pending lines for the next release after 1.1.0,
-pasted when its build is attached; `docs/RELEASE.md` step 8):
+**What's New** (4000 max; the text for 1.2.0, pasted when its build is
+attached; `docs/RELEASE.md` step 8):
 
+> Bathroom: the seventh thing to know before you walk in. Filter the map for bodegas with one, and add it when you add or edit a bodega.
+>
+> Export and Import History: save your whole walk history to a file, and bring it back on a new phone.
+>
+> Your Walks now shows the blocks you covered each day as bars.
+>
 > Miles in Your Walks now count walking on streets, so past days read a little lower. Blocks haven't changed.
 
 (#192 DS2: the one-time drop in past miles is announced here, not in the app.)
@@ -191,7 +197,7 @@ bodega,deli,new york,manhattan,brooklyn,queens,bronx,cat,hot food,beer,lotto,atm
 
 > Browsing the map and list works without signing in. Adding bodegas, photos, reviews and flags uses Sign in with Apple only, so no demo account is needed; your own Apple Account works.
 >
-> Location: finding nearby bodegas uses When-In-Use location only. "Streets Walked" is an optional feature, off by default, started from its own button in the app (the walking figure in the map's top bar). It records the streets the user walks so they can see them highlighted on their own map, and it is the only thing that asks for Always location and uses the background `location` mode. The walk history stays on the device and is never uploaded. A user can share a picture of a walk through the system share sheet; nothing is sent to our servers. The share also carries a link that holds the same walk and opens it in the app on another iPhone; the link is not stored anywhere on our side. To try it: on the map, tap the walking-figure button → Start Recording, grant Always, walk or simulate a route (Features → Location → Freeway Drive on a simulator), then reopen the app. Motion & Fitness is used only to tell walking from riding.
+> Location: finding nearby bodegas uses When-In-Use location only. "Streets Walked" is an optional feature, off by default, started from its own button in the app (the walking figure in the map's top bar). It records the streets the user walks so they can see them highlighted on their own map, and it is the only thing that asks for Always location and uses the background `location` mode. The walk history stays on the device and is never uploaded. Export History hands the whole history, as a file, to the system share sheet, and Import History reads such a file back; neither sends anything to our servers. A user can share a picture of a walk through the system share sheet; nothing is sent to our servers. The share also carries a link that holds the same walk and opens it in the app on another iPhone; the link is not stored anywhere on our side. To try it: on the map, tap the walking-figure button → Start Recording, grant Always, walk or simulate a route (Features → Location → Freeway Drive on a simulator), then reopen the app. Motion & Fitness is used only to tell walking from riding.
 >
 > User-generated content: every bodega, review and photo has a "Flag an Issue" action. Three flags hide the item automatically, and the owner reviews flags. The privacy policy (linked in the app's Account menu and in the listing) carries the contact email. Account deletion is in the app: Account → Your Account → Delete Account. It removes the account, its data and the Sign in with Apple grant.
 >
