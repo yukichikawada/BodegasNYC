@@ -61,7 +61,7 @@ nonisolated final class WalkedBlockStore {
     /// fetches only the rows of the blocks it touches).
     private(set) var blockRowsFetched = 0
 
-    init(container: ModelContainer, grid: StreetGrid, now: @escaping @Sendable () -> Date = { Date() }) {
+    init(container: ModelContainer, grid: StreetGrid, now: @escaping @Sendable () -> Date = { AppClock.now() }) {
         self.container = container
         self.grid = grid
         self.now = now
